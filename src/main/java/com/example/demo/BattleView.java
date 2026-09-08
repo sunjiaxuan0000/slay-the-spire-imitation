@@ -54,6 +54,8 @@ public class BattleView extends StackPane {
     private int energy = 3;
     private int playerBlock = 0;
     private int weakTurns = 0;
+    private int enemyVulnerable = 0; // 敌人易伤层数：承受伤害 +50%，每回合 -1，多层不叠加伤害加成
+    private int playerStrength = 0; // 玩家力量层数：每层为造成的所有伤害 +1，不随回合减少
     private boolean playerTurn = true;
     private boolean battleOver = false;
 
@@ -603,6 +605,7 @@ public class BattleView extends StackPane {
         playerTurn = true;
         playerBlock = 0;
         if (weakTurns > 0) weakTurns--;
+        if (enemyVulnerable > 0) enemyVulnerable--;
         energy = 3;
 
         // 遗物：请假条 → 每回合多抽 1 张
@@ -641,14 +644,35 @@ public class BattleView extends StackPane {
 
         energy -= c.cost;
         if (c.damage > 0) {
-            int dmg = c.damage;
-            if (weakTurns > 0) dmg = dmg * 3 / 4;
-            damageEnemy(dmg);
+            for (int i = 0; i < c.hits; i++) {
+                int dmg = c.damage + playerStrength;
+                if (weakTurns > 0) dmg = dmg * 3 / 4;
+                if (enemyVulnerable > 0) dmg = dmg * 3 / 2; // 易伤：+50%
+                damageEnemy(dmg);
+                if (battleOver) break;
+            }
+        }
+        if (c.kind == Card.Kind.BASH) {
+            enemyVulnerable += 2; // 痛击：给敌人 2 层易伤
+        }
+        if (c.kind == Card.Kind.KINDLE) {
+            playerStrength += 2; // 燃烧：获得 2 层力量
+        }
+        if (c.kind == Card.Kind.BLEED) {
+            energy += 2; // 放血：获得 2 点能量
+            player.damage(3); // 自己失去 3 点生命
+            hud.refresh();
+            if (player.hp() == 0) { playerDied(); return; }
         }
         if (c.block > 0) playerBlock += c.block;
+        if (c.draw > 0) drawHand(c.draw); // 剑柄打击等：额外抽牌
 
         hand.remove(c);
-        discard.add(c); // 打出 → 进弃牌堆
+        if (c.exhaust) {
+            // 消耗：不进入弃牌堆，本场战斗无法再次使用
+        } else {
+            discard.add(c); // 打出 → 进弃牌堆
+        }
         if (!battleOver) refreshAll();
     }
 
@@ -773,12 +797,39 @@ public class BattleView extends StackPane {
         rewardChosen = false;
         overlay.setVisible(false); // 如果开着牌堆浏览层，先关掉
 
-        // 从奖励池里随机抽 3 张不重复的（先复制成可变列表才能 shuffle）
-        List<Card> pool = new ArrayList<>(List.of(
-                Card.strike(), Card.defend(), Card.bash(),
-                Card.heavyHit(), Card.ironWall()));
-        Collections.shuffle(pool, rnd);
-        List<Card> offers = new ArrayList<>(pool.subList(0, 3));
+        // 奖励池（不含打击、防御）+ 权重：数值越大越容易被抽到
+        //   高权重: 痛击、铁斩波
+        //   中权重: 剑柄打击、耸肩无视、放血
+        //   低权重: 重锤、岿然不动
+        List<Card> pool = List.of(
+                Card.bash(), Card.sweep(),
+                Card.pommelStrike(), Card.shrug(), Card.bleed(),
+                Card.hammer(), Card.impregnable(),
+                Card.doubleStrike(), Card.kindle());
+        List<Integer> weights = List.of(
+                4, 4,   // 痛击、铁斩波
+                3, 3, 3, // 剑柄打击、耸肩无视、放血
+                2, 2,   // 重锤、岿然不动
+                4, 2);  // 双重打击、燃烧
+
+        // 按权重随机抽 3 张不重复的牌
+        List<Card> offers = new ArrayList<>();
+        List<Card> remaining = new ArrayList<>(pool);
+        List<Integer> remainingWeights = new ArrayList<>(weights);
+        for (int i = 0; i < 3; i++) {
+            int total = remainingWeights.stream().mapToInt(Integer::intValue).sum();
+            int r = rnd.nextInt(total);
+            int cumulative = 0;
+            for (int j = 0; j < remaining.size(); j++) {
+                cumulative += remainingWeights.get(j);
+                if (r < cumulative) {
+                    offers.add(remaining.get(j));
+                    remaining.remove(j);
+                    remainingWeights.remove(j);
+                    break;
+                }
+            }
+        }
 
         rewardBox.getChildren().clear();
         for (Card c : offers) {
@@ -805,7 +856,11 @@ public class BattleView extends StackPane {
         name.setFont(Font.font(19));
         name.setStyle("-fx-font-weight: bold;");
 
-        Label value = new Label(c.damage > 0 ? "伤害 " + c.damage : "格挡 " + c.block);
+        Label value = new Label(
+                c.damage > 0 && c.block > 0 ? "伤害 " + c.damage + "  格挡 " + c.block
+                : c.damage > 0 ? "伤害 " + c.damage
+                : c.block > 0 ? "格挡 " + c.block + (c.exhaust ? " 消耗" : "")
+                : c.kind.desc);
         value.setTextFill(Color.WHITE);
         value.setFont(Font.font(15));
 
@@ -858,6 +913,10 @@ public class BattleView extends StackPane {
             pChips.getChildren().add(statusChip("弱", weakTurns, "#7c3aed",
                     "虚弱 ×" + weakTurns + "：你造成的伤害 ×0.75"));
         }
+        if (playerStrength > 0) {
+            pChips.getChildren().add(statusChip("力", playerStrength, "#f59e0b",
+                    "力量 +" + playerStrength + "：每段攻击伤害增加"));
+        }
 
         // ---- 怪物(右)：同上 + 意图图标 ----
         eName.setText(enemy.name);
@@ -873,6 +932,10 @@ public class BattleView extends StackPane {
         if (enemy.power > 0) {
             eChips.getChildren().add(statusChip("力", enemy.power, "#f59e0b",
                     "力量 +" + enemy.power + "：攻击伤害增加"));
+        }
+        if (enemyVulnerable > 0) {
+            eChips.getChildren().add(statusChip("伤", enemyVulnerable, "#dc2626",
+                    "易伤 " + enemyVulnerable + " 回合：承受伤害 ×1.5"));
         }
         refreshIntent();
 
@@ -902,13 +965,28 @@ public class BattleView extends StackPane {
         }
     }
 
+    private static String intentColor(Enemy.Intent i) {
+        return switch (i) {
+            case ATTACK -> "#dc2626";
+            case DEFEND -> "#0284c7";
+            case BUFF   -> "#d97706";
+            case WEAKEN -> "#7c3aed";
+        };
+    }
+
     private static String cardColor(Card.Kind k) {
         return switch (k) {
             case STRIKE -> "#991b1b";
             case DEFEND -> "#1d4ed8";
             case BASH   -> "#b45309";
-            case HEAVY  -> "#7c2d12";
-            case IRON   -> "#334155";
+            case SWEEP  -> "#4338ca";
+            case POMMEL -> "#92400e";
+            case SHRUG  -> "#475569";
+            case BLEED  -> "#881337";
+            case HAMMER -> "#7f1d1d";
+            case IMPREGNABLE -> "#1e3a5f";
+            case DOUBLE_STRIKE -> "#c2410c";
+            case KINDLE -> "#9a3412";
         };
     }
 
@@ -929,7 +1007,20 @@ public class BattleView extends StackPane {
         name.setFont(Font.font(17));
         name.setStyle("-fx-font-weight: bold;");
 
-        Label value = new Label(c.damage > 0 ? "伤害 " + c.damage : "格挡 " + c.block);
+        String valueText;
+        if (c.damage > 0 && c.block > 0) {
+            valueText = "伤害 " + c.damage + "  格挡 " + c.block;
+        } else if (c.damage > 0 && c.hits > 1) {
+            valueText = "伤害 " + c.damage + "×" + c.hits;
+        } else if (c.damage > 0) {
+            valueText = c.kind.desc;
+        } else if (c.block > 0) {
+            valueText = "格挡 " + c.block;
+            if (c.exhaust) valueText += " 消耗";
+        } else {
+            valueText = c.kind.desc;
+        }
+        Label value = new Label(valueText);
         value.setTextFill(Color.rgb(254, 243, 199));
         value.setFont(Font.font(13));
 

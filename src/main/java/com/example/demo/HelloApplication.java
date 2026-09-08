@@ -38,7 +38,7 @@ public class HelloApplication extends Application {
 
     @Override
     public void start(Stage stage) {
-        stage.setTitle("我的游戏");
+        stage.setTitle("杀戮猪塔");
         stage.setScene(buildMenuScene(stage));
         stage.show();
 
@@ -314,11 +314,14 @@ public class HelloApplication extends Application {
     /** 详情/牌组里的小牌 */
     private VBox miniCard(Card c) {
         String color = switch (c.kind) {
-            case STRIKE -> "#991b1b";
-            case DEFEND -> "#1d4ed8";
-            case BASH   -> "#b45309";
-            case HEAVY  -> "#7c2d12";
-            case IRON   -> "#334155";
+            case STRIKE   -> "#991b1b";
+            case DEFEND   -> "#1d4ed8";
+            case BASH     -> "#b45309";
+            case HAMMER   -> "#7c2d12";
+            case IMPREGNABLE -> "#334155";
+            case DOUBLE_STRIKE -> "#c2410c";
+            case KINDLE   -> "#9a3412";
+            default       -> "#475569";
         };
         VBox card = new VBox(4);
         card.setAlignment(Pos.CENTER);
@@ -399,7 +402,8 @@ public class HelloApplication extends Application {
     private Card randomRewardCard() {
         List<Card> pool = List.of(
                 Card.strike(), Card.defend(), Card.bash(),
-                Card.heavyHit(), Card.ironWall());
+                Card.hammer(), Card.impregnable(),
+                Card.doubleStrike(), Card.kindle());
         int idx = new java.util.Random().nextInt(pool.size());
         return pool.get(idx);
     }
