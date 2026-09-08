@@ -37,6 +37,7 @@ public class MapView extends Pane {
             case ELITE   -> "#f59e0b";
             case REST    -> "#2563eb";
             case TREASURE-> "#b45309";
+            case EVENT   -> "#0d9488";
             case BOSS    -> "#7f1d1d";
         };
     }
@@ -73,15 +74,28 @@ public class MapView extends Pane {
     private final GameMap map;
     private final Consumer<GameMap.NodeType> onArrive; // 走上节点后回调
     private final ScrollPane scroll;                   // 外层滚动容器（视图跟随用）
+    private final boolean interactive;                 // true=可点击行走；false=纯查看(战斗中看地图)
     private final List<NodeView> views = new ArrayList<>();
     private final List<Edge> edges = new ArrayList<>();
     private final Label header;
     private final Label hint;
 
-    public MapView(GameMap map, Consumer<GameMap.NodeType> onArrive, ScrollPane scroll) {
+    /** 每列的水平小抖动：只影响显示坐标，让节点不那么笔直对齐（拓扑不变、不会交叉） */
+    private final double[] colJitter = new double[GameMap.MAX_COLS];
+
+    {
+        java.util.Random jr = new java.util.Random(20240601L);
+        for (int i = 0; i < colJitter.length; i++) {
+            colJitter[i] = (jr.nextDouble() * 2 - 1) * 100; // 左右最多偏 38px
+        }
+    }
+
+    public MapView(GameMap map, Consumer<GameMap.NodeType> onArrive, ScrollPane scroll,
+                   boolean interactive) {
         this.map = map;
         this.onArrive = onArrive;
         this.scroll = scroll;
+        this.interactive = interactive;
 
         setPrefHeight(CONTENT_H); // 高度固定很长，宽度交给 ScrollPane(fitToWidth) 决定
         setStyle("-fx-background-color: #0b1020;");
@@ -112,12 +126,16 @@ public class MapView extends Pane {
 
     // ================= 坐标计算（随内容宽度自适应） =================
 
-    /** 某列中心的 x 坐标：列在内容宽度里均匀铺开，左右留边距 */
+    /** 某列中心的 x 坐标：列在内容宽度里均匀铺开 + 每列固定的小抖动（左右留边距） */
     private double nodeX(int col) {
         double w = getWidth() > 0 ? getWidth() : 1280; // 还没布局时按默认宽度算
         double margin = Math.max(50, w * 0.06);        // 左右边距随宽度变化
         if (GameMap.MAX_COLS <= 1) return w / 2;
-        return margin + col * ((w - 2 * margin) / (GameMap.MAX_COLS - 1));
+        double lane = margin + col * ((w - 2 * margin) / (GameMap.MAX_COLS - 1));
+        if (col >= 0 && col < colJitter.length) {
+            lane += colJitter[col]; // 轻微左右错开，画面更自然
+        }
+        return lane;
     }
 
     /** 某行的 y 坐标（纵向固定，靠 ScrollPane 滚动查看） */
@@ -157,7 +175,9 @@ public class MapView extends Pane {
         for (List<GameMap.MapNode> rowNodes : map.floors) {
             for (GameMap.MapNode n : rowNodes) {
                 NodeView v = new NodeView(n);
-                v.setOnMouseClicked(e -> click(n));
+                if (interactive) {
+                    v.setOnMouseClicked(e -> click(n));
+                }
                 getChildren().add(v);
                 views.add(v);
             }
@@ -188,12 +208,17 @@ public class MapView extends Pane {
                         colorOf(n.type), ok ? "#f8fafc" : "transparent", ok ? 2 : 0);
             }
             v.setStyle(style);
-            v.setOpacity(ok ? 1.0 : 0.4);      // 不可点的变暗
-            v.setCursor(ok ? Cursor.HAND : Cursor.DEFAULT);
+            v.setOpacity(ok || !interactive ? 1.0 : 0.4); // 不可点的变暗（查看模式全部点亮）
+            if (interactive) {
+                v.setCursor(ok ? Cursor.HAND : Cursor.DEFAULT);
+            }
         }
 
         // 顶部进度 + 底部提示
-        if (map.current == null) {
+        if (!interactive) {
+            header.setText("地图（查看模式）");
+            hint.setText("滚轮滚动查看 · 点外部任意处或“关闭”退出");
+        } else if (map.current == null) {
             header.setText("地图 · 点击起点出发");
             hint.setText("滚轮上下浏览地图 · 白色光圈可走 · Esc 返回");
         } else {
@@ -207,6 +232,7 @@ public class MapView extends Pane {
 
     /** 点击节点：可以走才走，走完刷新并通知外面。 */
     private void click(GameMap.MapNode n) {
+        if (!interactive) return;
         if (!reachable(n)) return;
         map.current = n;
         refresh();

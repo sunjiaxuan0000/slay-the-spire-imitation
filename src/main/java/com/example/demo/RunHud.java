@@ -3,57 +3,61 @@ package com.example.demo;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Label;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
-import javafx.scene.layout.Pane;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 
-import java.util.EnumMap;
-import java.util.Map;
+import java.util.function.Consumer;
 
 /**
- * 局内顶部 UI（HUD）：角色生命 + 牌组一览。
- * 放在每个局内场景的顶部，生命变化后调用 refresh() 刷新。
+ * 局内顶部 UI（HUD）：
+ *   第一行：角色名 + 生命值(血条) … 右边 → [地图图标][牌组图标(右上角,只显示数量)]
+ *   第二行：已拾取遗物的图标（悬停看名字/效果）
+ * 点击牌组 / 地图 / 遗物图标 → 触发外层回调，
+ * 由外层弹出“和抽牌堆一样”的整页大窗口（半透明遮罩 + 居中大面板）。
  */
-public class RunHud extends HBox {
+public class RunHud extends VBox {
 
-    private static final double BAR_WIDTH = 170; // 血条宽度
+    private static final double BAR_WIDTH = 190; // 血条宽度
 
     private final Player player;
 
     private final Label hpText;
     private final Region hpFill;
-    private final HBox deckBox;
+    private final StackPane deckIcon = new StackPane();
+    private final Label deckBadge = new Label();
+    private final HBox relicRow = new HBox(10);
 
-    public RunHud(Player player) {
+    public RunHud(Player player,
+                  Consumer<Relic> onRelicClick,
+                  Runnable onDeckClick,
+                  Runnable onMapClick) {
         this.player = player;
 
-        setAlignment(Pos.CENTER_LEFT);
-        setSpacing(22);
-        setPadding(new Insets(8, 16, 8, 16));
-        setStyle("-fx-background-color: #111827;");
-        setMaxHeight(USE_PREF_SIZE);
+        // ---------- 第一行 ----------
+        HBox row1 = new HBox(18);
+        row1.setAlignment(Pos.CENTER_LEFT);
+        row1.setPadding(new Insets(8, 18, 8, 18));
+        row1.setStyle("-fx-background-color: #111827;");
 
-        // ---------- 左边：角色名 ----------
         Label name = new Label(Player.CHARACTER_NAME);
         name.setTextFill(Color.WHITE);
         name.setFont(Font.font(20));
         name.setStyle("-fx-font-weight: bold;");
 
-        // ---------- 中间：生命值（数字 + 血条） ----------
         hpText = new Label();
         hpText.setTextFill(Color.WHITE);
         hpText.setFont(Font.font(16));
 
-        // 血条底槽（深色圆角条），HBox 会让填充块靠左、不拉伸
         HBox barBg = new HBox();
         barBg.setPrefSize(BAR_WIDTH, 14);
         barBg.setMaxSize(BAR_WIDTH, 14);
         barBg.setStyle("-fx-background-color: #1f2937; -fx-background-radius: 7;");
-
-        // 血条填充（宽度随当前血量比例变化）
-        hpFill = new Pane();
+        hpFill = new Region();
         hpFill.setStyle("-fx-background-color: #22c55e; -fx-background-radius: 7;");
         barBg.getChildren().add(hpFill);
 
@@ -61,50 +65,109 @@ public class RunHud extends HBox {
         hpArea.setAlignment(Pos.CENTER_LEFT);
         hpArea.getChildren().addAll(hpText, barBg);
 
-        // ---------- 右边：牌组一览 ----------
-        Label deckTitle = new Label("牌组 · " + player.deck.size() + " 张");
-        deckTitle.setTextFill(Color.rgb(148, 163, 184));
-        deckTitle.setFont(Font.font(14));
+        // 弹性空隙 → 把右侧图标推到右上角
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, javafx.scene.layout.Priority.ALWAYS);
 
-        deckBox = new HBox(8);
-        deckBox.setAlignment(Pos.CENTER_LEFT);
+        // 地图图标（牌组图标左边）
+        StackPane mapIcon = iconCard("图",
+                "linear-gradient(to bottom right, #86efac, #15803d);", "#052e16");
+        Tooltip.install(mapIcon, new Tooltip("查看地图（战斗中也可查看）"));
+        mapIcon.setOnMouseClicked(e -> onMapClick.run());
 
-        HBox deckArea = new HBox(8);
-        deckArea.setAlignment(Pos.CENTER_LEFT);
-        deckArea.getChildren().addAll(deckTitle, deckBox);
+        // 牌组图标（右上角）
+        deckIcon.setCursor(javafx.scene.Cursor.HAND);
+        deckIcon.setStyle("-fx-background-color: linear-gradient(to bottom right, #e5e7eb, #9ca3af); "
+                + "-fx-background-radius: 8;");
+        deckIcon.setPrefSize(46, 58);
+        deckIcon.setMaxSize(46, 58);
+        Label glyph = new Label("牌");
+        glyph.setTextFill(Color.rgb(55, 65, 81));
+        glyph.setFont(Font.font(17));
+        glyph.setStyle("-fx-font-weight: bold;");
+        deckIcon.getChildren().add(glyph);
+        attachBadge(deckIcon, deckBadge);
+        deckIcon.setOnMouseClicked(e -> onDeckClick.run());
 
-        getChildren().addAll(name, hpArea, deckArea);
+        row1.getChildren().addAll(name, hpArea, spacer, mapIcon, deckIcon);
+        getChildren().add(row1);
+
+        // ---------- 第二行：遗物 ----------
+        relicRow.setAlignment(Pos.CENTER_LEFT);
+        relicRow.setPadding(new Insets(6, 18, 6, 18));
+        relicRow.setStyle("-fx-background-color: rgba(15, 23, 42, 0.85);");
+        getChildren().add(relicRow);
+
+        // 保存点击回调供遗物图标用
+        this.onRelicClick = onRelicClick;
 
         refresh();
     }
 
-    /** 按当前血量/牌组刷新显示（血量变了、牌组变了都要调用）。 */
-    public void refresh() {
-        // 生命数字
-        hpText.setText(player.hp() + " / " + player.maxHp);
+    private final Consumer<Relic> onRelicClick;
 
-        // 血条宽度 = 总宽 × 血量比例
+    /** 通用小图标（地图用） */
+    private static StackPane iconCard(String glyph, String grad, String color) {
+        StackPane icon = new StackPane();
+        icon.setPrefSize(46, 58);
+        icon.setMaxSize(46, 58);
+        icon.setCursor(javafx.scene.Cursor.HAND);
+        icon.setStyle("-fx-background-color: " + grad + "; -fx-background-radius: 8;");
+        Label g = new Label(glyph);
+        g.setTextFill(Color.web(color));
+        g.setFont(Font.font(17));
+        g.setStyle("-fx-font-weight: bold;");
+        icon.getChildren().add(g);
+        return icon;
+    }
+
+    /** 数量下标挂右下角（牌组图标用） */
+    private static void attachBadge(StackPane icon, Label badge) {
+        badge.setTextFill(Color.WHITE);
+        badge.setFont(Font.font(12));
+        badge.setStyle("-fx-font-weight: bold; -fx-background-color: #dc2626; "
+                + "-fx-background-radius: 8; -fx-padding: 0 5 0 5;");
+        icon.getChildren().add(badge);
+        StackPane.setAlignment(badge, Pos.BOTTOM_RIGHT);
+        StackPane.setMargin(badge, new Insets(0, 2, 2, 0));
+        badge.setVisible(false);
+    }
+
+    /** 刷新：血条 / 牌组数量 / 遗物图标 */
+    public void refresh() {
+        hpText.setText(player.hp() + " / " + player.maxHp);
         double ratio = (double) player.hp() / player.maxHp;
         hpFill.setPrefWidth(Math.max(0, BAR_WIDTH * ratio));
-        // 血量低（<40%）时血条变红，提醒危险
         hpFill.setStyle("-fx-background-color: " + (ratio < 0.4 ? "#ef4444" : "#22c55e")
                 + "; -fx-background-radius: 7;");
 
-        // 牌组按种类统计：打击×5 防御×4 痛击×1
-        deckBox.getChildren().clear();
-        Map<Card.Kind, Integer> counts = new EnumMap<>(Card.Kind.class);
-        for (Card c : player.deck) {
-            counts.merge(c.kind, 1, Integer::sum);
+        deckBadge.setText(String.valueOf(player.deck.size()));
+        deckBadge.setVisible(true);
+        Tooltip.install(deckIcon, new Tooltip("牌组：共 " + player.deck.size() + " 张（点击查看）"));
+
+        relicRow.getChildren().clear();
+        for (Relic r : player.relics) {
+            relicRow.getChildren().add(buildRelicIcon(r));
         }
-        for (Card.Kind kind : Card.Kind.values()) {
-            int n = counts.getOrDefault(kind, 0);
-            if (n == 0) continue;
-            Label chip = new Label(kind.label + " ×" + n);
-            chip.setTextFill(Color.rgb(226, 232, 240));
-            chip.setFont(Font.font(13));
-            chip.setStyle("-fx-background-color: #1e293b; -fx-background-radius: 10; "
-                    + "-fx-padding: 3 10 3 10;");
-            deckBox.getChildren().add(chip);
-        }
+        relicRow.setVisible(!player.relics.isEmpty());
+    }
+
+    /** 单个遗物小图标：悬停看名字/效果，点击让外层弹整页详情 */
+    private StackPane buildRelicIcon(Relic r) {
+        StackPane icon = new StackPane();
+        icon.setPrefSize(30, 30);
+        icon.setMaxSize(30, 30);
+        icon.setCursor(javafx.scene.Cursor.HAND);
+        icon.setStyle("-fx-background-color: #7c3aed; -fx-background-radius: 8;");
+
+        Label g = new Label(r.name.substring(0, 1));
+        g.setTextFill(Color.WHITE);
+        g.setFont(Font.font(14));
+        g.setStyle("-fx-font-weight: bold;");
+        icon.getChildren().add(g);
+
+        Tooltip.install(icon, new Tooltip(r.name + "\n" + r.desc));
+        icon.setOnMouseClicked(e -> onRelicClick.accept(r));
+        return icon;
     }
 }
