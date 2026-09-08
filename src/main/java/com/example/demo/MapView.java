@@ -37,6 +37,7 @@ public class MapView extends Pane {
             case ELITE   -> "#f59e0b";
             case REST    -> "#2563eb";
             case TREASURE-> "#b45309";
+            case EVENT   -> "#0d9488";
             case BOSS    -> "#7f1d1d";
         };
     }
@@ -79,6 +80,16 @@ public class MapView extends Pane {
     private final Label header;
     private final Label hint;
 
+    /** 每列的水平小抖动：只影响显示坐标，让节点不那么笔直对齐（拓扑不变、不会交叉） */
+    private final double[] colJitter = new double[GameMap.MAX_COLS];
+
+    {
+        java.util.Random jr = new java.util.Random(20240601L);
+        for (int i = 0; i < colJitter.length; i++) {
+            colJitter[i] = (jr.nextDouble() * 2 - 1) * 100; // 左右最多偏 38px
+        }
+    }
+
     public MapView(GameMap map, Consumer<GameMap.NodeType> onArrive, ScrollPane scroll,
                    boolean interactive) {
         this.map = map;
@@ -115,12 +126,16 @@ public class MapView extends Pane {
 
     // ================= 坐标计算（随内容宽度自适应） =================
 
-    /** 某列中心的 x 坐标：列在内容宽度里均匀铺开，左右留边距 */
+    /** 某列中心的 x 坐标：列在内容宽度里均匀铺开 + 每列固定的小抖动（左右留边距） */
     private double nodeX(int col) {
         double w = getWidth() > 0 ? getWidth() : 1280; // 还没布局时按默认宽度算
         double margin = Math.max(50, w * 0.06);        // 左右边距随宽度变化
         if (GameMap.MAX_COLS <= 1) return w / 2;
-        return margin + col * ((w - 2 * margin) / (GameMap.MAX_COLS - 1));
+        double lane = margin + col * ((w - 2 * margin) / (GameMap.MAX_COLS - 1));
+        if (col >= 0 && col < colJitter.length) {
+            lane += colJitter[col]; // 轻微左右错开，画面更自然
+        }
+        return lane;
     }
 
     /** 某行的 y 坐标（纵向固定，靠 ScrollPane 滚动查看） */

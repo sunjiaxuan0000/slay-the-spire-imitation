@@ -351,6 +351,11 @@ public class HelloApplication extends Application {
             case ELITE   -> startBattle(stage, map, player, GameMap.NodeType.ELITE, Enemy.eliteSlime());
             case BOSS    -> startBattle(stage, map, player, GameMap.NodeType.BOSS, Enemy.boss());
             case START   -> showRoomScene(stage, map, player);
+            case EVENT   -> {
+                List<EventDef> events = EventDef.pool();
+                EventDef ev = events.get(new java.util.Random().nextInt(events.size()));
+                startEventScene(stage, map, player, ev);
+            }
             case REST    -> {
                 int before = player.hp();
                 player.heal(player.maxHp);
@@ -388,6 +393,75 @@ public class HelloApplication extends Application {
         Relic gained = pool.get(idx);
         player.addRelic(gained);
         return gained;
+    }
+
+    /** 随机奖励一张卡（事件/奖励用） */
+    private Card randomRewardCard() {
+        List<Card> pool = List.of(
+                Card.strike(), Card.defend(), Card.bash(),
+                Card.heavyHit(), Card.ironWall());
+        int idx = new java.util.Random().nextInt(pool.size());
+        return pool.get(idx);
+    }
+
+    // ================= 事件 =================
+
+    /** 事件场景：专属背景图 + 右侧名称/描述 + 选项，选完结算回地图 */
+    private void startEventScene(Stage stage, GameMap map, Player player, EventDef ev) {
+        EventView view = new EventView(ev, opt -> {
+            String msg = applyEventOption(player, opt);
+            if (player.hp() == 0) {
+                Alert over = new Alert(Alert.AlertType.INFORMATION);
+                over.setTitle("事件结果");
+                over.setHeaderText(null);
+                over.setContentText(msg + "\n\n你的生命归零……本局结束。");
+                over.setOnHidden(e -> stage.setScene(buildMenuScene(stage)));
+                over.showAndWait();
+            } else {
+                Alert result = new Alert(Alert.AlertType.INFORMATION);
+                result.setTitle("事件结果");
+                result.setHeaderText(null);
+                result.setContentText(msg);
+                result.setOnHidden(e -> showMapScene(stage, map, player));
+                result.showAndWait();
+            }
+        });
+
+        Scene scene = new Scene(view, W, H);
+        scene.setOnKeyPressed(e -> {
+            if (e.getCode() == KeyCode.ESCAPE) {
+                stage.setScene(buildMenuScene(stage)); // 放弃本局
+            }
+        });
+        stage.setScene(scene);
+    }
+
+    /** 结算事件选项的真实效果，返回结果描述文字 */
+    private String applyEventOption(Player player, EventDef.Option opt) {
+        return switch (opt.action) {
+            case HEAL -> {
+                int before = player.hp();
+                player.heal(opt.amount);
+                yield "回复 " + opt.amount + " 点生命：" + before + " → " + player.hp();
+            }
+            case DAMAGE -> {
+                int before = player.hp();
+                player.damage(opt.amount);
+                yield "失去 " + opt.amount + " 点生命：" + before + " → " + player.hp();
+            }
+            case ADD_CARD -> {
+                Card c = randomRewardCard();
+                player.deck.add(c);
+                yield "获得卡牌：「" + c.kind.label + "」加入牌组（#" + c.id + "）";
+            }
+            case ADD_RELIC -> {
+                Relic r = randomTreasure(player);
+                yield r == null
+                        ? "遗物池里已经没有新遗物了……"
+                        : "获得遗物：「" + r.name + "」\n" + r.desc;
+            }
+            case NOTHING -> opt.effectDesc + "（无事发生）";
+        };
     }
 
     /** 起点房间：NPC + 三选一初始遗物 */
