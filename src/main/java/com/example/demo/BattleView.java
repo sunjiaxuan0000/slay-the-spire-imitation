@@ -1,13 +1,18 @@
 package com.example.demo;
 
+import javafx.animation.ParallelTransition;
 import javafx.animation.PauseTransition;
+import javafx.animation.RotateTransition;
+import javafx.animation.TranslateTransition;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Tooltip;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.Region;
@@ -55,15 +60,22 @@ public class BattleView extends StackPane {
     // ================= UI =================
     // 角色(左)
     private final Label pName = new Label(Player.CHARACTER_NAME);
-    private final Label pHpText = new Label();
+    private final Label pHpText = new Label();          // 血条上的数字数字
     private final Region pHpFill = new Region();
-    private final Label pStatus = new Label();
+    private final StackPane pHpWrap = new StackPane();  // 包住血条的容器（有格挡=金属框）
+    private final StackPane pShield = new StackPane();  // 格挡盾牌
+    private final Label pShieldNum = new Label();
+    private final FlowPane pChips = new FlowPane(4, 4); // buff/debuff 图标行
     // 怪物(右)
     private final Label eName = new Label();
-    private final Label eIntent = new Label();
+    private final StackPane eIntentIcon = new StackPane(); // 意图图标
+    private final Label eIntentNum = new Label();          // 攻击意图的数字
     private final Label eHpText = new Label();
     private final Region eHpFill = new Region();
-    private final Label eStatus = new Label();
+    private final StackPane eHpWrap = new StackPane();
+    private final StackPane eShield = new StackPane();
+    private final Label eShieldNum = new Label();
+    private final FlowPane eChips = new FlowPane(4, 4);
     // 中下
     private int turn = 0;                        // 当前第几回合
     private final Label turnLabel = new Label(); // 中间：第 n 回合
@@ -85,6 +97,11 @@ public class BattleView extends StackPane {
     private final StackPane rewardOverlay = new StackPane();
     private final HBox rewardBox = new HBox(16);
     private boolean rewardChosen = false;
+    // 死亡演出
+    private StackPane playerPortrait;                 // 角色立绘（倒地动画）
+    private final Pane deadDim = new Pane();          // 背景变暗层（在内容下层，角色/怪物保持高亮）
+    private final StackPane deathOverlay = new StackPane(); // 死亡提示页
+    private boolean diedShown = false;
 
     public BattleView(Player player, RunHud hud, Enemy enemy, Consumer<Boolean> onFinish) {
         this.player = player;
@@ -94,6 +111,11 @@ public class BattleView extends StackPane {
 
         // 整层背景（以后换战斗背景图）
         setStyle("-fx-background-color: linear-gradient(to bottom, #191511, #23201c);");
+
+        // 背景变暗层：默认隐藏，死亡时点亮（它在内容层下面 → 只有背景暗、角色怪物亮）
+        deadDim.setStyle("-fx-background-color: rgba(2, 6, 23, 0.5);");
+        deadDim.setVisible(false);
+        getChildren().add(deadDim);
 
         BorderPane main = new BorderPane();
         main.setStyle("-fx-background-color: transparent;");
@@ -157,15 +179,34 @@ public class BattleView extends StackPane {
         rewardOverlay.setVisible(false);
         getChildren().add(rewardOverlay);
 
+        // 死亡提示页（默认隐藏）
+        buildDeathOverlay();
+        deathOverlay.setVisible(false);
+        getChildren().add(deathOverlay);
+
         // 开局：牌组洗入抽牌堆，角色先手
         draw.addAll(player.deck);
         Collections.shuffle(draw, rnd);
+
+        // 遗物：保温杯 → 战斗开始恢复 10 点生命
+        if (hasRelic("保温杯")) {
+            player.heal(10);
+            hud.refresh();
+        }
         startPlayerTurn();
+    }
+
+    /** 检查玩家是否持有某个遗物（遗物效果都靠它触发） */
+    private boolean hasRelic(String name) {
+        for (Relic r : player.relics) {
+            if (r.name.equals(name)) return true;
+        }
+        return false;
     }
 
     // ================= 面板搭建 =================
 
-    /** 左侧：角色（立绘 → 血量 → buff/debuff） */
+    /** 左侧：角色（立绘 → 血条(数字/数字，有格挡=金属框+盾牌) → buff/debuff图标） */
     private VBox buildLeftPanel() {
         VBox box = new VBox(8);
         box.setAlignment(Pos.CENTER);
@@ -175,24 +216,33 @@ public class BattleView extends StackPane {
         pName.setFont(Font.font(26));
         pName.setStyle("-fx-font-weight: bold;");
 
-        StackPane portrait = portrait("战",
+        playerPortrait = portrait("战",
                 "radial-gradient(center 35% 30%, radius 100%, #b45309, #451a03);");
-        portrait.setPrefSize(210, 210);
-        portrait.setMaxSize(210, 210);
+        playerPortrait.setPrefSize(210, 210);
+        playerPortrait.setMaxSize(210, 210);
 
-        pHpText.setTextFill(Color.rgb(226, 232, 240));
-        pHpText.setFont(Font.font(14));
-        HBox bar = hpBar(pHpFill, 240);
-        pHpFill.setStyle("-fx-background-color: #16a34a; -fx-background-radius: 7;");
+        // 血条（数字/数字 写在条上）
+        hpWrap(pHpWrap, pHpFill, pHpText, 240, "#22c55e");
+        // 格挡盾牌
+        pShieldNum.setTextFill(Color.WHITE);
+        pShieldNum.setFont(Font.font(13));
+        pShieldNum.setStyle("-fx-font-weight: bold;");
+        shield(pShield, pShieldNum);
+        Tooltip.install(pShield, new Tooltip("格挡：吸收等量伤害，下回合开始清除"));
 
-        pStatus.setTextFill(Color.rgb(226, 232, 240));
-        pStatus.setFont(Font.font(14));
+        HBox cluster = new HBox(6);
+        cluster.setAlignment(Pos.CENTER_LEFT);
+        cluster.getChildren().addAll(pShield, pHpWrap);
 
-        box.getChildren().addAll(pName, portrait, pHpText, bar, pStatus);
+        // buff/debuff 图标行（超过血条宽度自动换行）
+        pChips.setPrefWrapLength(286);
+        pChips.setAlignment(Pos.CENTER_LEFT);
+
+        box.getChildren().addAll(pName, playerPortrait, cluster, pChips);
         return box;
     }
 
-    /** 右侧：怪物（意图 → 立绘 → 血量 → buff/debuff） */
+    /** 右侧：怪物（意图图标 → 立绘 → 血条 → buff/debuff图标） */
     private VBox buildRightPanel() {
         VBox box = new VBox(8);
         box.setAlignment(Pos.CENTER);
@@ -202,24 +252,37 @@ public class BattleView extends StackPane {
         eName.setFont(Font.font(26));
         eName.setStyle("-fx-font-weight: bold;");
 
-        eIntent.setTextFill(Color.WHITE);
-        eIntent.setFont(Font.font(18));
-        eIntent.setStyle("-fx-font-weight: bold; -fx-padding: 2 12 2 12; -fx-background-radius: 10;");
+        // 意图：图标(+攻击数字)，悬停看含义
+        eIntentIcon.setPrefSize(46, 46);
+        eIntentIcon.setMaxSize(46, 46);
+        eIntentNum.setTextFill(Color.WHITE);
+        eIntentNum.setFont(Font.font(22));
+        eIntentNum.setStyle("-fx-font-weight: bold;");
+        eIntentNum.setVisible(false);
+        HBox intentRow = new HBox(8);
+        intentRow.setAlignment(Pos.CENTER);
+        intentRow.getChildren().addAll(eIntentIcon, eIntentNum);
 
         StackPane portrait = portrait(enemy.name.substring(0, 1),
                 "radial-gradient(center 35% 30%, radius 100%, #6b7280, #1f2937);");
         portrait.setPrefSize(210, 210);
         portrait.setMaxSize(210, 210);
 
-        eHpText.setTextFill(Color.rgb(226, 232, 240));
-        eHpText.setFont(Font.font(14));
-        HBox bar = hpBar(eHpFill, 240);
-        eHpFill.setStyle("-fx-background-color: #dc2626; -fx-background-radius: 7;");
+        hpWrap(eHpWrap, eHpFill, eHpText, 240, "#dc2626");
+        eShieldNum.setTextFill(Color.WHITE);
+        eShieldNum.setFont(Font.font(13));
+        eShieldNum.setStyle("-fx-font-weight: bold;");
+        shield(eShield, eShieldNum);
+        Tooltip.install(eShield, new Tooltip("格挡：吸收等量伤害"));
 
-        eStatus.setTextFill(Color.rgb(226, 232, 240));
-        eStatus.setFont(Font.font(14));
+        HBox cluster = new HBox(6);
+        cluster.setAlignment(Pos.CENTER_LEFT);
+        cluster.getChildren().addAll(eShield, eHpWrap);
 
-        box.getChildren().addAll(eName, eIntent, portrait, eHpText, bar, eStatus);
+        eChips.setPrefWrapLength(286);
+        eChips.setAlignment(Pos.CENTER_LEFT);
+
+        box.getChildren().addAll(eName, intentRow, portrait, cluster, eChips);
         return box;
     }
 
@@ -258,14 +321,110 @@ public class BattleView extends StackPane {
         return box;
     }
 
-    /** 血条底槽 */
-    private static HBox hpBar(Region fill, double width) {
+    /** 血条：底槽 + 填充 + 数字/数字文字，包进 wrap（wrap 负责“有格挡=金属框”） */
+    private static void hpWrap(StackPane wrap, Region fill, Label text, double width, String fillColor) {
         HBox bar = new HBox();
-        bar.setPrefSize(width, 14);
-        bar.setMaxSize(width, 14);
-        bar.setStyle("-fx-background-color: #1f2937; -fx-background-radius: 7;");
+        bar.setPrefSize(width, 18);
+        bar.setMaxSize(width, 18);
+        bar.setStyle("-fx-background-color: #1f2937; -fx-background-radius: 9;");
         bar.getChildren().add(fill);
-        return bar;
+        fill.setStyle("-fx-background-color: " + fillColor + "; -fx-background-radius: 9;");
+
+        text.setTextFill(Color.WHITE);
+        text.setFont(Font.font(13));
+        text.setStyle("-fx-font-weight: bold;");
+
+        wrap.setPrefSize(width, 18);
+        wrap.setMaxSize(width, 18);
+        wrap.getChildren().addAll(bar, text); // 条在底、数字在上
+        wrap.setStyle("-fx-border-color: transparent; -fx-border-width: 2; -fx-border-radius: 10;");
+    }
+
+    /** 有格挡时：血条包上金属框 */
+    private static String frameStyle(boolean metal) {
+        return metal
+                ? "-fx-border-color: #e2e8f0; -fx-border-width: 2; -fx-border-radius: 10; "
+                        + "-fx-effect: dropshadow(gaussian, rgba(226,232,240,0.35), 4, 0, 0, 0);"
+                : "-fx-border-color: transparent; -fx-border-width: 2; -fx-border-radius: 10;";
+    }
+
+    /** 格挡盾牌：圆底 + 盾牌图标 + 格挡数字 */
+    private static void shield(StackPane s, Label num) {
+        s.setPrefSize(32, 32);
+        s.setMaxSize(32, 32);
+        s.setStyle("-fx-background-color: #0ea5e9; -fx-background-radius: 16; "
+                + "-fx-border-color: #bae6fd; -fx-border-width: 1; -fx-border-radius: 16;");
+        s.getChildren().add(num);
+        s.setVisible(false);
+    }
+
+    /** buff/debuff 图标 + 层数 */
+    private static HBox statusChip(String glyph, int count, String color, String tip) {
+        StackPane icon = new StackPane();
+        icon.setPrefSize(24, 24);
+        icon.setMaxSize(24, 24);
+        icon.setStyle("-fx-background-color: " + color + "; -fx-background-radius: 12;");
+        Label g = new Label(glyph);
+        g.setTextFill(Color.WHITE);
+        g.setFont(Font.font(12));
+        g.setStyle("-fx-font-weight: bold;");
+        icon.getChildren().add(g);
+
+        Label n = new Label(String.valueOf(count));
+        n.setTextFill(Color.WHITE);
+        n.setFont(Font.font(13));
+        n.setStyle("-fx-font-weight: bold;");
+
+        HBox chip = new HBox(3);
+        chip.setAlignment(Pos.CENTER_LEFT);
+        chip.getChildren().addAll(icon, n);
+        Tooltip.install(chip, new Tooltip(tip));
+        return chip;
+    }
+
+    /** 怪物意图刷新：攻击=图标+数字；其余只图标；悬停显示含义 */
+    private void refreshIntent() {
+        Enemy.Step s = enemy.current();
+        String glyph;
+        String color;
+        String tip;
+        int number = 0;
+
+        switch (s.intent) {
+            case ATTACK -> {
+                glyph = "攻";
+                color = "#dc2626";
+                number = s.value + enemy.power;
+                tip = "意图·攻击：将对玩家造成 " + number + " 伤害";
+            }
+            case DEFEND -> {
+                glyph = "防";
+                color = "#0284c7";
+                tip = "意图·防御：获得 " + s.value + " 格挡";
+            }
+            case BUFF   -> {
+                glyph = "强";
+                color = "#d97706";
+                tip = "意图·强化自身：力量 +" + s.value;
+            }
+            default     -> {
+                glyph = "弱";
+                color = "#7c3aed";
+                tip = "意图·虚弱我方：" + s.value + " 回合，你造成的伤害 ×0.75";
+            }
+        }
+
+        eIntentIcon.getChildren().clear();
+        eIntentIcon.setStyle("-fx-background-color: " + color + "; -fx-background-radius: 23;");
+        Label g = new Label(glyph);
+        g.setTextFill(Color.WHITE);
+        g.setFont(Font.font(20));
+        g.setStyle("-fx-font-weight: bold;");
+        eIntentIcon.getChildren().add(g);
+
+        eIntentNum.setText(String.valueOf(number));
+        eIntentNum.setVisible(s.intent == Enemy.Intent.ATTACK); // 只有攻击意图显示数字
+        Tooltip.install(eIntentIcon, new Tooltip(tip));
     }
 
     /** 立绘圆（占位，以后换成 ImageView） */
@@ -445,7 +604,15 @@ public class BattleView extends StackPane {
         playerBlock = 0;
         if (weakTurns > 0) weakTurns--;
         energy = 3;
-        drawHand(5);
+
+        // 遗物：请假条 → 每回合多抽 1 张
+        drawHand(5 + (hasRelic("请假条") ? 1 : 0));
+
+        // 遗物：青铜怀表 → 战斗刚开始的那一回合获得 2 点格挡
+        if (turn == 1 && hasRelic("青铜怀表")) {
+            playerBlock = 2;
+        }
+
         refreshAll();
     }
 
@@ -492,7 +659,7 @@ public class BattleView extends StackPane {
             dmg -= absorb;
         }
         enemy.hp = Math.max(0, enemy.hp - dmg);
-        if (enemy.hp == 0) finish(true);
+        if (enemy.hp == 0) victory();
     }
 
     // ================= 怪物回合 =================
@@ -526,7 +693,7 @@ public class BattleView extends StackPane {
                 }
                 player.damage(dmg);
                 hud.refresh();
-                if (player.hp() == 0) { finish(false); return; }
+                if (player.hp() == 0) { playerDied(); return; }
             }
             case DEFEND -> enemy.block += s.value;
             case BUFF   -> enemy.power += s.value;
@@ -542,21 +709,63 @@ public class BattleView extends StackPane {
 
     // ================= 胜负 =================
 
-    /** 胜利 → 屏幕中央三选一奖励牌；失败 → 提示后结束 */
-    private void finish(boolean won) {
+    /** 怪物被击败 → 屏幕中央三选一奖励牌 */
+    private void victory() {
         if (battleOver) return;
         battleOver = true;
+        showReward();
+    }
 
-        if (!won) {
-            Alert alert = new Alert(Alert.AlertType.INFORMATION);
-            alert.setTitle("失败");
-            alert.setHeaderText(null);
-            alert.setContentText("你被 " + enemy.name + " 击败了……");
-            alert.setOnHidden(e -> onFinish.accept(false));
-            alert.showAndWait();
-        } else {
-            showReward(); // 三选一，加入牌组
-        }
+    /** 玩家阵亡：背景变暗、角色倒地，然后弹出死亡页 */
+    private void playerDied() {
+        if (diedShown) return;
+        diedShown = true;
+        battleOver = true;
+
+        deadDim.setVisible(true); // 背景变暗，角色和怪物保持高亮（它在内容层下面）
+
+        // 角色立绘缓缓“倒地”：旋转 + 下坠
+        RotateTransition rotate = new RotateTransition(Duration.millis(900), playerPortrait);
+        rotate.setToAngle(85);
+        TranslateTransition fall = new TranslateTransition(Duration.millis(900), playerPortrait);
+        fall.setToY(80);
+        ParallelTransition both = new ParallelTransition(rotate, fall);
+        both.setOnFinished(e -> {
+            deadDim.setStyle("-fx-background-color: rgba(2, 6, 23, 0.62);"); // 再压暗一档
+            deathOverlay.setVisible(true);
+        });
+        both.play();
+    }
+
+    private void buildDeathOverlay() {
+        Pane dim = new Pane();
+        dim.setStyle("-fx-background-color: rgba(2, 6, 23, 0.45);");
+
+        VBox box = new VBox(12);
+        box.setAlignment(Pos.CENTER);
+        box.setStyle("-fx-background-color: #1f2937; -fx-background-radius: 16; "
+                + "-fx-padding: 24 40 20 40;");
+
+        Label title = new Label("你倒下了…");
+        title.setTextFill(Color.rgb(248, 113, 113));
+        title.setFont(Font.font(30));
+        title.setStyle("-fx-font-weight: bold;");
+
+        Label body = new Label("你被 " + enemy.name + " 击败，本局结束");
+        body.setTextFill(Color.rgb(226, 232, 240));
+        body.setFont(Font.font(16));
+
+        Button back = new Button("返回主菜单");
+        back.setFont(Font.font(16));
+        back.setPrefSize(170, 42);
+        back.setStyle("-fx-background-color: #475569; -fx-text-fill: white; "
+                + "-fx-background-radius: 10; -fx-cursor: hand;");
+        back.setOnAction(e -> onFinish.accept(false));
+
+        box.getChildren().addAll(title, body, back);
+        box.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        StackPane.setAlignment(box, Pos.CENTER);
+        deathOverlay.getChildren().addAll(dim, box);
     }
 
     /** 屏幕中央出现三张随机牌，点一张加入牌组（或跳过），然后离开战斗 */
@@ -634,25 +843,38 @@ public class BattleView extends StackPane {
         // 左下抽牌堆上方：能量
         energyLabel.setText("能量 " + energy + " / 3");
 
-        // 角色(左)：血量条 + buff/debuff
-        pHpText.setText("生命 " + player.hp() + " / " + player.maxHp);
-        pHpFill.setPrefWidth(Math.max(0, 240.0 * player.hp() / player.maxHp));
-        List<String> pp = new ArrayList<>();
-        if (playerBlock > 0) pp.add("格挡 " + playerBlock);
-        if (weakTurns > 0) pp.add("虚弱 " + weakTurns + " 回合");
-        pStatus.setText("状态：" + (pp.isEmpty() ? "无" : String.join("    ", pp)));
+        // ---- 角色(左)：血条数字/数字 + 金属框 + 盾牌 + buff/debuff ----
+        double pRatio = (double) player.hp() / player.maxHp;
+        pHpText.setText(player.hp() + " / " + player.maxHp);
+        pHpFill.setPrefWidth(Math.max(0, 240.0 * pRatio));
+        pHpFill.setStyle("-fx-background-color: " + (pRatio < 0.4 ? "#ef4444" : "#22c55e")
+                + "; -fx-background-radius: 9;");
+        pHpWrap.setStyle(frameStyle(playerBlock > 0));
+        pShield.setVisible(playerBlock > 0);
+        pShieldNum.setText(String.valueOf(playerBlock));
 
-        // 怪物(右)：血量条 + buff/debuff + 意图
+        pChips.getChildren().clear();
+        if (weakTurns > 0) {
+            pChips.getChildren().add(statusChip("弱", weakTurns, "#7c3aed",
+                    "虚弱 ×" + weakTurns + "：你造成的伤害 ×0.75"));
+        }
+
+        // ---- 怪物(右)：同上 + 意图图标 ----
         eName.setText(enemy.name);
-        eHpText.setText("生命 " + enemy.hp + " / " + enemy.maxHp);
-        eHpFill.setPrefWidth(Math.max(0, 240.0 * enemy.hp / enemy.maxHp));
-        List<String> ep = new ArrayList<>();
-        if (enemy.block > 0) ep.add("格挡 " + enemy.block);
-        if (enemy.power > 0) ep.add("力量 +" + enemy.power);
-        eStatus.setText("状态：" + (ep.isEmpty() ? "无" : String.join("    ", ep)));
-        eIntent.setText("意图：" + enemy.intentText());
-        eIntent.setStyle("-fx-font-weight: bold; -fx-padding: 2 12 2 12; -fx-background-radius: 10; "
-                + "-fx-background-color: " + intentColor(enemy.current().intent) + ";");
+        double eRatio = (double) enemy.hp / enemy.maxHp;
+        eHpText.setText(enemy.hp + " / " + enemy.maxHp);
+        eHpFill.setPrefWidth(Math.max(0, 240.0 * eRatio));
+        eHpFill.setStyle("-fx-background-color: #dc2626; -fx-background-radius: 9;");
+        eHpWrap.setStyle(frameStyle(enemy.block > 0));
+        eShield.setVisible(enemy.block > 0);
+        eShieldNum.setText(String.valueOf(enemy.block));
+
+        eChips.getChildren().clear();
+        if (enemy.power > 0) {
+            eChips.getChildren().add(statusChip("力", enemy.power, "#f59e0b",
+                    "力量 +" + enemy.power + "：攻击伤害增加"));
+        }
+        refreshIntent();
 
         // 手牌
         handBox.getChildren().clear();
@@ -678,15 +900,6 @@ public class BattleView extends StackPane {
                 btn.setDisable(!playerTurn || battleOver);
             }
         }
-    }
-
-    private static String intentColor(Enemy.Intent i) {
-        return switch (i) {
-            case ATTACK -> "#dc2626";
-            case DEFEND -> "#0284c7";
-            case BUFF   -> "#d97706";
-            case WEAKEN -> "#7c3aed";
-        };
     }
 
     private static String cardColor(Card.Kind k) {

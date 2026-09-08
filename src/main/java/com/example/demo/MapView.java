@@ -73,15 +73,18 @@ public class MapView extends Pane {
     private final GameMap map;
     private final Consumer<GameMap.NodeType> onArrive; // 走上节点后回调
     private final ScrollPane scroll;                   // 外层滚动容器（视图跟随用）
+    private final boolean interactive;                 // true=可点击行走；false=纯查看(战斗中看地图)
     private final List<NodeView> views = new ArrayList<>();
     private final List<Edge> edges = new ArrayList<>();
     private final Label header;
     private final Label hint;
 
-    public MapView(GameMap map, Consumer<GameMap.NodeType> onArrive, ScrollPane scroll) {
+    public MapView(GameMap map, Consumer<GameMap.NodeType> onArrive, ScrollPane scroll,
+                   boolean interactive) {
         this.map = map;
         this.onArrive = onArrive;
         this.scroll = scroll;
+        this.interactive = interactive;
 
         setPrefHeight(CONTENT_H); // 高度固定很长，宽度交给 ScrollPane(fitToWidth) 决定
         setStyle("-fx-background-color: #0b1020;");
@@ -157,7 +160,9 @@ public class MapView extends Pane {
         for (List<GameMap.MapNode> rowNodes : map.floors) {
             for (GameMap.MapNode n : rowNodes) {
                 NodeView v = new NodeView(n);
-                v.setOnMouseClicked(e -> click(n));
+                if (interactive) {
+                    v.setOnMouseClicked(e -> click(n));
+                }
                 getChildren().add(v);
                 views.add(v);
             }
@@ -188,12 +193,17 @@ public class MapView extends Pane {
                         colorOf(n.type), ok ? "#f8fafc" : "transparent", ok ? 2 : 0);
             }
             v.setStyle(style);
-            v.setOpacity(ok ? 1.0 : 0.4);      // 不可点的变暗
-            v.setCursor(ok ? Cursor.HAND : Cursor.DEFAULT);
+            v.setOpacity(ok || !interactive ? 1.0 : 0.4); // 不可点的变暗（查看模式全部点亮）
+            if (interactive) {
+                v.setCursor(ok ? Cursor.HAND : Cursor.DEFAULT);
+            }
         }
 
         // 顶部进度 + 底部提示
-        if (map.current == null) {
+        if (!interactive) {
+            header.setText("地图（查看模式）");
+            hint.setText("滚轮滚动查看 · 点外部任意处或“关闭”退出");
+        } else if (map.current == null) {
             header.setText("地图 · 点击起点出发");
             hint.setText("滚轮上下浏览地图 · 白色光圈可走 · Esc 返回");
         } else {
@@ -207,6 +217,7 @@ public class MapView extends Pane {
 
     /** 点击节点：可以走才走，走完刷新并通知外面。 */
     private void click(GameMap.MapNode n) {
+        if (!interactive) return;
         if (!reachable(n)) return;
         map.current = n;
         refresh();

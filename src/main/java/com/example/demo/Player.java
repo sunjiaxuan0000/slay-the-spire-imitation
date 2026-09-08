@@ -20,8 +20,13 @@ public class Player {
         deck.addAll(starterDeck()); // 起始牌组
     }
 
+    /** 获得遗物（同名不重复拿，避免效果叠加） */
     public void addRelic(Relic r) {
-        if (r != null && !relics.contains(r)) relics.add(r);
+        if (r == null) return;
+        for (Relic have : relics) {
+            if (have.name.equals(r.name)) return;
+        }
+        relics.add(r);
     }
 
     /** 起始牌组：10 张 = 5 打击 + 4 防御 + 1 痛击 */
