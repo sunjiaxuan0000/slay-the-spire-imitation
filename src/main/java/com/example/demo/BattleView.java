@@ -1,5 +1,6 @@
 package com.example.demo;
 
+import javafx.animation.ParallelTransition;
 import javafx.animation.PauseTransition;
 import javafx.animation.RotateTransition;
 import javafx.animation.TranslateTransition;
@@ -589,11 +590,7 @@ public class BattleView extends StackPane {
         name.setFont(Font.font(15));
         name.setStyle("-fx-font-weight: bold;");
 
-        Label value = new Label(
-                c.damage > 0 && c.block > 0 ? "伤害 " + c.damage + "  格挡 " + c.block
-                : c.damage > 0 ? "伤害 " + c.damage
-                : c.block > 0 ? "格挡 " + c.block + (c.exhaust ? " ，消耗" : "")
-                : c.kind.desc);
+        Label value = new Label(c.damage > 0 ? "伤害 " + c.damage : "格挡 " + c.block);
         value.setTextFill(Color.rgb(254, 243, 199));
         value.setFont(Font.font(12));
 
@@ -665,7 +662,7 @@ public class BattleView extends StackPane {
             energy += 2; // 放血：获得 2 点能量
             player.damage(3); // 自己失去 3 点生命
             hud.refresh();
-            if (player.hp() == 0) { finish(false); return; }
+            if (player.hp() == 0) { playerDied(); return; }
         }
         if (c.block > 0) playerBlock += c.block;
         if (c.draw > 0) drawHand(c.draw); // 剑柄打击等：额外抽牌
@@ -916,6 +913,10 @@ public class BattleView extends StackPane {
             pChips.getChildren().add(statusChip("弱", weakTurns, "#7c3aed",
                     "虚弱 ×" + weakTurns + "：你造成的伤害 ×0.75"));
         }
+        if (playerStrength > 0) {
+            pChips.getChildren().add(statusChip("力", playerStrength, "#f59e0b",
+                    "力量 +" + playerStrength + "：每段攻击伤害增加"));
+        }
 
         // ---- 怪物(右)：同上 + 意图图标 ----
         eName.setText(enemy.name);
@@ -931,6 +932,10 @@ public class BattleView extends StackPane {
         if (enemy.power > 0) {
             eChips.getChildren().add(statusChip("力", enemy.power, "#f59e0b",
                     "力量 +" + enemy.power + "：攻击伤害增加"));
+        }
+        if (enemyVulnerable > 0) {
+            eChips.getChildren().add(statusChip("伤", enemyVulnerable, "#dc2626",
+                    "易伤 " + enemyVulnerable + " 回合：承受伤害 ×1.5"));
         }
         refreshIntent();
 
