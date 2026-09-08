@@ -3,6 +3,12 @@ package com.example.demo;
 import javafx.scene.Cursor;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.image.Image;
+import javafx.scene.layout.Background;
+import javafx.scene.layout.BackgroundImage;
+import javafx.scene.layout.BackgroundPosition;
+import javafx.scene.layout.BackgroundRepeat;
+import javafx.scene.layout.BackgroundSize;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
@@ -98,7 +104,7 @@ public class MapView extends Pane {
         this.interactive = interactive;
 
         setPrefHeight(CONTENT_H); // 高度固定很长，宽度交给 ScrollPane(fitToWidth) 决定
-        setStyle("-fx-background-color: #0b1020;");
+        setBackground(makeMapBackground()); // map.png 拉伸铺满，涵盖所有节点图标
         setCursor(Cursor.DEFAULT);
 
         header = new Label("");
@@ -252,5 +258,18 @@ public class MapView extends Pane {
         double v = (cy - viewH / 2) / maxV;                 // 让中心出现在视口中部
         v = Math.max(0, Math.min(1, v));                    // 限制在 0~1
         scroll.setVvalue(v);
+    }
+
+    /** 地图背景：map.png 拉伸铺满整个地图内容区（涵盖到最高/最下节点） */
+    private static Background makeMapBackground() {
+        Image image = new Image(MapView.class.getResourceAsStream("map.png"));
+        BackgroundImage bi = new BackgroundImage(
+                image,
+                BackgroundRepeat.NO_REPEAT,
+                BackgroundRepeat.NO_REPEAT,
+                BackgroundPosition.CENTER,
+                new BackgroundSize(1, 1, true, true, false, false) // 宽高各 100% 拉伸铺满
+        );
+        return new Background(bi);
     }
 }
