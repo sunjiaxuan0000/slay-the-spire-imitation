@@ -226,7 +226,8 @@ public class HelloApplication extends Application {
                              GameMap.NodeType type, Enemy enemy) {
         RunHud hud = buildHud(player, map, () -> openBattleMapReadOnly(stage, map), true);
 
-        BattleView battle = new BattleView(player, hud, enemy, won -> {
+        BattleView battle = new BattleView(player, hud, enemy,
+                won -> {
             activeBattle = null;
             battleMapOpen = false;
             if (won) {
@@ -238,7 +239,7 @@ public class HelloApplication extends Application {
             } else {
                 returnToMenu(stage);     // 阵亡
             }
-        });
+        }, type == GameMap.NodeType.BOSS); // true=用 boss 战斗背景，否则 default 背景
         activeBattle = battle;
 
         BorderPane content = new BorderPane();
