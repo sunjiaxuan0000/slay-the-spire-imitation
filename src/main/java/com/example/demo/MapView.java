@@ -4,6 +4,7 @@ import javafx.scene.Cursor;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.Background;
 import javafx.scene.layout.BackgroundImage;
 import javafx.scene.layout.BackgroundPosition;
@@ -12,30 +13,68 @@ import javafx.scene.layout.BackgroundSize;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
 import javafx.scene.shape.Line;
+import javafx.scene.shape.StrokeLineCap;
 import javafx.scene.text.Font;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
  * 地图界面：把 GameMap 画出来，支持“点击可到达的节点往上走”。
  *
- * 画法：连线（Line）垫底，节点（彩色圆）盖在线上。
+ * 画法：连线用 icons/arrow.png（沿节点方向拉伸旋转）垫底，
+ *       节点用各类型图标（icons/*.png）盖在线上。
  * 规则：只能走到当前节点的 next（上层）里；没选到的节点变暗不可点；
  *       走上一个节点后触发 onArrive(类型)，由外面决定发生什么。
  *
- * 宽度自适应：内容宽度随窗口变化时，节点列和连线会整体重排（配合 ScrollPane 的 fitToWidth）。
+ * 宽度自适应：内容宽度随窗口变化时，节点和箭头会整体重排（配合 ScrollPane 的 fitToWidth）。
  */
 public class MapView extends Pane {
 
-    private static final double TOP = 70;         // 塔顶（BOSS 层）离内容顶部的距离
     private static final double ROW_SPACING = 95; // 层与层之间的纵向间距（拉长、不挤）
-    private static final double CONTENT_H = TOP + ROW_SPACING * (GameMap.ROWS - 1) + 80; // 内容总高 >> 窗口高
-    private static final double NODE_SIZE = 46;   // 圆节点直径
+    private static final double NODE_SIZE = 46;   // 普通节点图标直径
+    private static final double BIG_NODE_SIZE = 300; // 起点/BOSS 大图标直径（远大于普通节点）
+    // BOSS 独立放在顶部留白带：顶部留一点边距，BOSS 图标下方与下一层留空隙，不再叠压
+    private static final double BOSS_ZONE_TOP = 24;
+    private static final double GRID_TOP = BOSS_ZONE_TOP + BIG_NODE_SIZE + 18; // 普通层起点
+    private static final double CONTENT_H =
+            GRID_TOP + (GameMap.ROWS - 2) * ROW_SPACING + BIG_NODE_SIZE + 60; // 底部为大起点图标留足空间
 
-    // 各类型节点颜色
+    // ================= 贴图 =================
+
+    /** 图标资源（相对 resources/com/example/demo/） */
+    private static final Map<GameMap.NodeType, String> ICON_FILES = new HashMap<>();
+    static {
+        ICON_FILES.put(GameMap.NodeType.MONSTER,  "icons/monster.png");
+        ICON_FILES.put(GameMap.NodeType.ELITE,    "icons/elite.png");
+        ICON_FILES.put(GameMap.NodeType.REST,     "icons/rest.png");
+        ICON_FILES.put(GameMap.NodeType.TREASURE, "icons/chest.png");
+        ICON_FILES.put(GameMap.NodeType.EVENT,    "icons/encounter.png");
+        ICON_FILES.put(GameMap.NodeType.START,    "icons/deep.png");    // 起点大图标
+        ICON_FILES.put(GameMap.NodeType.BOSS,     "icons/fishron.png"); // BOSS 大图标
+    }
+
+    /** 图标尺寸：起点/BOSS 用大图标，其余普通大小 */
+    private static double nodeDiameter(GameMap.NodeType t) {
+        return (t == GameMap.NodeType.START || t == GameMap.NodeType.BOSS)
+                ? BIG_NODE_SIZE : NODE_SIZE;
+    }
+
+    private static Image loadImage(String path) {
+        var in = MapView.class.getResourceAsStream(path);
+        return in == null ? null : new Image(in);
+    }
+
+    private static String iconFile(GameMap.NodeType t) {
+        return ICON_FILES.get(t);
+    }
+
+    // 各类型节点颜色（只有没图/老的起终点节点用）
     private static String colorOf(GameMap.NodeType t) {
         return switch (t) {
             case START   -> "#16a34a";
@@ -48,23 +87,52 @@ public class MapView extends Pane {
         };
     }
 
-    /** 一个可见节点：彩色圆 + 里面一个字的图标 */
+    // ================= 节点视图 =================
+
+    /** 一个可见节点：图标图（或老式彩色圆） + 状态光环 */
     private static class NodeView extends StackPane {
         final GameMap.MapNode node;
-        final Label glyph = new Label();
+        final Circle ring = new Circle();   // 当前/可到达光环
 
         NodeView(GameMap.MapNode node) {
             this.node = node;
-            setPrefSize(NODE_SIZE, NODE_SIZE);
-            setMaxSize(NODE_SIZE, NODE_SIZE);
-            glyph.setText(node.type.glyph);
-            glyph.setTextFill(Color.WHITE);
-            glyph.setFont(Font.font(16));
-            getChildren().add(glyph);
+            double d = nodeDiameter(node.type); // 大图标节点用大尺寸
+            setPrefSize(d, d);
+            setMaxSize(d, d);
+
+            String icon = iconFile(node.type);
+            if (icon != null) {
+                ImageView img = new ImageView(loadImage(icon));
+                img.setPreserveRatio(true);
+                img.setFitWidth(d);
+                img.setFitHeight(d);
+                img.setMouseTransparent(true);
+                getChildren().add(img);
+            } else {
+                // 兜底：彩色圆 + 字
+                StackPane disc = new StackPane();
+                disc.setPrefSize(d, d);
+                disc.setMaxSize(d, d);
+                disc.setStyle("-fx-background-color: " + colorOf(node.type)
+                        + "; -fx-background-radius: " + (d / 2) + ";");
+                Label glyph = new Label(node.type.glyph);
+                glyph.setTextFill(Color.WHITE);
+                glyph.setFont(Font.font(d / 3.0));
+                glyph.setStyle("-fx-font-weight: bold;");
+                disc.getChildren().add(glyph);
+                getChildren().add(disc);
+            }
+
+            ring.setFill(null);
+            ring.setStroke(null);
+            ring.setRadius(d / 2 + 5); // 比图标大一圈的光环
+            ring.setStrokeWidth(3);
+            ring.setMouseTransparent(true);
+            getChildren().add(ring);
         }
     }
 
-    /** 一条连线：记住两端是哪两个节点，窗口变宽时好重新算坐标 */
+    /** 一条连线：虚线 Line（保存两端节点，重排时更新端点） */
     private static class Edge {
         final Line line;
         final GameMap.MapNode a;
@@ -78,21 +146,21 @@ public class MapView extends Pane {
     }
 
     private final GameMap map;
-    private final Consumer<GameMap.NodeType> onArrive; // 走上节点后回调
-    private final ScrollPane scroll;                   // 外层滚动容器（视图跟随用）
-    private final boolean interactive;                 // true=可点击行走；false=纯查看(战斗中看地图)
+    private final Consumer<GameMap.NodeType> onArrive;
+    private final ScrollPane scroll;
+    private final boolean interactive;
     private final List<NodeView> views = new ArrayList<>();
     private final List<Edge> edges = new ArrayList<>();
     private final Label header;
     private final Label hint;
 
-    /** 每列的水平小抖动：只影响显示坐标，让节点不那么笔直对齐（拓扑不变、不会交叉） */
+    /** 每列的水平小抖动：只影响显示坐标（拓扑不变） */
     private final double[] colJitter = new double[GameMap.MAX_COLS];
 
     {
         java.util.Random jr = new java.util.Random(20240601L);
         for (int i = 0; i < colJitter.length; i++) {
-            colJitter[i] = (jr.nextDouble() * 2 - 1) * 100; // 左右最多偏 38px
+            colJitter[i] = (jr.nextDouble() * 2 - 1) * 100;
         }
     }
 
@@ -103,8 +171,8 @@ public class MapView extends Pane {
         this.scroll = scroll;
         this.interactive = interactive;
 
-        setPrefHeight(CONTENT_H); // 高度固定很长，宽度交给 ScrollPane(fitToWidth) 决定
-        setBackground(makeMapBackground()); // map.png 拉伸铺满，涵盖所有节点图标
+        setPrefHeight(CONTENT_H);
+        setBackground(makeMapBackground()); // map.png 拉伸铺满
         setCursor(Cursor.DEFAULT);
 
         header = new Label("");
@@ -123,61 +191,67 @@ public class MapView extends Pane {
 
         draw();
 
-        // 窗口（内容）宽度一变 → 所有节点和连线按新宽度重排
         widthProperty().addListener(o -> relayout());
         relayout();
-
         refresh();
     }
 
-    // ================= 坐标计算（随内容宽度自适应） =================
+    // ================= 坐标 =================
 
-    /** 某列中心的 x 坐标：列在内容宽度里均匀铺开 + 每列固定的小抖动（左右留边距） */
     private double nodeX(int col) {
-        double w = getWidth() > 0 ? getWidth() : 1280; // 还没布局时按默认宽度算
-        double margin = Math.max(50, w * 0.06);        // 左右边距随宽度变化
+        double w = getWidth() > 0 ? getWidth() : 1280;
+        double margin = Math.max(50, w * 0.06);
         if (GameMap.MAX_COLS <= 1) return w / 2;
         double lane = margin + col * ((w - 2 * margin) / (GameMap.MAX_COLS - 1));
-        if (col >= 0 && col < colJitter.length) {
-            lane += colJitter[col]; // 轻微左右错开，画面更自然
+        // 中央列（起点/BOSS 所在列）不抖动，保证大图标严格居中
+        if (col != GameMap.CENTER_COL && col >= 0 && col < colJitter.length) {
+            lane += colJitter[col];
         }
         return lane;
     }
 
-    /** 某行的 y 坐标（纵向固定，靠 ScrollPane 滚动查看） */
     private double nodeY(int row) {
-        return TOP + (GameMap.ROWS - 1 - row) * ROW_SPACING;
+        if (row == GameMap.ROWS - 1) {
+            return BOSS_ZONE_TOP; // BOSS 大图标抬高到顶部留白带
+        }
+        return GRID_TOP + (GameMap.ROWS - 2 - row) * ROW_SPACING; // 其余 0..15 层正常排布
     }
 
-    /** 把每个节点圆和每条连线挪到正确位置（宽度变了就调用） */
     private void relayout() {
         for (NodeView v : views) {
             v.setLayoutX(nodeX(v.node.col));
             v.setLayoutY(nodeY(v.node.row));
         }
         for (Edge e : edges) {
-            e.line.setStartX(nodeX(e.a.col) + NODE_SIZE / 2);
-            e.line.setStartY(nodeY(e.a.row) + NODE_SIZE / 2);
-            e.line.setEndX(nodeX(e.b.col) + NODE_SIZE / 2);
-            e.line.setEndY(nodeY(e.b.row) + NODE_SIZE / 2);
+            double x1 = nodeX(e.a.col) + nodeDiameter(e.a.type) / 2;
+            double y1 = nodeY(e.a.row) + nodeDiameter(e.a.type) / 2;
+            double x2 = nodeX(e.b.col) + nodeDiameter(e.b.type) / 2;
+            double y2 = nodeY(e.b.row) + nodeDiameter(e.b.type) / 2;
+            e.line.setStartX(x1);
+            e.line.setStartY(y1);
+            e.line.setEndX(x2);
+            e.line.setEndY(y2);
         }
     }
 
     private void draw() {
-        // 1) 先画连线（在节点下面）
+        // 1) 虚线连线（在节点下面）
         for (List<GameMap.MapNode> rowNodes : map.floors) {
             for (GameMap.MapNode a : rowNodes) {
                 for (GameMap.MapNode b : a.next) { // a 下层 → b 上层
                     Line line = new Line(0, 0, 0, 0);
-                    line.setStroke(Color.rgb(71, 85, 105, 0.9));
-                    line.setStrokeWidth(2);
+                    line.setStroke(Color.rgb(148, 163, 184, 0.9)); // 虚线的灰色
+                    line.setStrokeWidth(3);
+                    line.setStrokeLineCap(StrokeLineCap.ROUND);
+                    line.getStrokeDashArray().addAll(4.0, 14.0);   // 虚线：10px 实 + 7px 空
+                    line.setMouseTransparent(true);
                     getChildren().add(line);
                     edges.add(new Edge(line, a, b));
                 }
             }
         }
 
-        // 2) 再画节点圆（盖在连线上）
+        // 2) 节点图标（盖在连线上）
         for (List<GameMap.MapNode> rowNodes : map.floors) {
             for (GameMap.MapNode n : rowNodes) {
                 NodeView v = new NodeView(n);
@@ -192,10 +266,9 @@ public class MapView extends Pane {
 
     // ================= 状态刷新 =================
 
-    /** 一个节点现在能不能点？ */
     private boolean reachable(GameMap.MapNode n) {
-        if (map.current == null) return n.row == 0;          // 没出发时只能点起点层
-        return map.current.next.contains(n);                  // 只能往上走一层
+        if (map.current == null) return n.row == 0;
+        return map.current.next.contains(n);
     }
 
     private void refresh() {
@@ -204,26 +277,30 @@ public class MapView extends Pane {
             boolean ok = reachable(n);
             boolean isCurrent = (n == map.current);
 
-            String style;
             if (isCurrent) {
-                style = String.format("-fx-background-color:%s; -fx-background-radius:23; "
-                        + "-fx-border-color:#fde047; -fx-border-width:3; -fx-border-radius:23;", colorOf(n.type));
+                v.ring.setStroke(Color.rgb(253, 224, 71, 0.95)); // 金圈 = 当前位置
+                v.ring.setStrokeWidth(4);
+            } else if (ok && interactive) {
+                v.ring.setStroke(Color.rgb(248, 250, 252, 0.9)); // 白圈 = 可走
+                v.ring.setStrokeWidth(2);
             } else {
-                style = String.format("-fx-background-color:%s; -fx-background-radius:23; "
-                        + "-fx-border-color:%s; -fx-border-width:%d; -fx-border-radius:23;",
-                        colorOf(n.type), ok ? "#f8fafc" : "transparent", ok ? 2 : 0);
+                v.ring.setStroke(null); // 不可走 / 查看模式不加圈
             }
-            v.setStyle(style);
-            v.setOpacity(ok || !interactive ? 1.0 : 0.4); // 不可点的变暗（查看模式全部点亮）
+            v.setOpacity(ok || !interactive ? 1.0 : 0.45);
             if (interactive) {
                 v.setCursor(ok ? Cursor.HAND : Cursor.DEFAULT);
             }
         }
 
-        // 顶部进度 + 底部提示
         if (!interactive) {
-            header.setText("地图（查看模式）");
-            hint.setText("滚轮滚动查看 · 点外部任意处或“关闭”退出");
+            // 战斗内查看地图：不写“只读”字样，正常显示当前层信息
+            if (map.current == null) {
+                header.setText("地图");
+            } else {
+                header.setText("第 " + (map.current.row + 1) + " / " + GameMap.ROWS + " 层（"
+                        + map.current.type.label + "）");
+            }
+            hint.setText("滚轮滚动浏览地图 · Esc 返回");
         } else if (map.current == null) {
             header.setText("地图 · 点击起点出发");
             hint.setText("滚轮上下浏览地图 · 白色光圈可走 · Esc 返回");
@@ -236,39 +313,44 @@ public class MapView extends Pane {
         }
     }
 
-    /** 点击节点：可以走才走，走完刷新并通知外面。 */
     private void click(GameMap.MapNode n) {
         if (!interactive) return;
         if (!reachable(n)) return;
         map.current = n;
         refresh();
-        followCurrent(); // 视图跟随，保证当前节点和上面的路线都在屏幕中间附近
+        followCurrent();
         onArrive.accept(n.type);
     }
 
-    /** 滚动外层 ScrollPane，让当前节点大致出现在视口中间。 */
-    private void followCurrent() {
-        if (scroll == null || map.current == null) return;
-        double contentH = getHeight();                       // 地图内容总高
-        double viewH = scroll.getViewportBounds().getHeight(); // 可见窗口高
+    /** 把“第 row 层”滚动到屏幕中间（战斗/事件结束后回到地图、战斗内查看地图时用） */
+    public void scrollToLayer(int row) {
+        if (scroll == null) return;
+        double contentH = getHeight();
+        double viewH = scroll.getViewportBounds().getHeight();
         double maxV = contentH - viewH;
         if (maxV <= 0) return;
 
-        double cy = nodeY(map.current.row) + NODE_SIZE / 2; // 当前节点中心的 y
-        double v = (cy - viewH / 2) / maxV;                 // 让中心出现在视口中部
-        v = Math.max(0, Math.min(1, v));                    // 限制在 0~1
+        double cy = nodeY(row) + NODE_SIZE / 2;
+        double v = (cy - viewH / 2) / maxV;
+        v = Math.max(0, Math.min(1, v));
         scroll.setVvalue(v);
     }
 
-    /** 地图背景：map.png 拉伸铺满整个地图内容区（涵盖到最高/最下节点） */
+    private void followCurrent() {
+        if (map.current != null) {
+            scrollToLayer(map.current.row);
+        }
+    }
+
+    /** 地图背景：map.png 拉伸铺满整个地图内容区 */
     private static Background makeMapBackground() {
-        Image image = new Image(MapView.class.getResourceAsStream("map.png"));
+        Image image = loadImage("map.png");
         BackgroundImage bi = new BackgroundImage(
                 image,
                 BackgroundRepeat.NO_REPEAT,
                 BackgroundRepeat.NO_REPEAT,
                 BackgroundPosition.CENTER,
-                new BackgroundSize(1, 1, true, true, false, false) // 宽高各 100% 拉伸铺满
+                new BackgroundSize(1, 1, true, true, false, false)
         );
         return new Background(bi);
     }

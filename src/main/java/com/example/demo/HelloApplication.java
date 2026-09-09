@@ -1,10 +1,16 @@
 package com.example.demo;
 
+import javafx.animation.Interpolator;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.PauseTransition;
+import javafx.animation.Timeline;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
@@ -21,6 +27,7 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
+import javafx.util.Duration;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -33,13 +40,31 @@ public class HelloApplication extends Application {
     private static final double W = 1280;
     private static final double H = 720;
 
-    /** 当前场景的“整页窗口”宿主：最上层放半透明遮罩 + 居中大面板 */
+    /** 主菜单的固定尺寸：离开菜单时记录，返回菜单时强制恢复，防止被游戏场景带�?*/
+    private double menuW = W;
+    private double menuH = H;
+
+    /** 当前场景的“整页窗口”宿主：最上层放半透明遮罩 + 居中大面�?*/
     private StackPane overlayHost;
+    private BattleView activeBattle = null; // 进行中的战斗（供只读地图暂停/恢复�?
+    private boolean battleMapOpen = false;  // 战斗里是否开着“只读地图�?
+
+    /** 按指定尺寸建场景 */
+    private Scene sizedAt(double w, double h, Parent root) {
+        return new Scene(root, (w > 0) ? w : W, (h > 0) ? h : H);
+    }
+
+    /** 按“窗口当前大小”建场景（游戏内场景用，保持用户当前窗口尺寸�?*/
+    private Scene sizedScene(Stage stage, Parent root) {
+        double w = (stage.isShowing() && stage.getWidth() > 0) ? stage.getWidth() : W;
+        double h = (stage.isShowing() && stage.getHeight() > 0) ? stage.getHeight() : H;
+        return new Scene(root, w, h);
+    }
 
     @Override
     public void start(Stage stage) {
         stage.setTitle("杀戮猪塔");
-        stage.setScene(buildMenuScene(stage));
+        returnToMenu(stage);
         stage.show();
 
         stage.setOnCloseRequest(event -> {
@@ -57,13 +82,13 @@ public class HelloApplication extends Application {
 
     // ================= 场景构建 =================
 
-    /** 主菜单场景 */
+    /** 主菜单场景：始终按“离开菜单时记录的尺寸”构�?*/
     private Scene buildMenuScene(Stage stage) {
         MainMenu menu = new MainMenu(
                 () -> startCharacterSelect(stage),
                 () -> stage.close()
         );
-        Scene scene = new Scene(menu, W, H);
+        Scene scene = sizedAt(menuW, menuH, menu);
         scene.setOnKeyPressed(e -> {
             double step = e.isShiftDown() ? 1 : 10;
             switch (e.getCode()) {
@@ -78,21 +103,35 @@ public class HelloApplication extends Application {
         return scene;
     }
 
-    /** 角色选择场景 */
+    /** 角色选择场景（离开主菜单时记录当前窗口尺寸，返回时恢复�?*/
     private void startCharacterSelect(Stage stage) {
+        if (stage.isShowing() && stage.getWidth() > 0 && stage.getHeight() > 0) {
+            menuW = stage.getWidth(); // 记住用户在主菜单调的窗口大小
+            menuH = stage.getHeight();
+        }
         CharacterSelect select = new CharacterSelect(
                 () -> startMap(stage)
         );
-        Scene scene = new Scene(select, W, H);
+        Scene scene = sizedScene(stage, select);
         scene.setOnKeyPressed(e -> {
             if (e.getCode() == KeyCode.ESCAPE) {
-                stage.setScene(buildMenuScene(stage));
+                returnToMenu(stage);
             }
         });
         stage.setScene(scene);
     }
 
-    /** 开始一局：新玩家 + 新地图 */
+    /** 回到主菜单：强制恢复离开菜单时记录的窗口尺寸，避免分辨率被游戏场景带�?*/
+    private void returnToMenu(Stage stage) {
+        if (stage.isShowing() && stage.getWidth() > 0 && stage.getHeight() > 0) {
+            // 只有回主菜单后用户手动调整过，这里才跟随；游戏期间的增长一律忽�?
+        }
+        stage.setWidth(menuW);
+        stage.setHeight(menuH);
+        stage.setScene(buildMenuScene(stage));
+    }
+
+    /** 开始一局：新玩家 + 新地�?*/
     private void startMap(Stage stage) {
         Player player = new Player();
         GameMap map = GameMap.generate();
@@ -101,12 +140,14 @@ public class HelloApplication extends Application {
 
     /** 地图场景（战斗后回同一张地图也用这个） */
     private void showMapScene(Stage stage, GameMap map, Player player) {
-        RunHud hud = buildHud(player, map);
+        // 地图页本身不显示右上角“地图”按�?
+        RunHud hud = buildHud(player, map, () -> showWindow(page(mapPage(map))), false);
 
         ScrollPane scroll = new ScrollPane();
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         scroll.setPannable(true);
+        scroll.setMinSize(0, 0); // 内容再高也不许把窗口撑大（否则回主菜单会被拉大）
         scroll.setStyle("-fx-background: #0b1020; -fx-background-color: #0b1020;");
 
         MapView view = new MapView(map,
@@ -117,68 +158,179 @@ public class HelloApplication extends Application {
         content.setTop(hud);
         content.setCenter(scroll);
 
-        Scene scene = wrapOverlay(content);
+        Scene scene = wrapOverlay(stage, content);
         scene.setOnKeyPressed(e -> {
             if (e.getCode() == KeyCode.ESCAPE) {
-                stage.setScene(buildMenuScene(stage));
+                if (isWindowOpen()) {
+                    closeWindow(); // 先关掉牌�?遗物等窗�?
+                } else {
+                    returnToMenu(stage);
+                }
             }
         });
-        Platform.runLater(() -> scroll.setVvalue(1.0));
+        // 新一局（还没出发）：弹阶段标题 �?�?BOSS 顶部向下滑过整张地图
+        // 战斗/事件结束后回来：直接把“下一层可走的节点”滚到屏幕中�?
+        Platform.runLater(() -> {
+            if (map.current == null) {
+                playStageIntro(scroll);
+            } else {
+                view.scrollToLayer(Math.min(map.current.row + 1, GameMap.ROWS - 1));
+            }
+        });
         stage.setScene(scene);
     }
 
-    /** 战斗场景：顶部 HUD + 战斗主体，外面再包整页窗口层 */
+    /** 开场演出：先显示“第一阶段 / 猪塔底”，再从地图顶部(BOSS)一路滑到底�?起点)展示全图 */
+    private void playStageIntro(ScrollPane scroll) {
+        // 1) 阶段标题遮罩
+        StackPane dim = new StackPane();
+        dim.setStyle("-fx-background-color: rgba(2, 6, 23, 0.6);");
+
+        VBox box = new VBox(6);
+        box.setAlignment(Pos.CENTER);
+
+        Label line1 = new Label("第一阶段");
+        line1.setTextFill(Color.rgb(252, 211, 77));
+        line1.setFont(Font.font(34));
+        line1.setStyle("-fx-font-weight: bold;");
+
+        Label line2 = new Label("猪塔底");
+        line2.setTextFill(Color.WHITE);
+        line2.setFont(Font.font(78));
+        line2.setStyle("-fx-font-weight: bold;");
+
+        box.getChildren().addAll(line1, line2);
+
+        StackPane window = new StackPane();
+        window.getChildren().addAll(dim, box);
+
+        // 2) 显示标题�?0.4 秒后收起，开始从顶部滑到底部的展�?
+        showWindow(window);
+        PauseTransition hold = new PauseTransition(Duration.millis(400));
+        hold.setOnFinished(e -> {
+            closeWindow();
+            scroll.setVvalue(0.0); // 从顶部（BOSS）开�?
+            Timeline sweep = new Timeline(
+                    new KeyFrame(Duration.ZERO,
+                            new KeyValue(scroll.vvalueProperty(), 0.0)),
+                    new KeyFrame(Duration.millis(1800),
+                            new KeyValue(scroll.vvalueProperty(), 1.0, Interpolator.EASE_BOTH))
+            );
+            sweep.play();
+        });
+        hold.play();
+    }
+
+    /** 战斗场景：顶�?HUD + 战斗主体，外面再包整页窗口层 */
     private void startBattle(Stage stage, GameMap map, Player player,
                              GameMap.NodeType type, Enemy enemy) {
-        RunHud hud = buildHud(player, map);
+        RunHud hud = buildHud(player, map, () -> openBattleMapReadOnly(stage, map), true);
+
         BattleView battle = new BattleView(player, hud, enemy, won -> {
+            activeBattle = null;
+            battleMapOpen = false;
             if (won) {
                 if (type == GameMap.NodeType.BOSS) {
-                    stage.setScene(buildMenuScene(stage)); // 通关
+                    returnToMenu(stage); // 通关
                 } else {
                     showMapScene(stage, map, player);
                 }
             } else {
-                stage.setScene(buildMenuScene(stage));     // 阵亡
+                returnToMenu(stage);     // 阵亡
             }
         });
+        activeBattle = battle;
 
         BorderPane content = new BorderPane();
         content.setTop(hud);
         content.setCenter(battle);
 
-        Scene scene = wrapOverlay(content);
+        Scene scene = wrapOverlay(stage, content);
         scene.setOnKeyPressed(e -> {
             if (e.getCode() == KeyCode.ESCAPE) {
-                stage.setScene(buildMenuScene(stage)); // 逃跑=放弃本局
+                if (isWindowOpen()) {
+                    closeBattleMapOrWindow(); // 开着只读地图/牌组窗口 �?先关，不退出战�?
+                } else {
+                    returnToMenu(stage); // 逃跑=放弃本局
+                }
             }
         });
         stage.setScene(scene);
     }
 
-    /** 把普通场景内容包一层：下面内容，上面是整页窗口层 */
-    private Scene wrapOverlay(Node content) {
-        overlayHost = new StackPane();
-        overlayHost.setMouseTransparent(true); // 平时不挡鼠标（没开窗口时不拦截点击）
-        StackPane root = new StackPane();
-        root.getChildren().addAll(content, overlayHost);
-        return new Scene(root, W, H);
+    // ================= 战斗中的只读地图 =================
+
+    /** 点“查看地图”：暂停战斗，铺满整屏的只读地图；点“返回战斗”恢�?*/
+    private void openBattleMapReadOnly(Stage stage, GameMap map) {
+        BattleView b = activeBattle;
+        if (b == null) return;
+        b.setPaused(true);
+        battleMapOpen = true;
+
+        ScrollPane scroll = new ScrollPane();
+        scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setPannable(true);
+        scroll.setStyle("-fx-background: #0b1020; -fx-background-color: #0b1020;");
+
+        MapView preview = new MapView(map, t -> { }, scroll, false); // 只读地图界面
+        scroll.setContent(preview);
+
+        Button back = new Button("返回战斗");
+        back.setFont(Font.font(17));
+        back.setPrefSize(170, 46);
+        back.setStyle("-fx-background-color: #16a34a; -fx-text-fill: white; "
+                + "-fx-background-radius: 12; -fx-cursor: hand;");
+        back.setOnAction(e -> closeBattleMapOrWindow());
+        StackPane.setAlignment(back, Pos.BOTTOM_RIGHT);
+        StackPane.setMargin(back, new Insets(0, 30, 24, 0));
+
+        StackPane window = new StackPane();
+        window.getChildren().addAll(scroll, back);
+
+        // 把“当前所在层”滚到屏幕中�?
+        Platform.runLater(() -> preview.scrollToLayer(
+                map.current == null ? 0 : map.current.row));
+        showWindow(window);
     }
 
-    // ================= 顶部 HUD（含三个整页窗口入口） =================
+    /** 关闭只读地图 / 其它窗口，并恢复战斗 */
+    private void closeBattleMapOrWindow() {
+        closeWindow();
+        if (battleMapOpen && activeBattle != null) {
+            battleMapOpen = false;
+            activeBattle.setPaused(false); // 回到战斗继续
+        }
+    }
 
-    private RunHud buildHud(Player player, GameMap map) {
+    private boolean isWindowOpen() {
+        return overlayHost != null && !overlayHost.getChildren().isEmpty();
+    }
+
+    /** 把普通场景内容包一层：下面内容，上面是整页窗口层（尺寸跟随当前窗口�?*/
+    private Scene wrapOverlay(Stage stage, Node content) {
+        overlayHost = new StackPane();
+        overlayHost.setMouseTransparent(true); // 平时不挡鼠标（没开窗口时不拦截点击�?
+        StackPane root = new StackPane();
+        root.getChildren().addAll(content, overlayHost);
+        return sizedScene(stage, root);
+    }
+
+    // ================= 顶部 HUD（含三个整页窗口入口�?=================
+
+    private RunHud buildHud(Player player, GameMap map, Runnable onMapClick, boolean showMapIcon) {
         return new RunHud(
                 player,
-                r -> showWindow(page(relicPage(r))),   // 点遗物图标
-                () -> showWindow(page(deckPage(player))), // 点牌组图标
-                () -> showWindow(page(mapPage(map)))     // 点地图图标
+                r -> showWindow(page(relicPage(r))),   // 点遗物图�?
+                () -> showWindow(page(deckPage(player))), // 点牌组图�?
+                onMapClick,                           // 点地图图标（场景自定义）
+                showMapIcon
         );
     }
 
     // ================= 整页窗口机制 =================
 
-    /** 打开一个整页窗口（清掉旧的） */
+    /** 打开一个整页窗口（清掉旧的�?*/
     private void showWindow(StackPane window) {
         overlayHost.getChildren().clear();
         overlayHost.setMouseTransparent(false); // 窗口打开后要能点遮罩/按钮
@@ -199,12 +351,12 @@ public class HelloApplication extends Application {
 
     private void closeWindow() {
         overlayHost.getChildren().clear();
-        overlayHost.setMouseTransparent(true); // 关掉后恢复“不挡鼠标”
+        overlayHost.setMouseTransparent(true); // 关掉后恢复“不挡鼠标�?
     }
 
     // ================= 三个整页窗口 =================
 
-    /** 牌组页：所有牌按 id 排列 */
+    /** 牌组页：所有牌�?id 排列 */
     private VBox deckPage(Player player) {
         List<Card> sorted = new ArrayList<>(player.deck);
         sorted.sort(Comparator.comparingInt(c -> c.id));
@@ -240,7 +392,7 @@ public class HelloApplication extends Application {
         return panel;
     }
 
-    /** 地图页：战斗中也能查看的整页大地图（只读） */
+    /** 地图页：战斗中也能查看的整页大地图（只读�?*/
     private VBox mapPage(GameMap map) {
         ScrollPane scroll = new ScrollPane();
         scroll.setFitToWidth(true);
@@ -270,7 +422,7 @@ public class HelloApplication extends Application {
         return panel;
     }
 
-    /** 遗物页：大图标 + 详细介绍 */
+    /** 遗物页：大图�?+ 详细介绍 */
     private VBox relicPage(Relic r) {
         StackPane icon = new StackPane();
         icon.setPrefSize(96, 96);
@@ -398,7 +550,7 @@ public class HelloApplication extends Application {
         return gained;
     }
 
-    /** 随机奖励一张卡（事件/奖励用） */
+    /** 随机奖励一张卡（事�?奖励用） */
     private Card randomRewardCard() {
         List<Card> pool = List.of(
                 Card.strike(), Card.defend(), Card.bash(),
@@ -410,7 +562,7 @@ public class HelloApplication extends Application {
 
     // ================= 事件 =================
 
-    /** 事件场景：专属背景图 + 右侧名称/描述 + 选项，选完结算回地图 */
+    /** 事件场景：专属背景图 + 右侧名称/描述 + 选项，选完结算回地�?*/
     private void startEventScene(Stage stage, GameMap map, Player player, EventDef ev) {
         EventView view = new EventView(ev, opt -> {
             String msg = applyEventOption(player, opt);
@@ -419,7 +571,7 @@ public class HelloApplication extends Application {
                 over.setTitle("事件结果");
                 over.setHeaderText(null);
                 over.setContentText(msg + "\n\n你的生命归零……本局结束。");
-                over.setOnHidden(e -> stage.setScene(buildMenuScene(stage)));
+                over.setOnHidden(e -> returnToMenu(stage));
                 over.showAndWait();
             } else {
                 Alert result = new Alert(Alert.AlertType.INFORMATION);
@@ -431,10 +583,10 @@ public class HelloApplication extends Application {
             }
         });
 
-        Scene scene = new Scene(view, W, H);
+        Scene scene = sizedScene(stage, view);
         scene.setOnKeyPressed(e -> {
             if (e.getCode() == KeyCode.ESCAPE) {
-                stage.setScene(buildMenuScene(stage)); // 放弃本局
+                returnToMenu(stage); // 放弃本局
             }
         });
         stage.setScene(scene);
@@ -482,10 +634,10 @@ public class HelloApplication extends Application {
                 () -> showMapScene(stage, map, player)
         );
 
-        Scene scene = new Scene(room, W, H);
+        Scene scene = sizedScene(stage, room);
         scene.setOnKeyPressed(e -> {
             if (e.getCode() == KeyCode.ESCAPE) {
-                stage.setScene(buildMenuScene(stage));
+                returnToMenu(stage);
             }
         });
         stage.setScene(scene);
