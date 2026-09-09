@@ -140,4 +140,75 @@ public class Enemy {
                 new Step(Intent.ATTACK,20),
                 new Step(Intent.WEAKEN,4)),true);
     }
+    //受击后退，攻击前冲
+    public enum AnimState {
+        IDLE, HIT_KNOCK, ATTACK_DASH
+    }
+    private AnimState animState = AnimState.IDLE;
+    private double offsetX = 0.0;      // 视觉偏移，真正逻辑位置不动
+    private double animTimer = 0.0;
+
+    /** 挨打：触发向后弹开动画，外部受伤时调用 */
+    public void triggerHitKnock() {
+        animTimer = 0;
+        animState = AnimState.HIT_KNOCK;
+    }
+
+    /** 攻击动作开始：触发向前冲刺动画，执行ATTACK意图时调用 */
+    public void triggerAttackDash() {
+        animTimer = 0;
+        animState = AnimState.ATTACK_DASH;
+    }
+
+    /** 每帧更新动画，BattleView 循环传入deltaTime */
+    public void updateAnim(double deltaTime) {
+        if (animState == AnimState.IDLE) return;
+
+        animTimer += deltaTime;
+        switch (animState) {
+            case HIT_KNOCK -> {
+                double dur = 0.25;
+                offsetX = easeOutElastic(animTimer, -32, 32, dur);
+                if (animTimer > dur) {
+                    offsetX = 0;
+                    animState = AnimState.IDLE;
+                }
+            }
+            case ATTACK_DASH -> {
+                double total = 0.40;
+                double peak = total * 0.45;
+                if (animTimer < peak) {
+                    offsetX = easeOutCubic(animTimer, 0, 42, peak);
+                } else if (animTimer < total) {
+                    offsetX = easeInCubic(animTimer - peak, 42, -42, total - peak);
+                } else {
+                    offsetX = 0;
+                    animState = AnimState.IDLE;
+                }
+            }
+            default -> {}
+        }
+    }
+
+    /** 获取渲染偏移，BattleView绘图使用：渲染X = 原始基准X + getOffsetX() */
+    public double getOffsetX() {
+        return offsetX;
+    }
+
+    // ========= 缓动函数 =========
+    private double easeOutCubic(double t, double b, double c, double d) {
+        t /= d;
+        return c * (t - 1) * t * t + 1 + b;
+    }
+    private double easeInCubic(double t, double b, double c, double d) {
+        t /= d;
+        return c * t * t * t + b;
+    }
+    private double easeOutElastic(double t, double b, double c, double d) {
+        if ((t /= d) == 1) return b + c;
+        double p = d * 0.3;
+        double a = c;
+        double s = p / 4;
+        return a * Math.pow(2, -10 * t) * Math.sin((t * d - s) * (2 * Math.PI) / p) + c + b;
+    }
 }
