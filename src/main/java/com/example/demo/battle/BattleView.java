@@ -618,8 +618,11 @@ public class BattleView extends javafx.scene.layout.StackPane {
                 Card.hammer(), Card.impregnable(),
                 Card.doubleStrike(), Card.kindle(), Card.lightning(),
                 Card.rage(), Card.offering());
-        List<Integer> weights = List.of(
-                4, 4, 3, 3, 3, 2, 2, 4, 2, 4, 3, 2);
+        // 权重直接取自 Card.Kind.weight（4=白/普通，3=蓝/罕见，1=金/稀有），
+        // 避免与卡池硬编码的双份数据源不同步。
+        List<Integer> weights = pool.stream()
+                .map(c -> c.kind.weight)
+                .toList();
 
         List<Card> offers = new ArrayList<>();
         List<Card> remaining = new ArrayList<>(pool);
