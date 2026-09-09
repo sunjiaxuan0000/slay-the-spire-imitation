@@ -1,4 +1,4 @@
-package com.example.demo;
+package com.example.demo.view;
 
 import javafx.scene.Cursor;
 import javafx.scene.control.Label;
@@ -66,7 +66,7 @@ public class MapView extends Pane {
     }
 
     private static Image loadImage(String path) {
-        var in = MapView.class.getResourceAsStream(path);
+        var in = MapView.class.getResourceAsStream("/com/example/demo/" + path);
         return in == null ? null : new Image(in);
     }
 

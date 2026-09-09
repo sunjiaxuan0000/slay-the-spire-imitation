@@ -1,4 +1,4 @@
-package com.example.demo;
+package com.example.demo.view;
 
 import java.util.ArrayList;
 import java.util.Collections;
