@@ -55,9 +55,11 @@ public class BattleView extends StackPane {
     private int playerBlock = 0;
     private int weakTurns = 0;
     private int enemyVulnerable = 0; // 敌人易伤层数：承受伤害 +50%，每回合 -1，多层不叠加伤害加成
+    private int enemyWeakTurns = 0; // 敌人虚弱层数：造成伤害 ×0.75，每回合 -1
     private int playerStrength = 0; // 玩家力量层数：每层为造成的所有伤害 +1，不随回合减少
     private boolean playerTurn = true;
     private boolean battleOver = false;
+    private boolean drawLocked = false; // 本回合抽牌被锁定（战斗专注效果）
     private boolean paused = false;            // 切去只读地图时暂停，防止后台偷偷行动
     private boolean pendingTurnStart = false;  // 暂停期间错过的“下一回合开始”
 
@@ -579,24 +581,25 @@ public class BattleView extends StackPane {
     /** 详情弹层里的小牌 */
     private VBox miniCard(Card c) {
         VBox card = new VBox(4);
-        card.setAlignment(Pos.CENTER);
+        card.setAlignment(Pos.TOP_CENTER);
         card.setPrefSize(88, 132);
-        card.setStyle("-fx-background-color: " + cardColor(c.kind) + "; -fx-background-radius: 10;");
-
-        Label id = new Label("#" + c.id);
-        id.setTextFill(Color.rgb(255, 255, 255, 0.75));
-        id.setFont(Font.font(11));
+        card.setStyle("-fx-background-color: " + cardColor(c.kind) + "; -fx-background-radius: 10;"
+                + " -fx-border-color: " + rarityBorderColor(c.kind) + "; -fx-border-width: 2; -fx-border-radius: 10;");
 
         Label name = new Label(c.kind.label);
         name.setTextFill(Color.WHITE);
-        name.setFont(Font.font(15));
+        name.setFont(Font.font(13));
         name.setStyle("-fx-font-weight: bold;");
+
+        Label type = new Label(typeLabel(c.kind.type));
+        type.setTextFill(Color.rgb(255, 255, 255, 0.7));
+        type.setFont(Font.font(11));
 
         Label value = new Label(c.damage > 0 ? "伤害 " + c.damage : "格挡 " + c.block);
         value.setTextFill(Color.rgb(254, 243, 199));
         value.setFont(Font.font(12));
 
-        card.getChildren().addAll(id, name, value);
+        card.getChildren().addAll(name, type, value);
         return card;
     }
 
@@ -606,8 +609,10 @@ public class BattleView extends StackPane {
         turn++; // 进入新一回合
         playerTurn = true;
         playerBlock = 0;
+        drawLocked = false; // 新回合重置抽牌锁定
         if (weakTurns > 0) weakTurns--;
         if (enemyVulnerable > 0) enemyVulnerable--;
+        if (enemyWeakTurns > 0) enemyWeakTurns--;
         energy = 3;
 
         // 遗物：请假条 → 每回合多抽 1 张
@@ -624,6 +629,7 @@ public class BattleView extends StackPane {
     private static final int HAND_LIMIT = 10; // 手牌上限
 
     private void drawHand(int n) {
+        if (drawLocked) return; // 抽牌被锁定，直接返回
         for (int i = 0; i < n; i++) {
             if (hand.size() >= HAND_LIMIT) break; // 手牌已满，停止抽牌，剩余抽牌数作废
             Card c = drawOne();
@@ -681,6 +687,17 @@ public class BattleView extends StackPane {
             hud.refresh();
             if (player.hp() == 0) { playerDied(); return; }
         }
+        if (c.kind == Card.Kind.FORTIFY) {
+            playerBlock *= 2; // 巩固：格挡翻倍
+        }
+        if (c.kind == Card.Kind.FOCUS) {
+            drawHand(3); // 战斗专注：抽 3 张牌
+            drawLocked = true; // 本回合不能再抽牌
+        }
+        if (c.kind == Card.Kind.SHOCKWAVE) {
+            enemyWeakTurns += 4; // 震荡波：给敌人 4 层虚弱
+            enemyVulnerable += 4; // 震荡波：给敌人 4 层易伤
+        }
         if (c.block > 0) playerBlock += c.block;
         if (c.draw > 0) drawHand(c.draw); // 剑柄打击等：额外抽牌
 
@@ -727,6 +744,7 @@ public class BattleView extends StackPane {
         switch (s.intent) {
             case ATTACK -> {
                 int dmg = s.value + enemy.power;
+                if (enemyWeakTurns > 0) dmg = dmg * 3 / 4; // 敌人虚弱：伤害 ×0.75
                 if (playerBlock > 0) {
                     int absorb = Math.min(playerBlock, dmg);
                     playerBlock -= absorb;
@@ -840,15 +858,19 @@ public class BattleView extends StackPane {
                 Card.pommelStrike(), Card.shrug(), Card.bleed(),
                 Card.hammer(), Card.impregnable(),
                 Card.doubleStrike(), Card.kindle(), Card.lightning(),
-                Card.rage(), Card.offering());
+                Card.rage(), Card.offering(),
+                Card.fortify(), Card.focus(),
+                Card.shockwave());
         List<Integer> weights = List.of(
                 4, 4,   // 痛击、铁斩波
                 3, 3, 3, // 剑柄打击、耸肩无视、放血
                 2, 2,   // 重锤、岿然不动
                 4, 2, 4, // 双重打击、燃烧、闪电霹雳
-                3, 2);  // 盛怒、祭品
+                3, 2,   // 盛怒、祭品
+                3, 3,   // 巩固、战斗专注
+                3);     // 震荡波
 
-        // 按权重随机抽 3 张不重复的牌
+        // 按权重无放回随机抽取 3 张不重复的牌
         List<Card> offers = new ArrayList<>();
         List<Card> remaining = new ArrayList<>(pool);
         List<Integer> remainingWeights = new ArrayList<>(weights);
@@ -877,11 +899,12 @@ public class BattleView extends StackPane {
 
     /** 奖励牌按钮：点它就加入牌组并离开战斗 */
     private Button buildRewardButton(Card c) {
-        VBox card = new VBox(8);
-        card.setAlignment(Pos.CENTER);
+        VBox card = new VBox(6);
+        card.setAlignment(Pos.TOP_CENTER);
         card.setPadding(new Insets(10));
         card.setPrefSize(150, 205);
-        card.setStyle("-fx-background-color: " + cardColor(c.kind) + "; -fx-background-radius: 14;");
+        card.setStyle("-fx-background-color: " + cardColor(c.kind) + "; -fx-background-radius: 14;"
+                + " -fx-border-color: " + rarityBorderColor(c.kind) + "; -fx-border-width: 2; -fx-border-radius: 14;");
 
         Label cost = new Label("费用 " + c.cost);
         cost.setTextFill(Color.rgb(254, 243, 199));
@@ -889,8 +912,12 @@ public class BattleView extends StackPane {
 
         Label name = new Label(c.kind.label);
         name.setTextFill(Color.WHITE);
-        name.setFont(Font.font(19));
+        name.setFont(Font.font(18));
         name.setStyle("-fx-font-weight: bold;");
+
+        Label type = new Label(typeLabel(c.kind.type));
+        type.setTextFill(Color.rgb(255, 255, 255, 0.7));
+        type.setFont(Font.font(13));
 
         Label value = new Label(
                 c.damage > 0 && c.block > 0 ? "伤害 " + c.damage + "  格挡 " + c.block
@@ -898,14 +925,14 @@ public class BattleView extends StackPane {
                 : c.block > 0 ? "格挡 " + c.block + (c.exhaust ? " 消耗" : "")
                 : c.kind.desc);
         value.setTextFill(Color.WHITE);
-        value.setFont(Font.font(15));
+        value.setFont(Font.font(14));
 
         Label desc = new Label(c.kind.desc);
         desc.setTextFill(Color.rgb(226, 232, 240));
-        desc.setFont(Font.font(12));
+        desc.setFont(Font.font(11));
         desc.setWrapText(true);
 
-        card.getChildren().addAll(cost, name, value, desc);
+        card.getChildren().addAll(cost, name, type, value, desc);
 
         Button btn = new Button();
         btn.setGraphic(card);
@@ -973,6 +1000,10 @@ public class BattleView extends StackPane {
             eChips.getChildren().add(statusChip("伤", enemyVulnerable, "#dc2626",
                     "易伤 " + enemyVulnerable + " 回合：承受伤害 ×1.5"));
         }
+        if (enemyWeakTurns > 0) {
+            eChips.getChildren().add(statusChip("弱", enemyWeakTurns, "#7c3aed",
+                    "虚弱 " + enemyWeakTurns + " 回合：造成伤害 ×0.75"));
+        }
         refreshIntent();
 
         // 手牌
@@ -1026,15 +1057,38 @@ public class BattleView extends StackPane {
             case LIGHTNING -> "#ca8a04";
             case RAGE -> "#7e22ce";
             case OFFERING -> "#581c87";
+            case FORTIFY -> "#0369a1";
+            case FOCUS -> "#065f46";
+            case SHOCKWAVE -> "#6d28d9";
+        };
+    }
+
+    /** 稀有度边框颜色：权重 4=灰色(白卡)，权重 3=蓝色(蓝卡)，权重 2=金色(金卡) */
+    private static String rarityBorderColor(Card.Kind k) {
+        return switch (k.weight) {
+            case 4 -> "#9ca3af"; // 灰色（白卡/普通）
+            case 3 -> "#3b82f6"; // 蓝色（蓝卡/罕见）
+            case 2 -> "#f59e0b"; // 金色（金卡/稀有）
+            default -> "#9ca3af";
+        };
+    }
+
+    /** 卡牌类型文字标签 */
+    private static String typeLabel(Card.Type t) {
+        return switch (t) {
+            case ATTACK -> "攻击";
+            case SKILL  -> "技能";
+            case POWER  -> "能力";
         };
     }
 
     private Button buildCardButton(Card c) {
-        VBox card = new VBox(6);
-        card.setAlignment(Pos.CENTER);
+        VBox card = new VBox(4);
+        card.setAlignment(Pos.TOP_CENTER);
         card.setPadding(new Insets(8));
         card.setPrefSize(116, 152);
-        card.setStyle("-fx-background-color: " + cardColor(c.kind) + "; -fx-background-radius: 12;");
+        card.setStyle("-fx-background-color: " + cardColor(c.kind) + "; -fx-background-radius: 12;"
+                + " -fx-border-color: " + rarityBorderColor(c.kind) + "; -fx-border-width: 2; -fx-border-radius: 12;");
 
         Label cost = new Label(String.valueOf(c.cost));
         cost.setTextFill(Color.WHITE);
@@ -1043,8 +1097,12 @@ public class BattleView extends StackPane {
 
         Label name = new Label(c.kind.label);
         name.setTextFill(Color.WHITE);
-        name.setFont(Font.font(17));
+        name.setFont(Font.font(14));
         name.setStyle("-fx-font-weight: bold;");
+
+        Label type = new Label(typeLabel(c.kind.type));
+        type.setTextFill(Color.rgb(255, 255, 255, 0.65));
+        type.setFont(Font.font(11));
 
         String valueText;
         if (c.damage > 0 && c.block > 0) {
@@ -1061,9 +1119,9 @@ public class BattleView extends StackPane {
         }
         Label value = new Label(valueText);
         value.setTextFill(Color.rgb(254, 243, 199));
-        value.setFont(Font.font(13));
+        value.setFont(Font.font(11));
 
-        card.getChildren().addAll(cost, name, value);
+        card.getChildren().addAll(cost, name, type, value);
 
         Button btn = new Button();
         btn.setGraphic(card);
