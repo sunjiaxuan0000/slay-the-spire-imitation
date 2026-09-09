@@ -1291,50 +1291,11 @@ public class BattleView extends StackPane {
     }
 
     private Button buildCardButton(Card c) {
-        VBox card = new VBox(4);
-        card.setAlignment(Pos.TOP_CENTER);
-        card.setPadding(new Insets(8));
-        card.setPrefSize(116, 152);
-        card.setStyle("-fx-background-color: " + cardColor(c.kind) + "; -fx-background-radius: 12;"
-                + " -fx-border-color: " + rarityBorderColor(c.kind) + "; -fx-border-width: 2; -fx-border-radius: 12;");
-
-        Label cost = new Label(c.cost < 0 ? "X" : String.valueOf(c.cost));
-        cost.setTextFill(Color.WHITE);
-        cost.setFont(Font.font(15));
-        cost.setStyle("-fx-font-weight: bold;");
-
-        Label name = new Label(c.kind.label);
-        name.setTextFill(Color.WHITE);
-        name.setFont(Font.font(14));
-        name.setStyle("-fx-font-weight: bold;");
-
-        Label type = new Label(typeLabel(c.kind.type));
-        type.setTextFill(Color.rgb(255, 255, 255, 0.65));
-        type.setFont(Font.font(11));
-
-        String valueText;
-        if (c.kind.type == Card.Type.STATUS) {
-            valueText = c.kind.desc; // 状态牌显示描述
-        } else if (c.damage > 0 && c.block > 0) {
-            valueText = "伤害 " + c.damage + "  格挡 " + c.block;
-        } else if (c.damage > 0 && c.hits > 1) {
-            valueText = "伤害 " + c.damage + "×" + c.hits;
-        } else if (c.damage > 0) {
-            valueText = c.kind.desc;
-        } else if (c.block > 0) {
-            valueText = "格挡 " + c.block;
-            if (c.exhaust) valueText += " 消耗";
-        } else {
-            valueText = c.kind.desc;
-        }
-        Label value = new Label(valueText);
-        value.setTextFill(Color.rgb(254, 243, 199));
-        value.setFont(Font.font(11));
-
-        card.getChildren().addAll(cost, name, type, value);
+        // 多层贴图卡面（基础面+稀有度飘带+类型/名称/描述+能量徽章）
+        var face = CardFaceView.build(c);
 
         Button btn = new Button();
-        btn.setGraphic(card);
+        btn.setGraphic(face);
         btn.setStyle("-fx-background-color: transparent; -fx-padding: 0; -fx-cursor: hand;");
         // 费用为 -1 的状态牌无法打出，始终禁用
         boolean unplayable = c.cost < 0;
