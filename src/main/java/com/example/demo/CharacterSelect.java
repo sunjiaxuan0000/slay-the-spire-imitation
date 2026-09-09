@@ -6,6 +6,13 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.control.Label;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.layout.Background;
+import javafx.scene.layout.BackgroundImage;
+import javafx.scene.layout.BackgroundPosition;
+import javafx.scene.layout.BackgroundRepeat;
+import javafx.scene.layout.BackgroundSize;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
@@ -48,17 +55,11 @@ public class CharacterSelect extends StackPane {
         bg.setStyle("-fx-background-color: #0f1424;");
         getChildren().add(bg);
 
-        // ---- 第 1 层：角色立绘背景（默认隐藏，选中后出现并盖住深色背景）----
+        // ---- 第 1 层：点击头像后的“立绘背景”（ironclad_art.png，cover 铺满）----
         artBack = new StackPane();
-        artBack.setStyle("-fx-background-color: linear-gradient(to bottom right, #b91c1c, #450a0a);");
+        artBack.setBackground(bgCover("ironclad_art.png"));
         artBack.setMouseTransparent(true); // 只做背景展示，不拦截鼠标
         artBack.setVisible(false);
-
-        // 立绘中央提示（以后有真立绘图，把这里的 Label 换成 ImageView 铺满即可）
-        Label artText = new Label(CHARACTER_NAME + " · 立绘背景（占位）");
-        artText.setTextFill(Color.rgb(254, 202, 202, 0.85));
-        artText.setFont(Font.font(34));
-        artBack.getChildren().add(artText);
         getChildren().add(artBack);
 
         // ---- 中央提示：还没选角色时 ----
@@ -76,16 +77,16 @@ public class CharacterSelect extends StackPane {
         card.setCursor(Cursor.HAND);
         card.setStyle(CARD_STYLE);
 
-        // 卡内小立绘缩略图（占位小色块）
+        // 卡内头像（ironclad_head.png）
         StackPane mini = new StackPane();
         mini.setPrefSize(110, 90);
         mini.setMaxSize(110, 90);
-        mini.setStyle("-fx-background-color: linear-gradient(to bottom right, #ef4444, #7f1d1d); "
-                + "-fx-background-radius: 10;");
-        Label miniText = new Label("暂无立绘");
-        miniText.setTextFill(Color.rgb(254, 202, 202, 0.9));
-        miniText.setFont(Font.font(13));
-        mini.getChildren().add(miniText);
+        mini.setStyle("-fx-background-color: rgba(15, 23, 42, 0.6); -fx-background-radius: 10;");
+        ImageView head = new ImageView(new Image(CharacterSelect.class.getResourceAsStream("ironclad_head.png")));
+        head.setPreserveRatio(true);
+        head.setFitWidth(100);
+        head.setFitHeight(80);
+        mini.getChildren().add(head);
 
         Label cardName = new Label(CHARACTER_NAME);
         cardName.setTextFill(Color.WHITE);
@@ -152,5 +153,18 @@ public class CharacterSelect extends StackPane {
         pop.setToX(1.0);
         pop.setToY(1.0);
         pop.play();
+    }
+
+    /** 读取资源图并做成 cover（等比放大铺满、超出的裁掉）背景 */
+    private static Background bgCover(String name) {
+        Image image = new Image(CharacterSelect.class.getResourceAsStream(name));
+        BackgroundImage bi = new BackgroundImage(
+                image,
+                BackgroundRepeat.NO_REPEAT,
+                BackgroundRepeat.NO_REPEAT,
+                BackgroundPosition.CENTER,
+                new BackgroundSize(1, 1, true, true, false, true) // cover
+        );
+        return new Background(bi);
     }
 }
