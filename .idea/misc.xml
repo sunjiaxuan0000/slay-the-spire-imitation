@@ -8,6 +8,7 @@
       </list>
     </option>
   </component>
+<<<<<<< HEAD
   <component name="NullableNotNullManager">
     <option name="myDefaultNullable" value="org.jetbrains.annotations.Nullable" />
     <option name="myDefaultNotNull" value="org.jetbrains.annotations.NotNull" />
@@ -47,6 +48,8 @@
       </value>
     </option>
   </component>
+=======
+>>>>>>> hl-bog
   <component name="ProjectRootManager" version="2" languageLevel="JDK_25" default="true" project-jdk-name="25" project-jdk-type="JavaSDK">
     <output url="file://$PROJECT_DIR$/out" />
   </component>
