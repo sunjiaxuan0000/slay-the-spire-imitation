@@ -1,4 +1,4 @@
-package com.example.demo;
+package com.example.demo.view;
 
 import javafx.animation.ScaleTransition;
 import javafx.geometry.Point2D;
@@ -63,11 +63,11 @@ public class MainMenu extends Pane {
     private final javafx.scene.shape.Rectangle debugRect = new javafx.scene.shape.Rectangle(); // 青色框显示按钮当前范围
 
     public MainMenu(Runnable onStartGame, Runnable onExit) {
-        bgImage = new Image(MainMenu.class.getResourceAsStream("start_menu.png"));
+        bgImage = new Image(MainMenu.class.getResourceAsStream("/com/example/demo/start_menu.png"));
         setBackground(buildBackground(bgImage));
 
         // START.png：开始游戏按钮图（只负责显示，点击由下面的逻辑统一处理）
-        startButton = new ImageView(new Image(MainMenu.class.getResourceAsStream("START.png")));
+        startButton = new ImageView(new Image(MainMenu.class.getResourceAsStream("/com/example/demo/START.png")));
         startButton.setPreserveRatio(true);    // 保持原比例，绝不压扁
         startButton.setMouseTransparent(true); // 鼠标事件穿透，交给本面板统一处理
         getChildren().add(startButton);

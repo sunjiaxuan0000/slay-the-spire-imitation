@@ -1,4 +1,4 @@
-package com.example.demo;
+package com.example.demo.card;
 
 /**
  * 一张卡牌（后续战斗系统会用到 damage/block/cost/draw）。

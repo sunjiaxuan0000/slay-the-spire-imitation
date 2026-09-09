@@ -1,5 +1,22 @@
 package com.example.demo;
 
+import com.example.demo.battle.BattleView;
+import com.example.demo.card.Card;
+import com.example.demo.character.CharacterSelect;
+import com.example.demo.character.Player;
+import com.example.demo.character.Relic;
+import com.example.demo.enemy.Boss;
+import com.example.demo.enemy.EliteSlime;
+import com.example.demo.enemy.Enemy;
+import com.example.demo.enemy.Slime;
+import com.example.demo.event.EventDef;
+import com.example.demo.event.EventView;
+import com.example.demo.view.GameMap;
+import com.example.demo.view.MainMenu;
+import com.example.demo.view.MapView;
+import com.example.demo.view.RoomView;
+import com.example.demo.view.RunHud;
+
 import javafx.animation.Interpolator;
 import javafx.animation.KeyFrame;
 import javafx.animation.KeyValue;
@@ -503,9 +520,9 @@ public class HelloApplication extends Application {
     private void handleArrive(Stage stage, GameMap map, Player player, RunHud hud,
                               GameMap.NodeType type) {
         switch (type) {
-            case MONSTER -> startBattle(stage, map, player, GameMap.NodeType.MONSTER, Enemy.slime());
-            case ELITE   -> startBattle(stage, map, player, GameMap.NodeType.ELITE, Enemy.eliteSlime());
-            case BOSS    -> startBattle(stage, map, player, GameMap.NodeType.BOSS, Enemy.boss());
+            case MONSTER -> startBattle(stage, map, player, GameMap.NodeType.MONSTER, new Slime());
+            case ELITE   -> startBattle(stage, map, player, GameMap.NodeType.ELITE, new EliteSlime());
+            case BOSS    -> startBattle(stage, map, player, GameMap.NodeType.BOSS, new Boss());
             case START   -> showRoomScene(stage, map, player);
             case EVENT   -> {
                 List<EventDef> events = EventDef.pool();

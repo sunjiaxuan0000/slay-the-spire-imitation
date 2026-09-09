@@ -1,4 +1,6 @@
-package com.example.demo;
+package com.example.demo.character;
+
+import com.example.demo.card.Card;
 
 import java.util.ArrayList;
 import java.util.List;

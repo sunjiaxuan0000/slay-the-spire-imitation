@@ -1,4 +1,4 @@
-package com.example.demo;
+package com.example.demo.event;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -125,7 +125,7 @@ public class EventView extends StackPane {
 
     private static Image loadImage(String name) {
         try {
-            var in = EventView.class.getResourceAsStream(name);
+            var in = EventView.class.getResourceAsStream("/com/example/demo/" + name);
             if (in == null) return null;
             return new Image(in);
         } catch (Exception ex) {
