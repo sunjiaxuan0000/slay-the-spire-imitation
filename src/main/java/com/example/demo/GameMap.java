@@ -154,20 +154,20 @@ public class GameMap {
         int roll = rnd.nextInt(100);
 
         // 休息：只在过了山脚段出现，且不能被禁用（防连续）
-        if (row >= MIN_REST_ROW && roll < 8 && !banRest) return NodeType.REST;
+        if (row >= MIN_REST_ROW && roll < 15 && !banRest) return NodeType.REST;
 
         // 事件：频率提高 —— 早段(还没休息) 25%，之后 22%
         if (row < MIN_REST_ROW) {
-            if (roll < 25) return NodeType.EVENT;
+            if (roll < 45) return NodeType.EVENT;
             return NodeType.MONSTER; // 山脚只出怪/事件
         }
         if (roll < 30) return NodeType.EVENT;
 
-        if (row < TREASURE_ROW) return NodeType.MONSTER;  // 宝箱之前纯普通怪
+        if (row < 5) return NodeType.MONSTER;  // 宝箱之前纯普通怪
 
-        // 宝箱之后：精英概率随楼层逐渐提高
-        int eliteChance = 20 + (row - TREASURE_ROW - 1) * 5; // 20% → 45%
-        eliteChance = Math.min(45, eliteChance);
+        // 精英概率随楼层逐渐提高
+        int eliteChance = (row)*6; // 20% → 45%
+        eliteChance = Math.min(50, eliteChance);
         if (rnd.nextInt(100) >= eliteChance || banElite) return NodeType.MONSTER;
         return NodeType.ELITE;
     }

@@ -1,8 +1,12 @@
 package com.example.demo;
 
+import javafx.animation.AnimationTimer;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
 import javafx.animation.ParallelTransition;
 import javafx.animation.PauseTransition;
 import javafx.animation.RotateTransition;
+import javafx.animation.Timeline;
 import javafx.animation.TranslateTransition;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -11,6 +15,13 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tooltip;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.layout.Background;
+import javafx.scene.layout.BackgroundImage;
+import javafx.scene.layout.BackgroundPosition;
+import javafx.scene.layout.BackgroundRepeat;
+import javafx.scene.layout.BackgroundSize;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
@@ -19,6 +30,7 @@ import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.Ellipse;
 import javafx.scene.text.Font;
 import javafx.util.Duration;
 
@@ -62,6 +74,10 @@ public class BattleView extends StackPane {
     private boolean drawLocked = false; // 本回合抽牌被锁定（战斗专注效果）
     private boolean paused = false;            // 切去只读地图时暂停，防止后台偷偷行动
     private boolean pendingTurnStart = false;  // 暂停期间错过的“下一回合开始”
+    // ===== 角色局内动画 =====
+    private AnimationTimer idleBreath;   // 待机呼吸
+    private TranslateTransition attackAnim; // 攻击突进
+    private Timeline hurtAnim;           // 受击抖动
 
     // ================= UI =================
     // 角色(左)
@@ -104,19 +120,34 @@ public class BattleView extends StackPane {
     private final HBox rewardBox = new HBox(16);
     private boolean rewardChosen = false;
     // 死亡演出
-    private StackPane playerPortrait;                 // 角色立绘（倒地动画）
+    private StackPane playerPortrait;                 // 角色立绘（仍在左列内）
+    private StackPane enemyPortrait;                  // 怪物立绘（仍在右列内）
+    private VBox leftCol;                            // 左侧整列（随角色一起平移对齐地面）
+    private VBox rightCol;                           // 右侧整列
+    private final Ellipse playerShadow = new Ellipse(); // 脚底阴影
+    private final Ellipse enemyShadow = new Ellipse();
     private final Pane deadDim = new Pane();          // 背景变暗层（在内容下层，角色/怪物保持高亮）
     private final StackPane deathOverlay = new StackPane(); // 死亡提示页
     private boolean diedShown = false;
 
-    public BattleView(Player player, RunHud hud, Enemy enemy, Consumer<Boolean> onFinish) {
+    private Image battleBg;
+    private final ImageView bgView = new ImageView(); // 自绘背景（可缩放/裁切/偏移）
+    private static final double GROUND_IMG_Y = 594;   // 背景图上“地面线”的行号（原图坐标）
+
+    public BattleView(Player player, RunHud hud, Enemy enemy, Consumer<Boolean> onFinish,
+                      boolean bossBattle) {
         this.player = player;
         this.hud = hud;
         this.enemy = enemy;
         this.onFinish = onFinish;
 
-        // 整层背景（以后换战斗背景图）
-        setStyle("-fx-background-color: linear-gradient(to bottom, #191511, #23201c);");
+        // 战斗背景：BOSS 战用 boss.png，普通/精英用 default.png（cover 全屏铺满）
+        battleBg = loadImage(bossBattle ? "icons/boss.png" : "icons/default.png");
+        if (battleBg != null) {
+            setBackground(makeCoverBackground(battleBg));
+        } else {
+            setStyle("-fx-background-color: linear-gradient(to bottom, #191511, #23201c);");
+        }
 
         // 背景变暗层：默认隐藏，死亡时点亮（它在内容层下面 → 只有背景暗、角色怪物亮）
         deadDim.setStyle("-fx-background-color: rgba(2, 6, 23, 0.5);");
@@ -130,15 +161,23 @@ public class BattleView extends StackPane {
         HBox fighters = new HBox(10);
         fighters.setAlignment(Pos.CENTER);
 
-        VBox left = buildLeftPanel();   // 角色
+        VBox left = buildLeftPanel();   // 角色（整列会整体对齐地面）
+        leftCol = left;
         VBox middle = buildMiddlePanel(); // 能量 / 结束回合
         VBox right = buildRightPanel();  // 怪物
+        rightCol = right;
         fighters.getChildren().addAll(left, middle, right);
         main.setCenter(fighters);
 
         // ---- 底部：手牌区 ----
         main.setBottom(buildHandPanel());
         main.setPadding(new Insets(8, 10, 8, 10));
+
+//        // 脚底阴影先入层（垫在 main 下面，立绘/血条都在其上）
+//        addStageFigures();
+//        widthProperty().addListener(o -> anchorStageFigures());
+//        heightProperty().addListener(o -> anchorStageFigures());
+//        javafx.application.Platform.runLater(this::anchorStageFigures);
 
         // 主布局（本类就是 StackPane，子元素叠放、可拉伸的自动铺满）
         getChildren().add(main);
@@ -199,7 +238,65 @@ public class BattleView extends StackPane {
             player.heal(10);
             hud.refresh();
         }
+        startIdleBreath(); // 待机呼吸动画
         startPlayerTurn();
+    }
+
+    // ================= 角色局内动画（变换模拟动作） =================
+
+    /** 待机：上下呼吸 + 轻微摇摆（离开战斗前要 stop） */
+    private void startIdleBreath() {
+        if (idleBreath != null) return;
+        idleBreath = new AnimationTimer() {
+            private long t0 = -1;
+            @Override
+            public void handle(long now) {
+                if (paused || battleOver) return; // 暂停/结束就停着
+                if (t0 < 0) t0 = now;
+                double s = (now - t0) / 1_000_000_000.0;
+                playerPortrait.setTranslateY(Math.sin(s * 2.2) * 5);
+                playerPortrait.setRotate(Math.sin(s * 2.2) * 1.2);
+            }
+        };
+        idleBreath.start();
+    }
+
+    private void stopIdleBreath(boolean reset) {
+        if (idleBreath != null) {
+            idleBreath.stop();
+            idleBreath = null;
+        }
+        if (reset && playerPortrait != null) {
+            playerPortrait.setTranslateX(0);
+            playerPortrait.setTranslateY(0);
+            playerPortrait.setRotate(0);
+        }
+    }
+
+    /** 打出攻击牌：角色向右突进再弹回来 */
+    private void animateAttack() {
+        if (playerPortrait == null || battleOver) return;
+        if (attackAnim != null) attackAnim.stop();
+        attackAnim = new TranslateTransition(Duration.millis(130), playerPortrait);
+        attackAnim.setFromX(playerPortrait.getTranslateX());
+        attackAnim.setToX(90);
+        attackAnim.setAutoReverse(true);
+        attackAnim.setCycleCount(2);
+        attackAnim.play();
+    }
+
+    /** 受到伤害：短促左右抖动 */
+    private void animateHurt() {
+        if (playerPortrait == null || battleOver) return;
+        if (hurtAnim != null) hurtAnim.stop();
+        double base = playerPortrait.getTranslateX();
+        hurtAnim = new Timeline(
+                new KeyFrame(Duration.ZERO, new KeyValue(playerPortrait.translateXProperty(), base)),
+                new KeyFrame(Duration.millis(60), new KeyValue(playerPortrait.translateXProperty(), base - 12)),
+                new KeyFrame(Duration.millis(120), new KeyValue(playerPortrait.translateXProperty(), base + 10)),
+                new KeyFrame(Duration.millis(200), new KeyValue(playerPortrait.translateXProperty(), base))
+        );
+        hurtAnim.play();
     }
 
     /** 检查玩家是否持有某个遗物（遗物效果都靠它触发） */
@@ -209,6 +306,60 @@ public class BattleView extends StackPane {
         }
         return false;
     }
+
+    // ================= 战斗舞台：背景 + 立绘脚底对齐地面线 + 阴影 =================
+
+    private static Image loadImage(String path) {
+        var in = BattleView.class.getResourceAsStream(path);
+        return in == null ? null : new Image(in);
+    }
+
+    /** 背景用 cover（等比铺满、居中裁边）铺在战斗层 */
+    private static Background makeCoverBackground(Image image) {
+        BackgroundImage bi = new BackgroundImage(
+                image,
+                BackgroundRepeat.NO_REPEAT,
+                BackgroundRepeat.NO_REPEAT,
+                BackgroundPosition.CENTER,
+                new BackgroundSize(1, 1, true, true, false, true) // cover
+        );
+        return new Background(bi);
+    }
+
+    /** 把影子与立绘加到本层（立绘留在各自列里，整列平移对齐地面） */
+    private void addStageFigures() {
+        playerShadow.setRadiusX(78);
+        playerShadow.setRadiusY(13);
+        playerShadow.setFill(Color.rgb(0, 0, 0, 0.42));
+        playerShadow.setMouseTransparent(true);
+        enemyShadow.setRadiusX(78);
+        enemyShadow.setRadiusY(13);
+        enemyShadow.setFill(Color.rgb(0, 0, 0, 0.42));
+        enemyShadow.setMouseTransparent(true);
+        getChildren().addAll(playerShadow, enemyShadow);
+//        anchorStageFigures();
+    }
+
+    /**
+     * 立绘保持在“加背景前”的原始居中布局里（不做任何位移）；
+     * 背景由 Region cover 全屏显示；这里只负责把阴影贴到立绘脚底。
+     */
+//    private void anchorStageFigures() {
+//        if (leftCol == null || rightCol == null || playerPortrait == null || enemyPortrait == null) {
+//            return;
+//        }
+//        alignShadow(leftCol, playerPortrait, playerShadow);
+//        alignShadow(rightCol, enemyPortrait, enemyShadow);
+//    }
+//
+//    /** 只摆放阴影：贴住立绘画布底沿，稍微上收以便盖住图内可能的透明留白 */
+//    private void alignShadow(VBox col, StackPane art, Ellipse shadow) {
+//        javafx.geometry.Point2D origin = localToScene(0, 0);
+//        double lift = 18; // 阴影相对画布底边往上收的像素（图有留白就调大）
+//        javafx.geometry.Point2D c = art.localToScene(art.getWidth() / 2, art.getHeight() - lift);
+//        shadow.setCenterX(c.getX() - origin.getX());
+//        shadow.setCenterY(c.getY() - origin.getY());
+//    }
 
     // ================= 面板搭建 =================
 
@@ -222,10 +373,16 @@ public class BattleView extends StackPane {
         pName.setFont(Font.font(26));
         pName.setStyle("-fx-font-weight: bold;");
 
-        playerPortrait = portrait("战",
-                "radial-gradient(center 35% 30%, radius 100%, #b45309, #451a03);");
+        playerPortrait = new StackPane(); // 用 char.png 作为角色立绘
         playerPortrait.setPrefSize(210, 210);
         playerPortrait.setMaxSize(210, 210);
+        ImageView pImg = new ImageView(new Image(
+                BattleView.class.getResourceAsStream("icons/char.png")));
+        pImg.setPreserveRatio(true);
+        pImg.setFitWidth(210);
+        pImg.setFitHeight(210);
+        pImg.setMouseTransparent(true);
+        playerPortrait.getChildren().add(pImg);
 
         // 血条（数字/数字 写在条上）
         hpWrap(pHpWrap, pHpFill, pHpText, 240, "#22c55e");
@@ -269,11 +426,6 @@ public class BattleView extends StackPane {
         intentRow.setAlignment(Pos.CENTER);
         intentRow.getChildren().addAll(eIntentIcon, eIntentNum);
 
-        StackPane portrait = portrait(enemy.name.substring(0, 1),
-                "radial-gradient(center 35% 30%, radius 100%, #6b7280, #1f2937);");
-        portrait.setPrefSize(210, 210);
-        portrait.setMaxSize(210, 210);
-
         hpWrap(eHpWrap, eHpFill, eHpText, 240, "#dc2626");
         eShieldNum.setTextFill(Color.WHITE);
         eShieldNum.setFont(Font.font(13));
@@ -288,7 +440,13 @@ public class BattleView extends StackPane {
         eChips.setPrefWrapLength(286);
         eChips.setAlignment(Pos.CENTER_LEFT);
 
-        box.getChildren().addAll(eName, intentRow, portrait, cluster, eChips);
+        // 怪物立绘（保留在右列内，整列随后对齐地面）
+        enemyPortrait = portrait(enemy.name.substring(0, 1),
+                "radial-gradient(center 35% 30%, radius 100%, #6b7280, #1f2937);");
+        enemyPortrait.setPrefSize(210, 210);
+        enemyPortrait.setMaxSize(210, 210);
+
+        box.getChildren().addAll(eName, intentRow, enemyPortrait, cluster, eChips);
         return box;
     }
 
@@ -662,6 +820,7 @@ public class BattleView extends StackPane {
                 damageEnemy(dmg);
                 if (battleOver) break;
             }
+            if (!battleOver) animateAttack(); // 攻击动画：突进挥一下
         }
         if (c.kind == Card.Kind.BASH) {
             enemyVulnerable += 2; // 痛击：给敌人 2 层易伤
@@ -675,6 +834,7 @@ public class BattleView extends StackPane {
         if (c.kind == Card.Kind.BLEED) {
             energy += 2; // 放血：获得 2 点能量
             player.damage(3); // 自己失去 3 点生命
+            animateHurt(); // 自伤受击抖动
             hud.refresh();
             if (player.hp() == 0) { playerDied(); return; }
         }
@@ -683,6 +843,7 @@ public class BattleView extends StackPane {
         }
         if (c.kind == Card.Kind.OFFERING) {
             player.damage(6); // 祭品：自己失去 6 点生命
+            animateHurt(); // 自伤受击抖动
             energy += 2; // 获得 2 点能量
             hud.refresh();
             if (player.hp() == 0) { playerDied(); return; }
@@ -751,6 +912,7 @@ public class BattleView extends StackPane {
                     dmg -= absorb;
                 }
                 player.damage(dmg);
+                animateHurt(); // 玩家受击抖动
                 hud.refresh();
                 if (player.hp() == 0) { playerDied(); return; }
             }
@@ -789,6 +951,7 @@ public class BattleView extends StackPane {
     private void victory() {
         if (battleOver) return;
         battleOver = true;
+        stopIdleBreath(true); // 停待机，避免后台空转
         showReward();
     }
 
@@ -797,6 +960,7 @@ public class BattleView extends StackPane {
         if (diedShown) return;
         diedShown = true;
         battleOver = true;
+        stopIdleBreath(true); // 停掉待机呼吸，复位后再播倒地动画
 
         deadDim.setVisible(true); // 背景变暗，角色和怪物保持高亮（它在内容层下面）
 
