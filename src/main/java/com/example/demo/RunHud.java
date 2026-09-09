@@ -35,7 +35,8 @@ public class RunHud extends VBox {
     public RunHud(Player player,
                   Consumer<Relic> onRelicClick,
                   Runnable onDeckClick,
-                  Runnable onMapClick) {
+                  Runnable onMapClick,
+                  boolean showMapIcon) {
         this.player = player;
 
         // ---------- 第一行 ----------
@@ -69,11 +70,16 @@ public class RunHud extends VBox {
         Region spacer = new Region();
         HBox.setHgrow(spacer, javafx.scene.layout.Priority.ALWAYS);
 
-        // 地图图标（牌组图标左边）
-        StackPane mapIcon = iconCard("图",
-                "linear-gradient(to bottom right, #86efac, #15803d);", "#052e16");
-        Tooltip.install(mapIcon, new Tooltip("查看地图（战斗中也可查看）"));
-        mapIcon.setOnMouseClicked(e -> onMapClick.run());
+        row1.getChildren().addAll(name, hpArea, spacer);
+
+        // 地图图标（只在地图页之外的场景显示，例如战斗中用于“查看地图”）
+        if (showMapIcon) {
+            StackPane mapIcon = iconCard("图",
+                    "linear-gradient(to bottom right, #86efac, #15803d);", "#052e16");
+            Tooltip.install(mapIcon, new Tooltip("查看地图（战斗中也可查看）"));
+            mapIcon.setOnMouseClicked(e -> onMapClick.run());
+            row1.getChildren().add(mapIcon);
+        }
 
         // 牌组图标（右上角）
         deckIcon.setCursor(javafx.scene.Cursor.HAND);
@@ -89,7 +95,7 @@ public class RunHud extends VBox {
         attachBadge(deckIcon, deckBadge);
         deckIcon.setOnMouseClicked(e -> onDeckClick.run());
 
-        row1.getChildren().addAll(name, hpArea, spacer, mapIcon, deckIcon);
+        row1.getChildren().add(deckIcon);
         getChildren().add(row1);
 
         // ---------- 第二行：遗物 ----------

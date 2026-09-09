@@ -58,6 +58,8 @@ public class BattleView extends StackPane {
     private int playerStrength = 0; // 玩家力量层数：每层为造成的所有伤害 +1，不随回合减少
     private boolean playerTurn = true;
     private boolean battleOver = false;
+    private boolean paused = false;            // 切去只读地图时暂停，防止后台偷偷行动
+    private boolean pendingTurnStart = false;  // 暂停期间错过的“下一回合开始”
 
     // ================= UI =================
     // 角色(左)
@@ -702,7 +704,7 @@ public class BattleView extends StackPane {
     }
 
     private void enemyAct() {
-        if (battleOver) return;
+        if (battleOver || paused) return; // 暂停时先不动，等恢复
 
         enemy.block = 0; // 怪物格挡在自己回合开始清零
 
@@ -727,8 +729,25 @@ public class BattleView extends StackPane {
 
         refreshAll();
         PauseTransition pause = new PauseTransition(Duration.millis(600));
-        pause.setOnFinished(e -> { if (!battleOver) startPlayerTurn(); });
+        pause.setOnFinished(e -> {
+            if (battleOver) return;
+            if (paused) { pendingTurnStart = true; return; } // 暂停时错过：等恢复再开下一回合
+            startPlayerTurn();
+        });
         pause.play();
+    }
+
+    /** 暂停 / 恢复（切去只读地图时暂停；回到战斗时恢复） */
+    public void setPaused(boolean p) {
+        paused = p;
+        if (!paused && !battleOver) {
+            if (pendingTurnStart) {           // 有错过的下一回合 → 补开
+                pendingTurnStart = false;
+                startPlayerTurn();
+            } else if (!playerTurn) {         // 怪物还没行动 → 补行动
+                enemyAct();
+            }
+        }
     }
 
     // ================= 胜负 =================
