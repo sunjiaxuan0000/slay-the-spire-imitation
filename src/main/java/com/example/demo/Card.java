@@ -10,7 +10,8 @@ public class Card {
     public enum Type {
         ATTACK,  // 攻击牌
         SKILL,   // 技能牌
-        POWER    // 能力牌
+        POWER,   // 能力牌
+        STATUS   // 状态牌（战斗中产生，战后从牌组移除）
     }
 
     /** 牌的种类 */
@@ -31,7 +32,14 @@ public class Card {
         OFFERING("祭品", "自己失去 6 点生命，获得 2 点能量，抽 3 张牌，消耗", Type.SKILL, 2),
         FORTIFY("巩固", "将你当前的格挡翻倍", Type.SKILL, 3),
         FOCUS("战斗专注", "抽 3 张牌，本回合不能再抽牌", Type.SKILL, 3),
-        SHOCKWAVE("震荡波", "给予敌人 4 层虚弱，4 层易伤，消耗", Type.SKILL, 3);
+        SHOCKWAVE("震荡波", "给予敌人 4 层虚弱，4 层易伤，消耗", Type.SKILL, 3),
+        HEAVY_BLADE("重刃", "造成 14 点伤害，力量在重刃上发挥 3 倍效果", Type.ATTACK, 4),
+        WILD_STRIKE("狂野打击", "造成 12 点伤害，将一张“伤口”放入你的抽牌堆", Type.ATTACK, 4),
+        ADAMANT_ARM("金刚臂", "造成 12 点伤害，给予 2 层虚弱", Type.ATTACK, 4),
+        BRUTALITY("残暴", "使用后每回合开始时失去一点体力，多抽一张牌", Type.POWER, 2),
+        FLEX("活动肌肉", "获得 2 点力量，回合结束时失去 2 点力量", Type.SKILL, 4),
+        WOUND("伤口", "无法被打出", Type.STATUS, 4),
+        SLIME("黏液", "消耗", Type.STATUS, 4);
 
 
         public final String label;
@@ -102,4 +110,11 @@ public class Card {
     public static Card fortify()     { return new Card(Kind.FORTIFY, 2, 0, 0); }
     public static Card focus()       { return new Card(Kind.FOCUS, 0, 0, 0); }
     public static Card shockwave()   { return new Card(Kind.SHOCKWAVE, 2, 0, 0, 0, true); }
+    public static Card heavyBlade()  { return new Card(Kind.HEAVY_BLADE, 2, 14, 0); } // 力量 3 倍效果在 play() 中处理
+    public static Card wildStrike()  { return new Card(Kind.WILD_STRIKE, 1, 12, 0); } // 加伤口效果在 play() 中处理
+    public static Card adamantArm()  { return new Card(Kind.ADAMANT_ARM, 2, 12, 0); } // 给虚弱效果在 play() 中处理
+    public static Card brutality()   { return new Card(Kind.BRUTALITY, 0, 0, 0); } // 每回合效果在 play() 中处理
+    public static Card flex()        { return new Card(Kind.FLEX, 0, 0, 0); } // 临时力量效果在 play() 中处理
+    public static Card wound()       { return new Card(Kind.WOUND, -1, 0, 0); } // -1 表示无法打出
+    public static Card slime()       { return new Card(Kind.SLIME, 1, 0, 0, 0, true); } // 可打出，消耗
 }

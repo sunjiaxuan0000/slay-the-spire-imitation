@@ -69,6 +69,8 @@ public class BattleView extends StackPane {
     private int enemyVulnerable = 0; // 敌人易伤层数：承受伤害 +50%，每回合 -1，多层不叠加伤害加成
     private int enemyWeakTurns = 0; // 敌人虚弱层数：造成伤害 ×0.75，每回合 -1
     private int playerStrength = 0; // 玩家力量层数：每层为造成的所有伤害 +1，不随回合减少
+    private int tempStrength = 0; // 临时力量：回合结束时失去
+    private boolean brutalityActive = false; // 残暴能力是否激活：每回合开始失去 1 体力，多抽 1 牌
     private boolean playerTurn = true;
     private boolean battleOver = false;
     private boolean drawLocked = false; // 本回合抽牌被锁定（战斗专注效果）
@@ -753,7 +755,9 @@ public class BattleView extends StackPane {
         type.setTextFill(Color.rgb(255, 255, 255, 0.7));
         type.setFont(Font.font(11));
 
-        Label value = new Label(c.damage > 0 ? "伤害 " + c.damage : "格挡 " + c.block);
+        Label value = new Label(
+                c.kind.type == Card.Type.STATUS ? c.kind.desc
+                : c.damage > 0 ? "伤害 " + c.damage : "格挡 " + c.block);
         value.setTextFill(Color.rgb(254, 243, 199));
         value.setFont(Font.font(12));
 
@@ -773,8 +777,15 @@ public class BattleView extends StackPane {
         if (enemyWeakTurns > 0) enemyWeakTurns--;
         energy = 3;
 
+        // 能力：残暴 → 每回合开始失去 1 体力，多抽 1 牌
+        if (brutalityActive) {
+            player.damage(1);
+            hud.refresh();
+            if (player.hp() == 0) { playerDied(); return; }
+        }
+
         // 遗物：请假条 → 每回合多抽 1 张
-        drawHand(5 + (hasRelic("请假条") ? 1 : 0));
+        drawHand(5 + (hasRelic("请假条") ? 1 : 0) + (brutalityActive ? 1 : 0));
 
         // 遗物：青铜怀表 → 战斗刚开始的那一回合获得 2 点格挡
         if (turn == 1 && hasRelic("青铜怀表")) {
@@ -814,7 +825,13 @@ public class BattleView extends StackPane {
         energy -= c.cost;
         if (c.damage > 0) {
             for (int i = 0; i < c.hits; i++) {
-                int dmg = c.damage + playerStrength;
+                int dmg = c.damage;
+                // 重刃：力量发挥 3 倍效果
+                if (c.kind == Card.Kind.HEAVY_BLADE) {
+                    dmg += playerStrength * 3;
+                } else {
+                    dmg += playerStrength;
+                }
                 if (weakTurns > 0) dmg = dmg * 3 / 4;
                 if (enemyVulnerable > 0) dmg = dmg * 3 / 2; // 易伤：+50%
                 damageEnemy(dmg);
@@ -859,6 +876,19 @@ public class BattleView extends StackPane {
             enemyWeakTurns += 4; // 震荡波：给敌人 4 层虚弱
             enemyVulnerable += 4; // 震荡波：给敌人 4 层易伤
         }
+        if (c.kind == Card.Kind.WILD_STRIKE) {
+            draw.add(Card.wound()); // 狂野打击：将一张伤口放入抽牌堆
+        }
+        if (c.kind == Card.Kind.ADAMANT_ARM) {
+            enemyWeakTurns += 2; // 金刚臂：给敌人 2 层虚弱
+        }
+        if (c.kind == Card.Kind.BRUTALITY) {
+            brutalityActive = true; // 残暴：激活每回合效果
+        }
+        if (c.kind == Card.Kind.FLEX) {
+            playerStrength += 2; // 活动肌肉：获得 2 点力量
+            tempStrength += 2; // 记录临时力量，回合结束失去
+        }
         if (c.block > 0) playerBlock += c.block;
         if (c.draw > 0) drawHand(c.draw); // 剑柄打击等：额外抽牌
 
@@ -886,6 +916,12 @@ public class BattleView extends StackPane {
     private void endPlayerTurn() {
         if (!playerTurn || battleOver) return;
         playerTurn = false;
+
+        // 活动肌肉：回合结束失去临时力量
+        if (tempStrength > 0) {
+            playerStrength -= tempStrength;
+            tempStrength = 0;
+        }
 
         discard.addAll(hand);
         hand.clear();
@@ -1014,25 +1050,23 @@ public class BattleView extends StackPane {
         overlay.setVisible(false); // 如果开着牌堆浏览层，先关掉
 
         // 奖励池（不含打击、防御）+ 权重：数值越大越容易被抽到
-        //   高权重: 痛击、铁斩波
-        //   中权重: 剑柄打击、耸肩无视、放血
-        //   低权重: 重锤、岿然不动
+        // 金卡（权重 1）：重锤、岿然不动、燃烧、祭品、残暴
+        // 蓝卡（权重 3）：剑柄打击、耸肩无视、放血、盛怒、巩固、战斗专注、震荡波
+        // 白卡（权重 4）：痛击、铁斩波、双重打击、闪电霹雳、重刃、狂野打击、金刚臂、活动肌肉
         List<Card> pool = List.of(
-                Card.bash(), Card.sweep(),
-                Card.pommelStrike(), Card.shrug(), Card.bleed(),
-                Card.hammer(), Card.impregnable(),
-                Card.doubleStrike(), Card.kindle(), Card.lightning(),
-                Card.rage(), Card.offering(),
-                Card.fortify(), Card.focus(),
-                Card.shockwave());
+                // 金卡（权重 1）
+                Card.hammer(), Card.impregnable(), Card.kindle(), Card.offering(), Card.brutality(),
+                // 蓝卡（权重 3）
+                Card.pommelStrike(), Card.shrug(), Card.bleed(), Card.rage(), Card.fortify(), Card.focus(), Card.shockwave(),
+                // 白卡（权重 4）
+                Card.bash(), Card.sweep(), Card.doubleStrike(), Card.lightning(), Card.heavyBlade(), Card.wildStrike(), Card.adamantArm(), Card.flex());
         List<Integer> weights = List.of(
-                4, 4,   // 痛击、铁斩波
-                3, 3, 3, // 剑柄打击、耸肩无视、放血
-                2, 2,   // 重锤、岿然不动
-                4, 2, 4, // 双重打击、燃烧、闪电霹雳
-                3, 2,   // 盛怒、祭品
-                3, 3,   // 巩固、战斗专注
-                3);     // 震荡波
+                // 金卡
+                1, 1, 1, 1, 1,
+                // 蓝卡
+                3, 3, 3, 3, 3, 3, 3,
+                // 白卡
+                4, 4, 4, 4, 4, 4, 4, 4);
 
         // 按权重无放回随机抽取 3 张不重复的牌
         List<Card> offers = new ArrayList<>();
@@ -1112,6 +1146,8 @@ public class BattleView extends StackPane {
 
     /** 选完（或跳过）→ 隐藏奖励层，告诉外面战斗结束 */
     private void closeRewardAndLeave() {
+        // 战后移除牌组中的状态牌
+        player.deck.removeIf(c -> c.kind.type == Card.Type.STATUS);
         rewardOverlay.setVisible(false);
         onFinish.accept(true);
     }
@@ -1224,6 +1260,13 @@ public class BattleView extends StackPane {
             case FORTIFY -> "#0369a1";
             case FOCUS -> "#065f46";
             case SHOCKWAVE -> "#6d28d9";
+            case HEAVY_BLADE -> "#7c2d12"; // 棕红色（攻击牌）
+            case WILD_STRIKE -> "#9f1239"; // 玫红色（攻击牌）
+            case ADAMANT_ARM -> "#854d0e"; // 暗金色（攻击牌）
+            case BRUTALITY -> "#581c87"; // 紫色（能力牌）
+            case FLEX -> "#166534"; // 深绿色（技能牌）
+            case WOUND -> "#374151"; // 深灰色（状态牌）
+            case SLIME -> "#4b5563"; // 灰色（状态牌）
         };
     }
 
@@ -1243,6 +1286,7 @@ public class BattleView extends StackPane {
             case ATTACK -> "攻击";
             case SKILL  -> "技能";
             case POWER  -> "能力";
+            case STATUS -> "状态";
         };
     }
 
@@ -1254,7 +1298,7 @@ public class BattleView extends StackPane {
         card.setStyle("-fx-background-color: " + cardColor(c.kind) + "; -fx-background-radius: 12;"
                 + " -fx-border-color: " + rarityBorderColor(c.kind) + "; -fx-border-width: 2; -fx-border-radius: 12;");
 
-        Label cost = new Label(String.valueOf(c.cost));
+        Label cost = new Label(c.cost < 0 ? "X" : String.valueOf(c.cost));
         cost.setTextFill(Color.WHITE);
         cost.setFont(Font.font(15));
         cost.setStyle("-fx-font-weight: bold;");
@@ -1269,7 +1313,9 @@ public class BattleView extends StackPane {
         type.setFont(Font.font(11));
 
         String valueText;
-        if (c.damage > 0 && c.block > 0) {
+        if (c.kind.type == Card.Type.STATUS) {
+            valueText = c.kind.desc; // 状态牌显示描述
+        } else if (c.damage > 0 && c.block > 0) {
             valueText = "伤害 " + c.damage + "  格挡 " + c.block;
         } else if (c.damage > 0 && c.hits > 1) {
             valueText = "伤害 " + c.damage + "×" + c.hits;
@@ -1290,7 +1336,9 @@ public class BattleView extends StackPane {
         Button btn = new Button();
         btn.setGraphic(card);
         btn.setStyle("-fx-background-color: transparent; -fx-padding: 0; -fx-cursor: hand;");
-        btn.setDisable(c.cost > energy || !playerTurn || battleOver);
+        // 费用为 -1 的状态牌无法打出，始终禁用
+        boolean unplayable = c.cost < 0;
+        btn.setDisable(unplayable || c.cost > energy || !playerTurn || battleOver);
         btn.setOnAction(e -> {
             play(c);
             refreshHandEnabled();
