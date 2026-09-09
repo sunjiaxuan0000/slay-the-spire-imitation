@@ -1,6 +1,7 @@
 package com.example.demo.view;
 
 import com.example.demo.card.Card;
+import com.example.demo.card.CardFaceView;
 import com.example.demo.card.CardView;
 
 import javafx.geometry.Pos;
@@ -88,7 +89,7 @@ public class PileOverlay extends StackPane {
             overlayCards.getChildren().add(empty);
         } else {
             for (Card c : sorted) {
-                overlayCards.getChildren().add(CardView.miniCard(c));
+                overlayCards.getChildren().add(CardFaceView.buildAt(c, 120)); // 分层贴图卡面
             }
         }
         setVisible(true);
