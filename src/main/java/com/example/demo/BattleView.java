@@ -11,13 +11,10 @@ import javafx.animation.Timeline;
 import javafx.animation.TranslateTransition;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tooltip;
-import javafx.scene.image.Image;
-import javafx.scene.image.ImageView;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.Background;
@@ -36,7 +33,6 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Ellipse;
 import javafx.scene.text.Font;
 import javafx.util.Duration;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -488,12 +484,6 @@ public class BattleView extends StackPane {
 
         eChips.setPrefWrapLength(286);
         eChips.setAlignment(Pos.CENTER_LEFT);
-
-        // 怪物立绘（保留在右列内，整列随后对齐地面）
-        enemyPortrait = portrait(enemy.name.substring(0, 1),
-                "radial-gradient(center 35% 30%, radius 100%, #6b7280, #1f2937);");
-        enemyPortrait.setPrefSize(210, 210);
-        enemyPortrait.setMaxSize(210, 210);
 
         box.getChildren().addAll(eName, intentRow, enemyPortrait, cluster, eChips);
         return box;
