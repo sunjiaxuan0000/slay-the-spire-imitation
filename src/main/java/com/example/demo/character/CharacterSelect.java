@@ -1,4 +1,4 @@
-package com.example.demo;
+package com.example.demo.character;
 
 import javafx.animation.FadeTransition;
 import javafx.animation.ScaleTransition;
@@ -82,7 +82,7 @@ public class CharacterSelect extends StackPane {
         mini.setPrefSize(110, 90);
         mini.setMaxSize(110, 90);
         mini.setStyle("-fx-background-color: rgba(15, 23, 42, 0.6); -fx-background-radius: 10;");
-        ImageView head = new ImageView(new Image(CharacterSelect.class.getResourceAsStream("ironclad_head.png")));
+        ImageView head = new ImageView(new Image(CharacterSelect.class.getResourceAsStream("/com/example/demo/ironclad_head.png")));
         head.setPreserveRatio(true);
         head.setFitWidth(100);
         head.setFitHeight(80);
@@ -157,7 +157,7 @@ public class CharacterSelect extends StackPane {
 
     /** 读取资源图并做成 cover（等比放大铺满、超出的裁掉）背景 */
     private static Background bgCover(String name) {
-        Image image = new Image(CharacterSelect.class.getResourceAsStream(name));
+        Image image = new Image(CharacterSelect.class.getResourceAsStream("/com/example/demo/" + name));
         BackgroundImage bi = new BackgroundImage(
                 image,
                 BackgroundRepeat.NO_REPEAT,

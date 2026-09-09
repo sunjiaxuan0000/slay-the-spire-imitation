@@ -1,4 +1,4 @@
-package com.example.demo;
+package com.example.demo.character;
 
 /**
  * 遗物：暂时只记录名字和描述。

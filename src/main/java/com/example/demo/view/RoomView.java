@@ -1,4 +1,7 @@
-package com.example.demo;
+package com.example.demo.view;
+
+import com.example.demo.character.Player;
+import com.example.demo.character.Relic;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
