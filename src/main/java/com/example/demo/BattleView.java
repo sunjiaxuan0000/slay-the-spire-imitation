@@ -11,6 +11,8 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tooltip;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
@@ -267,8 +269,30 @@ public class BattleView extends StackPane {
         intentRow.setAlignment(Pos.CENTER);
         intentRow.getChildren().addAll(eIntentIcon, eIntentNum);
 
-        StackPane portrait = portrait(enemy.name.substring(0, 1),
-                "radial-gradient(center 35% 30%, radius 100%, #6b7280, #1f2937);");
+        StackPane portrait;
+// 判断是否拥有立绘
+        if(enemy.hasPortrait)
+        {
+            // 加载怪物立绘图片
+            ImageView portraitImg = new ImageView();
+            String imgPath = "/assets/portrait/"+ enemy.name +".png";
+            Image img = new Image(getClass().getResourceAsStream("/com/example/demo/portrait/"+enemy.name+".png"));
+            portraitImg.setImage(img);
+
+            // 限制立绘尺寸，和原来圆圈大小保持一致
+            portraitImg.setFitWidth(210);
+            portraitImg.setFitHeight(210);
+            portraitImg.setPreserveRatio(true);
+
+            portrait = new StackPane(portraitImg);
+        }
+        else
+        {
+            // 没有立绘，使用原来的圆形首字符头像逻辑
+            portrait = portrait(enemy.name.substring(0, 1),
+                    "radial-gradient(center 35% 30%, radius 100%, #6b7280, #1f2937);");
+        }
+// 统一设置大小，两种分支共用
         portrait.setPrefSize(210, 210);
         portrait.setMaxSize(210, 210);
 
@@ -704,7 +728,6 @@ public class BattleView extends StackPane {
     }
 
     // ================= 怪物回合 =================
-
     private void endPlayerTurn() {
         if (!playerTurn || battleOver) return;
         playerTurn = false;
@@ -722,11 +745,14 @@ public class BattleView extends StackPane {
         if (battleOver || paused) return; // 暂停时先不动，等恢复
 
         enemy.block = 0; // 怪物格挡在自己回合开始清零
-
+        enemy.CheckPhaseTransition();
         Enemy.Step s = enemy.current();
         switch (s.intent) {
             case ATTACK -> {
                 int dmg = s.value + enemy.power;
+                if(enemy.isBoss&&enemy.isSecondPhase&&playerBlock>0){
+                    dmg=(int)Math.floor(dmg*1.40);
+                }
                 if (playerBlock > 0) {
                     int absorb = Math.min(playerBlock, dmg);
                     playerBlock -= absorb;
