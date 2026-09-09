@@ -18,7 +18,10 @@ public class Card {
         HAMMER("重锤", "造成 32 点伤害"),
         IMPREGNABLE("岿然不动", "获得 30 点格挡"),
         DOUBLE_STRIKE("双重打击", "造成 5 点伤害两次"),
-        KINDLE("燃烧", "获得 2 层力量");
+        KINDLE("燃烧", "获得 2 层力量"),
+        LIGHTNING("闪电霹雳", "对敌人造成 6 点伤害，给予 1 层易伤"),
+        RAGE("盛怒", "获得 2 点能量，消耗"),
+        OFFERING("祭品", "自己失去 6 点生命，获得 2 点能量，抽 3 张牌，消耗");
 
 
         public final String label;
@@ -79,4 +82,7 @@ public class Card {
     public static Card impregnable() { return new Card(Kind.IMPREGNABLE, 2, 0, 30, 0, true); }
     public static Card doubleStrike(){ return new Card(Kind.DOUBLE_STRIKE, 1, 5, 0, 0, 2); }
     public static Card kindle()      { return new Card(Kind.KINDLE, 1, 0, 0); }
+    public static Card lightning()   { return new Card(Kind.LIGHTNING, 1, 6, 0); }
+    public static Card rage()        { return new Card(Kind.RAGE, 1, 0, 0, 0, true); }
+    public static Card offering()    { return new Card(Kind.OFFERING, 0, 0, 0, 3, true); }
 }

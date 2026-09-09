@@ -621,8 +621,11 @@ public class BattleView extends StackPane {
         refreshAll();
     }
 
+    private static final int HAND_LIMIT = 10; // 手牌上限
+
     private void drawHand(int n) {
         for (int i = 0; i < n; i++) {
+            if (hand.size() >= HAND_LIMIT) break; // 手牌已满，停止抽牌，剩余抽牌数作废
             Card c = drawOne();
             if (c == null) break;
             hand.add(c);
@@ -657,12 +660,24 @@ public class BattleView extends StackPane {
         if (c.kind == Card.Kind.BASH) {
             enemyVulnerable += 2; // 痛击：给敌人 2 层易伤
         }
+        if (c.kind == Card.Kind.LIGHTNING) {
+            enemyVulnerable += 1; // 闪电霹雳：给敌人 1 层易伤
+        }
         if (c.kind == Card.Kind.KINDLE) {
             playerStrength += 2; // 燃烧：获得 2 层力量
         }
         if (c.kind == Card.Kind.BLEED) {
             energy += 2; // 放血：获得 2 点能量
             player.damage(3); // 自己失去 3 点生命
+            hud.refresh();
+            if (player.hp() == 0) { playerDied(); return; }
+        }
+        if (c.kind == Card.Kind.RAGE) {
+            energy += 2; // 盛怒：获得 2 点能量
+        }
+        if (c.kind == Card.Kind.OFFERING) {
+            player.damage(6); // 祭品：自己失去 6 点生命
+            energy += 2; // 获得 2 点能量
             hud.refresh();
             if (player.hp() == 0) { playerDied(); return; }
         }
@@ -824,12 +839,14 @@ public class BattleView extends StackPane {
                 Card.bash(), Card.sweep(),
                 Card.pommelStrike(), Card.shrug(), Card.bleed(),
                 Card.hammer(), Card.impregnable(),
-                Card.doubleStrike(), Card.kindle());
+                Card.doubleStrike(), Card.kindle(), Card.lightning(),
+                Card.rage(), Card.offering());
         List<Integer> weights = List.of(
                 4, 4,   // 痛击、铁斩波
                 3, 3, 3, // 剑柄打击、耸肩无视、放血
                 2, 2,   // 重锤、岿然不动
-                4, 2);  // 双重打击、燃烧
+                4, 2, 4, // 双重打击、燃烧、闪电霹雳
+                3, 2);  // 盛怒、祭品
 
         // 按权重随机抽 3 张不重复的牌
         List<Card> offers = new ArrayList<>();
@@ -1006,6 +1023,9 @@ public class BattleView extends StackPane {
             case IMPREGNABLE -> "#1e3a5f";
             case DOUBLE_STRIKE -> "#c2410c";
             case KINDLE -> "#9a3412";
+            case LIGHTNING -> "#ca8a04";
+            case RAGE -> "#7e22ce";
+            case OFFERING -> "#581c87";
         };
     }
 
