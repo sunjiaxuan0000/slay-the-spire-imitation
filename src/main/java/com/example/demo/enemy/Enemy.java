@@ -8,7 +8,7 @@ import java.util.List;
  * 每个怪物有自己的"意图轮盘"（attack/defend/buff/weaken 循环），
  * 每回合怪物的行动 = 当前轮到的意图，执行完转到下一个。
  *
- * 子类：{@link Slime}（普通怪）、{@link GuardPig}（精英怪）、{@link Duke_Porcodraco}（BOSS）。
+ * 子类：{@link Slime}（普通怪）、{@link GuardPig}（精英怪）、{@link DukePorcodraco}（BOSS）。
  */
 public abstract class Enemy {
 

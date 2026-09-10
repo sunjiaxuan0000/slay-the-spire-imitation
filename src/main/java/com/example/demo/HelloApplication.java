@@ -6,13 +6,11 @@ import com.example.demo.card.CardFaceView;
 import com.example.demo.character.CharacterSelect;
 import com.example.demo.character.Player;
 import com.example.demo.character.Relic;
-import com.example.demo.enemy.BigSlime;
-import com.example.demo.enemy.Duke_Porcodraco;
-import com.example.demo.enemy.Cultist_Pig;
+import com.example.demo.enemy.DukePorcodraco;
+import com.example.demo.character.RelicFun;
 import com.example.demo.enemy.Enemy;
+import com.example.demo.enemy.EnemyFactory;
 import com.example.demo.enemy.GuardPig;
-import com.example.demo.enemy.Slime;
-import com.example.demo.enemy.Veteran_Cultist_Pig;
 import com.example.demo.event.EventDef;
 import com.example.demo.event.EventView;
 import com.example.demo.operator.DevEntry;
@@ -314,6 +312,17 @@ public class HelloApplication extends Application {
                 if (type == GameMap.NodeType.BOSS) {
                     returnToMenu(stage); // 通关
                 } else {
+                    if (type == GameMap.NodeType.ELITE) {
+                        Relic relic = RelicFun.randomEliteRelic(player);
+                        if (relic != null) {
+                            hud.refresh();
+                            Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                            alert.setTitle("精英战利品");
+                            alert.setHeaderText(null);
+                            alert.setContentText("击败精英怪，获得遗物：「" + relic.name + "」\n" + relic.desc);
+                            alert.showAndWait();
+                        }
+                    }
                     showMapScene(stage, map, player);
                 }
             } else {
@@ -435,9 +444,9 @@ public class HelloApplication extends Application {
     private RunHud buildHud(Player player, GameMap map, Runnable onMapClick, boolean showMapIcon) {
         return new RunHud(
                 player,
-                r -> showWindow(page(relicPage(r))),   // 点遗物图�?
-                () -> showWindow(page(deckPage(player))), // 点牌组图�?
-                onMapClick,                           // 点地图图标（场景自定义）
+                r -> showWindow(page(r.buildPage(this::closeWindow))),
+                () -> showWindow(page(deckPage(player))),
+                onMapClick,
                 showMapIcon
         );
     }
@@ -538,35 +547,7 @@ public class HelloApplication extends Application {
     }
 
     /** 遗物页：大图�?+ 详细介绍 */
-    private VBox relicPage(Relic r) {
-        StackPane icon = new StackPane();
-        icon.setPrefSize(96, 96);
-        icon.setMaxSize(96, 96);
-        icon.setStyle("-fx-background-color: #7c3aed; -fx-background-radius: 18;");
-        Label g = new Label(r.name.substring(0, 1));
-        g.setTextFill(Color.WHITE);
-        g.setFont(Font.font(44));
-        g.setStyle("-fx-font-weight: bold;");
-        icon.getChildren().add(g);
 
-        Label name = new Label(r.name);
-        name.setTextFill(Color.WHITE);
-        name.setFont(Font.font(26));
-        name.setStyle("-fx-font-weight: bold;");
-
-        Label desc = new Label(r.desc);
-        desc.setTextFill(Color.rgb(203, 213, 225));
-        desc.setFont(Font.font(16));
-        desc.setWrapText(true);
-        desc.setMaxWidth(360);
-
-        VBox panel = new VBox(12);
-        panel.setAlignment(Pos.CENTER);
-        panel.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
-        panel.setStyle("-fx-background-color: #1e293b; -fx-background-radius: 16; -fx-padding: 22 30 16 30;");
-        panel.getChildren().addAll(icon, name, desc, closeButton());
-        return panel;
-    }
 
     private Button closeButton() {
         Button close = new Button("关闭");
@@ -614,14 +595,10 @@ public class HelloApplication extends Application {
 
     // ================= 地图节点事件 =================
 
-    /** 普通怪生成：前 5 层出史莱姆，第 6 层起史莱姆换成大史莱姆 */
+    /** 普通怪生成：具体规则见 {@link EnemyFactory#normal(int)} */
     private Enemy monsterForRow(GameMap map) {
         int row = map.current == null ? 0 : map.current.row;
-        boolean cultist = Math.random() < 0.4;
-        if (row >= 5) {
-            return cultist ? new Veteran_Cultist_Pig() : new BigSlime();
-        }
-        return cultist ? new Cultist_Pig() : new Slime();
+        return EnemyFactory.normal(row);
     }
 
     private void handleArrive(Stage stage, GameMap map, Player player, RunHud hud,
@@ -630,7 +607,7 @@ public class HelloApplication extends Application {
             case MONSTER -> startBattle(stage, map, player, GameMap.NodeType.MONSTER,
                     monsterForRow(map));
             case ELITE   -> startBattle(stage, map, player, GameMap.NodeType.ELITE, new GuardPig());
-            case BOSS    -> startBattle(stage, map, player, GameMap.NodeType.BOSS, new Duke_Porcodraco());
+            case BOSS    -> startBattle(stage, map, player, GameMap.NodeType.BOSS, new DukePorcodraco());
             case START   -> showRoomScene(stage, map, player);
             case EVENT   -> {
                 List<EventDef> events = EventDef.pool();
@@ -640,6 +617,7 @@ public class HelloApplication extends Application {
             case REST    -> {
                 int before = player.hp();
                 player.heal(player.maxHp);
+                player.restedAtCampfire = true; // 标记篝火休息，用于古茶具套装遗物
                 hud.refresh();
                 Alert alert = new Alert(Alert.AlertType.INFORMATION);
                 alert.setTitle("节点事件");
@@ -648,7 +626,7 @@ public class HelloApplication extends Application {
                 alert.showAndWait();
             }
             case TREASURE -> {
-                Relic gained = randomTreasure(player);
+                Relic gained =  RelicFun.randomEliteRelic(player);
                 hud.refresh();
                 Alert alert = new Alert(Alert.AlertType.INFORMATION);
                 alert.setTitle("宝箱");
@@ -733,7 +711,7 @@ public class HelloApplication extends Application {
                 yield "获得卡牌：「" + c.kind.label + "」加入牌组（#" + c.id + "）";
             }
             case ADD_RELIC -> {
-                Relic r = randomTreasure(player);
+                Relic r = RelicFun.randomEventRelic(player);
                 yield r == null
                         ? "遗物池里已经没有新遗物了……"
                         : "获得遗物：「" + r.name + "」\n" + r.desc;
@@ -744,7 +722,7 @@ public class HelloApplication extends Application {
 
     /** 起点房间：NPC + 三选一初始遗物 */
     private void showRoomScene(Stage stage, GameMap map, Player player) {
-        List<Relic> starters = Relic.pool(); // 起点三选一
+        List<Relic> starters = RelicFun.starterRelics();
 
         RoomView room = new RoomView(
                 player, starters, "猪神",
