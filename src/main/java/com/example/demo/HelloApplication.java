@@ -13,11 +13,15 @@ import com.example.demo.enemy.GuardPig;
 import com.example.demo.enemy.Slime;
 import com.example.demo.event.EventDef;
 import com.example.demo.event.EventView;
+import com.example.demo.operator.DevEntry;
 import com.example.demo.view.GameMap;
 import com.example.demo.view.MainMenu;
 import com.example.demo.view.MapView;
 import com.example.demo.view.RoomView;
 import com.example.demo.view.RunHud;
+import com.example.demo.view.SettingsView;
+import com.example.demo.sound.MusicFx;
+import com.example.demo.sound.SoundFx;
 
 import javafx.animation.Interpolator;
 import javafx.animation.KeyFrame;
@@ -73,16 +77,31 @@ public class HelloApplication extends Application {
     private BattleView activeBattle = null; // 进行中的战斗（供只读地图暂停/恢复�?
     private boolean battleMapOpen = false;  // 战斗里是否开着“只读地图�?
 
-    /** 按指定尺寸建场景 */
+    /** 按指定尺寸建场景（并自动挂上“点按钮出声”） */
     private Scene sizedAt(double w, double h, Parent root) {
-        return new Scene(root, (w > 0) ? w : W, (h > 0) ? h : H);
+        return decorate(new Scene(root, (w > 0) ? w : W, (h > 0) ? h : H));
     }
 
-    /** 按“窗口当前大小”建场景（游戏内场景用，保持用户当前窗口尺寸�?*/
+    /** 按“窗口当前大小”建场景（游戏内场景用，保持用户当前窗口尺寸） */
     private Scene sizedScene(Stage stage, Parent root) {
         double w = (stage.isShowing() && stage.getWidth() > 0) ? stage.getWidth() : W;
         double h = (stage.isShowing() && stage.getHeight() > 0) ? stage.getHeight() : H;
-        return new Scene(root, w, h);
+        return decorate(new Scene(root, w, h));
+    }
+
+    /** 给场景统一挂“点击各类按钮 → click.wav” */
+    private Scene decorate(Scene scene) {
+        scene.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, e -> {
+            javafx.scene.Node n = (javafx.scene.Node) e.getTarget();
+            while (n != null) {
+                if (n instanceof Button) {
+                    SoundFx.play("click");
+                    break;
+                }
+                n = n.getParent();
+            }
+        });
+        return scene;
     }
 
     @Override
@@ -108,8 +127,10 @@ public class HelloApplication extends Application {
 
     /** 主菜单场景：始终按“离开菜单时记录的尺寸”构�?*/
     private Scene buildMenuScene(Stage stage) {
+        MusicFx.playLoop("bgm_menu"); // 主菜单 BGM（没放 bgm_menu.wav 就静音）
         MainMenu menu = new MainMenu(
                 () -> startCharacterSelect(stage),
+                () -> showSettingsScene(stage),
                 () -> stage.close()
         );
         Scene scene = sizedAt(menuW, menuH, menu);
@@ -120,11 +141,22 @@ public class HelloApplication extends Application {
                 case DOWN  -> menu.nudge(0, step);
                 case LEFT  -> menu.nudge(-step, 0);
                 case RIGHT -> menu.nudge(step, 0);
+                case TAB   -> menu.selectNext();  // 切换方向键调节哪个按钮
                 case F3    -> menu.toggleDebug();
                 default    -> { }
             }
         });
         return scene;
+    }
+
+    /** 设置页面：音乐/音效音量 + 开发者模式开关；点“返回主菜单”或按 Esc 回去 */
+    private void showSettingsScene(Stage stage) {
+        SettingsView settings = new SettingsView(() -> returnToMenu(stage));
+        Scene scene = sizedAt(menuW, menuH, settings);
+        scene.setOnKeyPressed(e -> {
+            if (e.getCode() == KeyCode.ESCAPE) returnToMenu(stage);
+        });
+        stage.setScene(scene);
     }
 
     /** 角色选择场景（离开主菜单时记录当前窗口尺寸，返回时恢复�?*/
@@ -164,8 +196,13 @@ public class HelloApplication extends Application {
 
     /** 地图场景（战斗后回同一张地图也用这个） */
     private void showMapScene(Stage stage, GameMap map, Player player) {
-        // 地图页本身不显示右上角“地图”按�?
+        SoundFx.play("map"); // 进入地图页音效
+        MusicFx.playLoop("bgm_map"); // 地图 BGM（没放 bgm_map.wav 就保持安静）
+        // 地图页本身不显示右上角“地图”按钮
         RunHud hud = buildHud(player, map, () -> showWindow(page(mapPage(map))), false);
+        // 开发者模式：HUD 上多挂一个「开」按钮（地图场景没有战斗 → battle 传 null）
+        DevEntry.attachDevButton(hud, player, null, hud::refresh,
+                node -> showWindow(page(node)), this::closeWindow);
 
         ScrollPane scroll = new ScrollPane();
         scroll.setFitToWidth(true);
@@ -177,6 +214,7 @@ public class HelloApplication extends Application {
 
         MapView view = new MapView(map,
                 type -> handleArrive(stage, map, player, hud, type), scroll, true);
+        DevEntry.enableDevMap(view); // 开发者模式：任意节点都能点
         scroll.setContent(view);
 
         // 让地图两侧留黑边：地图限宽居中，两侧露出黑底（HUD 仍占满宽度）
@@ -263,6 +301,7 @@ public class HelloApplication extends Application {
     /** 战斗场景：顶�?HUD + 战斗主体，外面再包整页窗口层 */
     private void startBattle(Stage stage, GameMap map, Player player,
                              GameMap.NodeType type, Enemy enemy) {
+        MusicFx.playLoop("bgm_battle"); // 战斗 BGM
         RunHud hud = buildHud(player, map, () -> openBattleMapReadOnly(stage, map), true);
 
         BattleView battle = new BattleView(player, hud, enemy,
@@ -280,6 +319,10 @@ public class HelloApplication extends Application {
             }
         }, type == GameMap.NodeType.BOSS); // true=用 boss 战斗背景，否则 default 背景
         activeBattle = battle;
+
+        // 开发者模式：战斗里也能改牌组/手牌/遗物（手牌改完立刻重画）
+        DevEntry.attachDevButton(hud, player, battle, hud::refresh,
+                node -> showWindow(page(node)), this::closeWindow);
 
         BorderPane content = new BorderPane();
         content.setTop(hud);
@@ -306,6 +349,7 @@ public class HelloApplication extends Application {
         if (b == null) return;
         b.setPaused(true);
         battleMapOpen = true;
+        SoundFx.play("map"); // 进入地图页音效
 
         ScrollPane scroll = new ScrollPane();
         scroll.setFitToWidth(true);
@@ -607,11 +651,7 @@ public class HelloApplication extends Application {
 
     /** 宝箱：从遗物池随机给一个还没拿过的遗物 */
     private Relic randomTreasure(Player player) {
-        List<Relic> pool = new ArrayList<>(List.of(
-                new Relic("青铜怀表", "战斗开始时获得 2 点格挡"),
-                new Relic("请假条", "每回合多抽 1 张牌"),
-                new Relic("保温杯", "每场战斗开始时恢复 10 点生命")
-        ));
+        List<Relic> pool = Relic.pool(); // 全部遗物（起点三选一 / 开发者面板用同一份）
         pool.removeIf(r -> player.relics.stream().anyMatch(h -> h.name.equals(r.name)));
         if (pool.isEmpty()) return null;
         int idx = new java.util.Random().nextInt(pool.size());
@@ -692,11 +732,7 @@ public class HelloApplication extends Application {
 
     /** 起点房间：NPC + 三选一初始遗物 */
     private void showRoomScene(Stage stage, GameMap map, Player player) {
-        List<Relic> starters = List.of(
-                new Relic("青铜怀表", "战斗开始时获得 2 点格挡"),
-                new Relic("请假条", "每回合多抽 1 张牌"),
-                new Relic("保温杯", "每场战斗开始时恢复 10 点生命")
-        );
+        List<Relic> starters = Relic.pool(); // 起点三选一
 
         RoomView room = new RoomView(
                 player, starters, "猪神",

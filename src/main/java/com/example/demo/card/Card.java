@@ -130,4 +130,37 @@ public class Card {
     public static Card flex()        { return new Card(Kind.FLEX, 0, 0, 0); } // 临时力量效果在 play() 中处理
     public static Card wound()       { return new Card(Kind.WOUND, -1, 0, 0); } // -1 表示无法打出
     public static Card slime()       { return new Card(Kind.SLIME, 1, 0, 0, 0, true); } // 可打出，消耗
+
+    /**
+     * 按种类造一张标准数值的牌（开发者模式面板的“加牌”列表用）。
+     * 新增卡牌种类时，这里补一个 case 即可。
+     */
+    public static Card of(Kind kind) {
+        return switch (kind) {
+            case STRIKE -> strike();
+            case DEFEND -> defend();
+            case BASH -> bash();
+            case SWEEP -> sweep();
+            case POMMEL -> pommelStrike();
+            case SHRUG -> shrug();
+            case BLEED -> bleed();
+            case HAMMER -> hammer();
+            case IMPREGNABLE -> impregnable();
+            case DOUBLE_STRIKE -> doubleStrike();
+            case KINDLE -> kindle();
+            case LIGHTNING -> lightning();
+            case RAGE -> rage();
+            case OFFERING -> offering();
+            case FORTIFY -> fortify();
+            case FOCUS -> focus();
+            case SHOCKWAVE -> shockwave();
+            case HEAVY_BLADE -> heavyBlade();
+            case WILD_STRIKE -> wildStrike();
+            case ADAMANT_ARM -> adamantArm();
+            case BRUTALITY -> brutality();
+            case FLEX -> flex();
+            case WOUND -> wound();
+            case SLIME -> slime();
+        };
+    }
 }

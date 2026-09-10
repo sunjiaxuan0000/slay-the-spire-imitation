@@ -8,6 +8,7 @@ import com.example.demo.card.CardView;
 import com.example.demo.character.Player;
 import com.example.demo.character.Relic;
 import com.example.demo.enemy.Enemy;
+import com.example.demo.sound.SoundFx;
 import com.example.demo.view.BattleUiFactory;
 import com.example.demo.view.DeathOverlay;
 import com.example.demo.view.PileOverlay;
@@ -246,6 +247,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         }
         initAnimators();
         gameTimer.start();
+        SoundFx.playAny(enemyOink()); // 怪物登场音效（BOSS 用鱼龙叫，普通怪用普通猪叫）
         startPlayerTurn();
     }
 
@@ -632,11 +634,13 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
 
     @Override
     public void addBlock(int amount) {
+        if (amount > 0) SoundFx.play("GainDefense"); // 玩家获得格挡音效
         playerBlock += amount;
     }
 
     @Override
     public void damageEnemy(int dmg) {
+        if (dmg > 0) SoundFx.play("ironclad_attack"); // 玩家攻击牌命中怪物音效
         enemyAnim.triggerHitKnock();
         if (enemy.block > 0) {
             int absorb = Math.min(enemy.block, dmg);
@@ -650,6 +654,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
 
     @Override
     public boolean loseHp(int hp, boolean withHurtAnim) {
+        if (hp > 0) SoundFx.play("GetHurt"); // 玩家受伤音效（含自伤牌）
         player.damage(hp);
         if (withHurtAnim) playerAnim.triggerHurt();
         hud.refresh();
@@ -682,6 +687,31 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         if (!battleOver) refreshAll();
     }
 
+    // ================= 供开发者面板（com.example.demo.operator）使用的通用接口 =================
+    // 说明：手牌/抽牌堆/弃牌堆都是 BattleView 的私有状态，operator 包碰不到，
+    // 所以这里只暴露三个「不带游戏规则」的通用操作，开发者语义留在 operator 包里。
+
+    /** 手牌（活引用，可直接增删，改完调用 {@link #refreshUi()} 重画） */
+    public List<Card> handCards() {
+        return hand;
+    }
+
+    /** 把一张牌从本场战斗的手牌 / 抽牌堆 / 弃牌堆里删掉（不动玩家的牌组） */
+    public void removeCardFromBattle(Card c) {
+        if (c == null) return;
+        hand.remove(c);
+        draw.remove(c);
+        discard.remove(c);
+        refreshUi();
+    }
+
+    /** 界面重画（改了手牌/牌组/遗物之后调用） */
+    public void refreshUi() {
+        if (battleOver) return;
+        refreshAll();
+        hud.refresh();
+    }
+
     /** 反伤：怪物处于反伤状态时，把玩家造成伤害的一定比例反弹给玩家（先扣格挡再扣血）。 */
     private void applyReflect(int dmg) {
         if (reflectTurns <= 0) return;
@@ -693,6 +723,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             reflectDmg -= absorb;
         }
         player.hp = Math.max(0, player.hp - reflectDmg);
+        SoundFx.play("GetHurt"); // 反伤受击音效
         hud.refresh();
         if (player.hp == 0) playerDied();
     }
@@ -700,6 +731,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
 
     private void endPlayerTurn() {
         if (!playerTurn || battleOver) return;
+        SoundFx.play("EndTurn"); // 结束玩家回合音效
         playerTurn = false;
         if (reflectTurns > 0) reflectTurns--;
 
@@ -726,14 +758,45 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         boolean wasSecondPhase = enemy.isSecondPhase;
         enemy.checkPhaseTransition();
         if (enemy.isSecondPhase && !wasSecondPhase) {
+            SoundFx.play("zhou"); // 二阶段变身音效
             playPhaseTransition(this::performEnemyAction);
         } else {
             performEnemyAction();
         }
     }
 
+    /**
+     * 怪物行为音效（含 BOSS 专属版本）。
+     *
+     * 命名约定（都放在 resources/com/example/demo/sound/ 下）：
+     *   normalOink / normalDie    —— 普通怪（卫兵猪、史莱姆……）
+     *   fishronOink / fishronDie  —— BOSS 鱼龙
+     *   zhou                      —— 强化/减益/反伤/吐黏液/仪式 等施法类通用音效
+     *
+     * BOSS 优先用自己的音效，文件缺失时自动退回普通怪音效（见 {@link SoundFx#playAny}），
+     * 所以只做一个 BOSS 的叫声也不会出现「静音」的怪。
+     */
+    private List<String> enemySoundOf(Enemy.Intent intent) {
+        return switch (intent) {
+            case ATTACK -> enemyOink();              // 出手叫声：BOSS 鱼龙叫 / 普通猪叫
+            case DEFEND -> List.of("GainDefense");   // 复用已有的加盾音效
+            case BUFF, WEAKEN, REFLECT, SPIT, RITUAL -> List.of("zhou");
+        };
+    }
+
+    /** 怪物出手叫声：BOSS 用 fishronOink，没有就退回 normalOink */
+    private List<String> enemyOink() {
+        return enemy.isBoss ? List.of("fishronOink", "normalOink") : List.of("normalOink");
+    }
+
+    /** 怪物死亡音效：BOSS 用 fishronDie，没有就退回 normalDie */
+    private List<String> enemyDie() {
+        return enemy.isBoss ? List.of("fishronDie", "normalDie") : List.of("normalDie");
+    }
+
     private void performEnemyAction() {
         Enemy.Step s = enemy.current();
+        SoundFx.playAny(enemySoundOf(s.intent)); // 怪物行为音效，映射见 enemySoundOf
         switch (s.intent) {
             case ATTACK -> {
                 enemyAnim.triggerAttackDash();
@@ -749,10 +812,11 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
                 }
                 player.damage(dmg);
                 playerAnim.triggerHurt();
+                if (dmg > 0) SoundFx.play("GetHurt"); // 玩家被怪物攻击的受伤音效
                 hud.refresh();
                 if (player.hp() == 0) { playerDied(); return; }
             }
-            case DEFEND -> enemy.block += s.value;
+            case DEFEND -> enemy.block += s.value; // 音效由 enemySoundOf(DEFEND) 播放
             case BUFF -> enemy.power += s.value;
             case WEAKEN -> weakTurns = Math.max(weakTurns, s.value);
             case REFLECT -> reflectTurns = Math.max(reflectTurns,s.value);
@@ -821,12 +885,33 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     }
 
     private void victory() {
-        gameTimer.stop();
         if (battleOver) return;
         battleOver = true;
-        playerAnim.stop();
+        playerAnim.stop();   // 冻结双方待机呼吸，交给倒地动画接管
+        enemyAnim.stop();
         clearStatusCards();
-        showReward();
+        refreshAll();        // 先把怪物血条刷成 0、手牌置灰
+        refreshHandEnabled();
+
+        // ---- 敌人倒地演出：向后倒下 + 下沉，然后才弹胜利奖励 ----
+        SoundFx.playAny(enemyDie()); // 怪物倒地/死亡音效（BOSS 用 fishronDie）
+        RotateTransition rotate = new RotateTransition(Duration.millis(750), enemyPortrait);
+        rotate.setToAngle(82);           // 顺时针倒下（朝远离玩家的方向）
+        rotate.setInterpolator(Interpolator.EASE_IN);
+
+        TranslateTransition fall = new TranslateTransition(Duration.millis(750), enemyPortrait);
+        fall.setToX(18);
+        fall.setToY(70);
+        fall.setInterpolator(Interpolator.EASE_IN);
+
+        ParallelTransition fallDown = new ParallelTransition(rotate, fall);
+        SequentialTransition seq = new SequentialTransition(
+                fallDown, new PauseTransition(Duration.millis(180)));
+        seq.setOnFinished(e -> {
+            gameTimer.stop();
+            showReward();
+        });
+        seq.play();
     }
 
     private void playerDied() {
@@ -838,6 +923,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         clearStatusCards();
 
         deadDim.setVisible(true);
+        SoundFx.play("normalDie");
 
         RotateTransition rotate = new RotateTransition(Duration.millis(900), playerPortrait);
         rotate.setToAngle(85);

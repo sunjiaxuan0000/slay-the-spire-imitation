@@ -149,6 +149,7 @@ public class MapView extends Pane {
     private final Consumer<GameMap.NodeType> onArrive;
     private final ScrollPane scroll;
     private final boolean interactive;
+    private boolean devMode = false; // 开发者模式：任意节点可点（由设置页开关决定）
     private final List<NodeView> views = new ArrayList<>();
     private final List<Edge> edges = new ArrayList<>();
     private final Label header;
@@ -267,8 +268,15 @@ public class MapView extends Pane {
     // ================= 状态刷新 =================
 
     private boolean reachable(GameMap.MapNode n) {
+        if (devMode) return true; // 开发者模式：任意节点都能进
         if (map.current == null) return n.row == 0;
         return map.current.next.contains(n);
+    }
+
+    /** 开发者模式：打开后可以直接点任意层级的节点进入（设置页里的开关决定） */
+    public void setDevMode(boolean on) {
+        this.devMode = on;
+        refresh();
     }
 
     private void refresh() {
@@ -301,6 +309,13 @@ public class MapView extends Pane {
                         + map.current.type.label + "）");
             }
             hint.setText("滚轮滚动浏览地图 · Esc 返回");
+        } else if (devMode) {
+            // 开发者模式：任何节点都能点，提示文字也说清楚
+            header.setText(map.current == null
+                    ? "地图 · 开发者模式（点任意节点出发）"
+                    : "地图 · 第 " + (map.current.row + 1) + " / " + GameMap.ROWS + " 层（"
+                            + map.current.type.label + "）");
+            hint.setText("开发者模式：任意节点都可点击进入 · Esc 返回主菜单");
         } else if (map.current == null) {
             header.setText("地图 · 点击起点出发");
             hint.setText("滚轮上下浏览地图 · 白色光圈可走 · Esc 返回");
