@@ -103,6 +103,9 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     private final Label eName = new Label();
     private final javafx.scene.layout.StackPane eIntentIcon = new javafx.scene.layout.StackPane();
     private final Label eIntentNum = new Label();
+    private Tooltip eIntentTip; // 意图悬停描述（只建一次）
+    private String currentIntentTip = ""; // 意图描述文字（供屏幕描述条用）
+    private final Label hoverBar = new Label(); // 悬停描述条（屏幕上方显示）
     private final Label eHpText = new Label();
     private final javafx.scene.layout.Region eHpFill = new javafx.scene.layout.Region();
     private final javafx.scene.layout.StackPane eHpWrap = new javafx.scene.layout.StackPane();
@@ -207,6 +210,21 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         StackPane.setMargin(endTurnBtn, new Insets(0, 116, 132, 0));
         getChildren().add(endTurnBtn);
 
+        // 悬停描述条：鼠标停在意图/buff/debuff 图标上时，在这里显示说明文字
+        hoverBar.setTextFill(Color.WHITE);
+        hoverBar.setFont(Font.font(14));
+        hoverBar.setMouseTransparent(true);
+        hoverBar.setStyle("-fx-background-color: rgba(15,23,42,0.88); "
+                + "-fx-background-radius: 8; -fx-padding: 4 12 4 12;");
+        hoverBar.setVisible(false);
+        StackPane.setAlignment(hoverBar, Pos.TOP_CENTER);
+        StackPane.setMargin(hoverBar, new Insets(6, 0, 0, 0));
+        getChildren().add(hoverBar);
+        BattleUiFactory.hoverConsumer = msg -> {
+            hoverBar.setText(msg == null ? "" : msg);
+            hoverBar.setVisible(msg != null && !msg.isEmpty());
+        };
+
         // 弹层
         getChildren().addAll(pileOverlay, rewardOverlay, deathOverlay);
 
@@ -266,6 +284,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         pShieldNum.setStyle("-fx-font-weight: bold;");
         BattleUiFactory.shield(pShield, pShieldNum);
         Tooltip.install(pShield, new Tooltip("格挡：吸收等量伤害，下回合开始清除"));
+        BattleUiFactory.attachHover(pShield, "格挡：吸收等量伤害，下回合开始清除");
 
         HBox cluster = new HBox(6);
         cluster.setAlignment(Pos.CENTER_LEFT);
@@ -289,6 +308,21 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
 
         eIntentIcon.setPrefSize(46, 46);
         eIntentIcon.setMaxSize(46, 46);
+        eIntentIcon.setPickOnBounds(true);  // 整块都能触发悬停
+        // 意图提示只建一次，之后只改文字（避免刷新时悬停被打断）
+        eIntentTip = new Tooltip();
+        Tooltip.install(eIntentIcon, eIntentTip);
+        // 悬停时同时把描述写到屏幕描述条上
+        eIntentIcon.setOnMouseEntered(e -> {
+            if (BattleUiFactory.hoverConsumer != null) {
+                BattleUiFactory.hoverConsumer.accept(currentIntentTip);
+            }
+        });
+        eIntentIcon.setOnMouseExited(e -> {
+            if (BattleUiFactory.hoverConsumer != null) {
+                BattleUiFactory.hoverConsumer.accept("");
+            }
+        });
         eIntentNum.setTextFill(Color.WHITE);
         eIntentNum.setFont(Font.font(22));
         eIntentNum.setStyle("-fx-font-weight: bold;");
@@ -320,6 +354,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         eShieldNum.setStyle("-fx-font-weight: bold;");
         BattleUiFactory.shield(eShield, eShieldNum);
         Tooltip.install(eShield, new Tooltip("格挡：吸收等量伤害"));
+        BattleUiFactory.attachHover(eShield, "格挡：吸收等量伤害");
 
         HBox cluster = new HBox(6);
         cluster.setAlignment(Pos.CENTER_LEFT);
@@ -384,17 +419,17 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             case DEFEND -> {
                 glyph = "防";
                 color = "#0284c7";
-                tip = "意图·防御：获得 " + s.value + " 格挡";
+                tip = "意图·防御：在下回合获得格挡";
             }
             case BUFF -> {
                 glyph = "强";
                 color = "#d97706";
-                tip = "意图·强化自身：力量 +" + s.value;
+                tip = "意图·强化：这个敌人将要为自己施加增益效果";
             }
             case REFLECT ->{
                 glyph="反";
                 color ="#9400D3";
-                tip="意图·反弹伤害："+s.value+" 回合，当你攻击时，受到造成伤害30%的伤害";
+                tip="意图·反弹伤害："+s.value+" 回合内，当你攻击时，受到造成伤害30%的伤害";
             }
             case SPIT -> {
                 glyph = "黏";
@@ -404,7 +439,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             default -> {
                 glyph = "弱";
                 color = "#7c3aed";
-                tip = "意图·虚弱我方：" + s.value + " 回合，你造成的伤害 ×0.75";
+                tip = "意图·弱化：这个敌人将要对你施加减益效果";
             }
         }
 
@@ -418,7 +453,8 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
 
         eIntentNum.setText(String.valueOf(number));
         eIntentNum.setVisible(s.intent == Enemy.Intent.ATTACK);
-        Tooltip.install(eIntentIcon, new Tooltip(tip));
+        if (eIntentTip != null) eIntentTip.setText(tip); // 只更新文字，保证悬停稳定
+        currentIntentTip = tip;                          // 供屏幕描述条使用
     }
 
     // ================= 玩家回合 =================
@@ -806,16 +842,16 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         eChips.getChildren().clear();
         if (enemy.power > 0) {
             eChips.getChildren().add(BattleUiFactory.statusChip("力", enemy.power, "#f59e0b",
-                    "力量 +" + enemy.power + "：攻击伤害增加"));
+                    "力量：每段攻击伤害增加"+enemy.power+"点"));
         }
         if (enemyVulnerable > 0) {
             eChips.getChildren().add(BattleUiFactory.statusChip("伤", enemyVulnerable, "#dc2626",
-                    "易伤 " + enemyVulnerable + " 回合：承受伤害 ×1.5"));
+                    "易伤： " + enemyVulnerable + " 回合内：承受伤害 ×1.5"));
         }
         if (reflectTurns > 0) {
             int pct = (int)(enemy.getReflectRate() * 100);
             eChips.getChildren().add(BattleUiFactory.statusChip("反", reflectTurns, "#9400D3",
-                    "反伤 " + reflectTurns + " 回合：你攻击时受到造成伤害 " + pct + "% 的伤害"));
+                    "反伤：" + reflectTurns + " 回合内：你攻击时受到造成伤害 " + pct + "% 的伤害"));
         }
         refreshIntent();
 

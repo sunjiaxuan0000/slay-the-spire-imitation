@@ -377,7 +377,7 @@ public class HelloApplication extends Application {
         ImageView iv = new ImageView(new Image(in));
         iv.setPreserveRatio(true);
         iv.setMouseTransparent(true);
-        double w = Math.max(40, MAP_SIDE_MARGIN - 12); // 比黑边略窄一点
+        double w = 300;
         iv.setFitWidth(w);
         iv.setFitHeight(w);
         return iv;
