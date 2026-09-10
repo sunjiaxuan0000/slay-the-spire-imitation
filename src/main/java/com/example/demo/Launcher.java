@@ -1,8 +1,8 @@
-<<<<<<<< HEAD:src/main/java/com/example/thegame/day1/Launcher.java
-package com.example.thegame.day1;
-========
+//<<<<<<<< HEAD:src/main/java/com/example/thegame/day1/Launcher.java
+//package com.example.thegame.day1;
+//========
 package com.example.demo;
->>>>>>>> origin/sjx:src/main/java/com/example/demo/Launcher.java
+//>>>>>>>> origin/sjx:src/main/java/com/example/demo/Launcher.java
 
 import javafx.application.Application;
 

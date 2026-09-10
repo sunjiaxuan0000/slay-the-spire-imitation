@@ -1,6 +1,10 @@
 package com.example.demo;
 
-import javafx.animation.*;
+import com.example.demo.card.Card;
+import com.example.demo.character.Player;
+import com.example.demo.character.Relic;
+import com.example.demo.enemy.Enemy;
+import com.example.demo.view.RunHud;
 import javafx.animation.AnimationTimer;
 import javafx.animation.KeyFrame;
 import javafx.animation.KeyValue;
@@ -11,6 +15,7 @@ import javafx.animation.Timeline;
 import javafx.animation.TranslateTransition;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
@@ -33,6 +38,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Ellipse;
 import javafx.scene.text.Font;
 import javafx.util.Duration;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -51,27 +57,7 @@ import java.util.function.Consumer;
  *       → 怪物按意图行动 → 抽牌堆空了自动洗弃牌堆。能量每回合 3 点。
  */
 public class BattleView extends StackPane {
-    private StackPane enemyPortrait;
-    private long lastFrameTime = 0;
-    private final AnimationTimer gameTimer = new AnimationTimer() {
-        @Override
-        public void handle(long now) {
-            if(lastFrameTime == 0){
-                lastFrameTime = now;
-                return;
-            }
-            //转成秒
-            double deltaSec = (now - lastFrameTime) / 1_000_000_000.0;
-            lastFrameTime = now;
 
-            if(!battleOver && !paused){
-                //更新怪物动画状态机
-                enemy.updateAnim(deltaSec);
-                //把Enemy算好的offsetX应用到UI立绘上
-                enemyPortrait.setTranslateX(enemy.getOffsetX());
-            }
-        }
-    };
     private final Player player;
     private final RunHud hud;
     private final Enemy enemy;
@@ -110,7 +96,6 @@ public class BattleView extends StackPane {
     private final Label pShieldNum = new Label();
     private final FlowPane pChips = new FlowPane(4, 4); // buff/debuff 图标行
     // 怪物(右)
-
     private final Label eName = new Label();
     private final StackPane eIntentIcon = new StackPane(); // 意图图标
     private final Label eIntentNum = new Label();          // 攻击意图的数字
@@ -143,6 +128,7 @@ public class BattleView extends StackPane {
     private boolean rewardChosen = false;
     // 死亡演出
     private StackPane playerPortrait;                 // 角色立绘（仍在左列内）
+    private StackPane enemyPortrait;                  // 怪物立绘（仍在右列内）
     private VBox leftCol;                            // 左侧整列（随角色一起平移对齐地面）
     private VBox rightCol;                           // 右侧整列
     private final Ellipse playerShadow = new Ellipse(); // 脚底阴影
@@ -259,7 +245,6 @@ public class BattleView extends StackPane {
             player.heal(10);
             hud.refresh();
         }
-        gameTimer.start();
         startIdleBreath(); // 待机呼吸动画
         startPlayerTurn();
     }
@@ -448,33 +433,6 @@ public class BattleView extends StackPane {
         intentRow.setAlignment(Pos.CENTER);
         intentRow.getChildren().addAll(eIntentIcon, eIntentNum);
 
-        StackPane portrait;
-// 判断是否拥有立绘
-        if(enemy.hasPortrait)
-        {
-            // 加载怪物立绘图片
-            ImageView portraitImg = new ImageView();
-            String imgPath = "/assets/portrait/"+ enemy.name +".png";
-            Image img = new Image(getClass().getResourceAsStream("/com/example/demo/portrait/"+enemy.name+".png"));
-            portraitImg.setImage(img);
-
-            // 限制立绘尺寸，和原来圆圈大小保持一致
-            portraitImg.setFitWidth(210);
-            portraitImg.setFitHeight(210);
-            portraitImg.setPreserveRatio(true);
-
-            portrait = new StackPane(portraitImg);
-        }
-        else
-        {
-            // 没有立绘，使用原来的圆形首字符头像逻辑
-            portrait = portrait(enemy.name.substring(0, 1),
-                    "radial-gradient(center 35% 30%, radius 100%, #6b7280, #1f2937);");
-        }
-// 统一设置大小，两种分支共用
-        portrait.setPrefSize(210, 210);
-        portrait.setMaxSize(210, 210);
-        enemyPortrait=portrait;
         hpWrap(eHpWrap, eHpFill, eHpText, 240, "#dc2626");
         eShieldNum.setTextFill(Color.WHITE);
         eShieldNum.setFont(Font.font(13));
@@ -488,6 +446,12 @@ public class BattleView extends StackPane {
 
         eChips.setPrefWrapLength(286);
         eChips.setAlignment(Pos.CENTER_LEFT);
+
+        // 怪物立绘（保留在右列内，整列随后对齐地面）
+        enemyPortrait = portrait(enemy.name.substring(0, 1),
+                "radial-gradient(center 35% 30%, radius 100%, #6b7280, #1f2937);");
+        enemyPortrait.setPrefSize(210, 210);
+        enemyPortrait.setMaxSize(210, 210);
 
         box.getChildren().addAll(eName, intentRow, enemyPortrait, cluster, eChips);
         return box;
@@ -878,6 +842,7 @@ public class BattleView extends StackPane {
                 damageEnemy(dmg);
                 if (battleOver) break;
             }
+            if (!battleOver) animateAttack(); // 攻击动画：突进挥一下
         }
         if (c.kind == Card.Kind.BASH) {
             enemyVulnerable += 2; // 痛击：给敌人 2 层易伤
@@ -891,6 +856,7 @@ public class BattleView extends StackPane {
         if (c.kind == Card.Kind.BLEED) {
             energy += 2; // 放血：获得 2 点能量
             player.damage(3); // 自己失去 3 点生命
+            animateHurt(); // 自伤受击抖动
             hud.refresh();
             if (player.hp() == 0) { playerDied(); return; }
         }
@@ -941,7 +907,6 @@ public class BattleView extends StackPane {
     }
 
     private void damageEnemy(int dmg) {
-        enemy.triggerHitKnock();
         if (enemy.block > 0) {
             int absorb = Math.min(enemy.block, dmg);
             enemy.block -= absorb;
@@ -952,6 +917,7 @@ public class BattleView extends StackPane {
     }
 
     // ================= 怪物回合 =================
+
     private void endPlayerTurn() {
         if (!playerTurn || battleOver) return;
         playerTurn = false;
@@ -975,15 +941,11 @@ public class BattleView extends StackPane {
         if (battleOver || paused) return; // 暂停时先不动，等恢复
 
         enemy.block = 0; // 怪物格挡在自己回合开始清零
-        enemy.CheckPhaseTransition();
+
         Enemy.Step s = enemy.current();
         switch (s.intent) {
             case ATTACK -> {
-                enemy.triggerAttackDash();
                 int dmg = s.value + enemy.power;
-                if(enemy.isBoss&&enemy.isSecondPhase&&playerBlock>0){
-                    dmg=(int)Math.floor(dmg*1.40);
-                }
                 if (enemyWeakTurns > 0) dmg = dmg * 3 / 4; // 敌人虚弱：伤害 ×0.75
                 if (playerBlock > 0) {
                     int absorb = Math.min(playerBlock, dmg);
@@ -1028,7 +990,6 @@ public class BattleView extends StackPane {
 
     /** 怪物被击败 → 屏幕中央三选一奖励牌 */
     private void victory() {
-        gameTimer.stop();
         if (battleOver) return;
         battleOver = true;
         stopIdleBreath(true); // 停待机，避免后台空转
@@ -1037,7 +998,6 @@ public class BattleView extends StackPane {
 
     /** 玩家阵亡：背景变暗、角色倒地，然后弹出死亡页 */
     private void playerDied() {
-        gameTimer.stop();
         if (diedShown) return;
         diedShown = true;
         battleOver = true;
@@ -1390,5 +1350,4 @@ public class BattleView extends StackPane {
         });
         return btn;
     }
-
 }
