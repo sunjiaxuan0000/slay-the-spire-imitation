@@ -6,14 +6,11 @@ import com.example.demo.card.CardFaceView;
 import com.example.demo.character.CharacterSelect;
 import com.example.demo.character.Player;
 import com.example.demo.character.Relic;
-import com.example.demo.enemy.BigSlime;
-import com.example.demo.enemy.Duke_Porcodraco;
-import com.example.demo.enemy.Cultist_Pig;
+import com.example.demo.enemy.DukePorcodraco;
 import com.example.demo.character.RelicFun;
 import com.example.demo.enemy.Enemy;
+import com.example.demo.enemy.EnemyFactory;
 import com.example.demo.enemy.GuardPig;
-import com.example.demo.enemy.Slime;
-import com.example.demo.enemy.Veteran_Cultist_Pig;
 import com.example.demo.event.EventDef;
 import com.example.demo.event.EventView;
 import com.example.demo.operator.DevEntry;
@@ -598,14 +595,10 @@ public class HelloApplication extends Application {
 
     // ================= 地图节点事件 =================
 
-    /** 普通怪生成：前 5 层出史莱姆，第 6 层起史莱姆换成大史莱姆 */
+    /** 普通怪生成：具体规则见 {@link EnemyFactory#normal(int)} */
     private Enemy monsterForRow(GameMap map) {
         int row = map.current == null ? 0 : map.current.row;
-        boolean cultist = Math.random() < 0.4;
-        if (row >= 5) {
-            return cultist ? new Veteran_Cultist_Pig() : new BigSlime();
-        }
-        return cultist ? new Cultist_Pig() : new Slime();
+        return EnemyFactory.normal(row);
     }
 
     private void handleArrive(Stage stage, GameMap map, Player player, RunHud hud,
@@ -614,7 +607,7 @@ public class HelloApplication extends Application {
             case MONSTER -> startBattle(stage, map, player, GameMap.NodeType.MONSTER,
                     monsterForRow(map));
             case ELITE   -> startBattle(stage, map, player, GameMap.NodeType.ELITE, new GuardPig());
-            case BOSS    -> startBattle(stage, map, player, GameMap.NodeType.BOSS, new Duke_Porcodraco());
+            case BOSS    -> startBattle(stage, map, player, GameMap.NodeType.BOSS, new DukePorcodraco());
             case START   -> showRoomScene(stage, map, player);
             case EVENT   -> {
                 List<EventDef> events = EventDef.pool();
