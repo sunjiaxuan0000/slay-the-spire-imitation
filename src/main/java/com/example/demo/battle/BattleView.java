@@ -541,8 +541,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         int brutality = powerStacks.getOrDefault(Card.Kind.BRUTALITY, 0);
         if (brutality > 0 && loseHp(brutality, true)) return;
 
-        drawHand(5 + (hasRelic("请假条") ? 1 : 0) + brutality);
-        drawHand(5 + RelicFun.extraDraw(player) + (brutality ? 1 : 0));
+        drawHand(5 + (RelicFun.hasRelic(player, "请假条") ? 1 : 0) + brutality);
 
         // 英雄宝典：战斗开始时增加一张免费能力牌
         if (turn == 1 && RelicFun.hasRelic(player, "英雄宝典")) {
