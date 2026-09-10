@@ -4,7 +4,6 @@ import com.example.demo.card.BattleState;
 import com.example.demo.card.Card;
 import com.example.demo.card.CardFaceView;
 import com.example.demo.card.CardPlay;
-import com.example.demo.card.CardView;
 import com.example.demo.character.Player;
 import com.example.demo.character.RelicFun;
 import com.example.demo.enemy.Enemy;
@@ -45,7 +44,7 @@ import java.util.function.Consumer;
 /**
  * 回合制战斗界面（纯战斗逻辑 + 面板拼装）。
  *
- * 卡牌渲染委托 {@link CardView}，静态 UI 构件委托 {@link BattleUiFactory}，
+ * 卡牌渲染委托 {@link CardFaceView}，静态 UI 构件委托 {@link BattleUiFactory}，
  * 弹层（牌堆浏览/奖励/死亡）委托 view 包中各自的 Overlay 类。
  */
 public class BattleView extends javafx.scene.layout.StackPane implements BattleState {
@@ -579,6 +578,9 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     private void play(Card c) {
         if (!playerTurn || battleOver) return;
         if (c.cost < 0 || c.cost > energy) return;
+        // 先移出手牌进入“打出中”状态再结算：为效果生成的牌腾出槽位，
+        // 且结算中的抽牌不会把刚打出的牌从弃牌堆洗回。最终去向由 onCardPlayed 决定。
+        hand.remove(c);
         CardPlay.play(c, this);
     }
 
@@ -715,8 +717,18 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     }
 
     @Override
+    public void addToHand(Card c) {
+        // 手牌已满（打出中的牌已提前移出 hand）：溢出的牌放入抽牌堆
+        if (hand.size() >= HAND_LIMIT) {
+            draw.add(c);
+        } else {
+            hand.add(c);
+        }
+    }
+
+    @Override
     public void onCardPlayed(Card c) {
-        hand.remove(c);
+        hand.remove(c); // 出牌时已移出，此处仅作兜底
         if (c.isExhaustOnPlay()) {
             // 消耗（含能力牌）：不进入弃牌堆
         } else {
@@ -1020,7 +1032,8 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
                 Card.doubleStrike(), Card.kindle(), Card.lightning(),
                 Card.rage(), Card.offering(), Card.wildStrike(),
                 Card.fortify(), Card.focus(), Card.shockwave(),
-                Card.heavyBlade(), Card.adamantArm(), Card.brutality(), Card.flex());
+                Card.heavyBlade(), Card.adamantArm(), Card.brutality(), Card.flex(),
+                Card.powerThrough(), Card.soulSever(), Card.uppercut());
         // 权重直接取自 Card.Kind.weight（4=白/普通，3=蓝/罕见，1=金/稀有），
         // 避免与卡池硬编码的双份数据源不同步。
         List<Integer> weights = pool.stream()

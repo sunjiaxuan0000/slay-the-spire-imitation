@@ -72,6 +72,12 @@ public interface BattleState {
     /** 将一张牌放入抽牌堆（如“狂野打击”塞入一张“伤口”） */
     void addToDrawPile(Card c);
 
+    /**
+     * 将一张牌直接加入手牌（如“硬撑”塞入“伤口”），不受抽牌禁令影响；
+     * 若手牌已达上限，则改放入抽牌堆。
+     */
+    void addToHand(Card c);
+
     /** 将玩家当前格挡翻倍（巩固） */
     void doubleBlock();
 

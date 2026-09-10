@@ -29,6 +29,9 @@ public final class CardPlay {
 
         s.spendEnergy(c.cost);
 
+        // 断魂术：先失去 2 点生命作为代价（致死则终止结算，不造成伤害）
+        if (c.kind == Card.Kind.SOUL_SEVER && s.loseHp(2, false)) return;
+
         // 攻击：按段数结算，段间若战斗已结束（击杀）则停止
         if (c.damage > 0) {
             int strength = s.getStrength();
@@ -72,6 +75,14 @@ public final class CardPlay {
                 s.gainStrength(2);
                 s.loseStrengthAtTurnEnd(2);
             }
+            case POWER_THROUGH -> {                      // 硬撑：将两张伤口加入手牌
+                s.addToHand(Card.wound());
+                s.addToHand(Card.wound());
+            }
+            case UPPERCUT ->{                       // 上勾拳：敌人 1 虚弱 / 1 易伤
+                s.addEnemyWeak(1);
+                s.addEnemyVulnerable(1);
+            } 
             default -> {
             }
         }

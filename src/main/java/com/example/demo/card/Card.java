@@ -24,7 +24,7 @@ public class Card {
         SHRUG("耸肩无视", "获得 8 点格挡，抽 1 张牌", Type.SKILL, 3),
         BLEED("放血", "获得 2 点能量，自己失去 3 点生命", Type.SKILL, 3),
         HAMMER("重锤", "造成 32 点伤害", Type.ATTACK, 1),
-        IMPREGNABLE("岿然不动", "获得 30 点格挡", Type.SKILL, 1),
+        IMPREGNABLE("岿然不动", "获得 30 点格挡，消耗", Type.SKILL, 1),
         DOUBLE_STRIKE("双重打击", "造成 5 点伤害两次", Type.ATTACK, 4),
         KINDLE("燃烧", "获得 2 层力量", Type.POWER, 3),
         LIGHTNING("闪电霹雳", "对敌人造成 6 点伤害，给予 1 层易伤", Type.ATTACK, 4),
@@ -38,9 +38,12 @@ public class Card {
         ADAMANT_ARM("金刚臂", "造成 12 点伤害，给予 2 层虚弱", Type.ATTACK, 4),
         BRUTALITY("残暴", "使用后每回合开始时失去一点体力，多抽一张牌", Type.POWER, 1),
         FLEX("活动肌肉", "获得 2 点力量，回合结束时失去 2 点力量", Type.SKILL, 4),
+        POWER_THROUGH("硬撑", "获得 15 点格挡，将两张伤口加入手牌", Type.SKILL, 3),
+        SOUL_SEVER("断魂术", "失去 2 点生命，造成 15 点伤害", Type.ATTACK, 3),
+        UPPERCUT("上勾拳","造成13点伤害，给予1层虚弱，给予1层易伤",Type.ATTACK,3),
         WOUND("伤口", "无法被打出", Type.STATUS, 4),
         SLIME("黏液", "消耗", Type.STATUS, 4);
-
+        
 
         public final String label;
         public final String desc;
@@ -123,13 +126,17 @@ public class Card {
     public static Card fortify()     { return new Card(Kind.FORTIFY, 2, 0, 0); }
     public static Card focus()       { return new Card(Kind.FOCUS, 0, 0, 0); }
     public static Card shockwave()   { return new Card(Kind.SHOCKWAVE, 2, 0, 0, 0, true); }
+    public static Card uppercut()    { return new Card(Kind.UPPERCUT,2,13,0);}
     public static Card heavyBlade()  { return new Card(Kind.HEAVY_BLADE, 2, 14, 0); } // 力量 3 倍效果在 play() 中处理
     public static Card wildStrike()  { return new Card(Kind.WILD_STRIKE, 1, 12, 0); } // 加伤口效果在 play() 中处理
     public static Card adamantArm()  { return new Card(Kind.ADAMANT_ARM, 2, 12, 0); } // 给虚弱效果在 play() 中处理
     public static Card brutality()   { return new Card(Kind.BRUTALITY, 0, 0, 0); } // 每回合效果在 play() 中处理
     public static Card flex()        { return new Card(Kind.FLEX, 0, 0, 0); } // 临时力量效果在 play() 中处理
+    public static Card powerThrough(){ return new Card(Kind.POWER_THROUGH, 1, 0, 15); } // 往手牌塞两张伤口的效果在 play() 中处理
+    public static Card soulSever()   { return new Card(Kind.SOUL_SEVER, 1, 15, 0); } // 自伤 2 点生命的代价在 play() 中处理
     public static Card wound()       { return new Card(Kind.WOUND, -1, 0, 0); } // -1 表示无法打出
     public static Card slime()       { return new Card(Kind.SLIME, 1, 0, 0, 0, true); } // 可打出，消耗
+    
 
     /** 英雄宝典遗物：随机生成一张不消耗能量的能力牌 */
     public static Card freePower() {
@@ -166,8 +173,11 @@ public class Card {
             case ADAMANT_ARM -> adamantArm();
             case BRUTALITY -> brutality();
             case FLEX -> flex();
+            case POWER_THROUGH -> powerThrough();
+            case SOUL_SEVER -> soulSever();
             case WOUND -> wound();
             case SLIME -> slime();
+            case UPPERCUT -> uppercut();
         };
     }
 }

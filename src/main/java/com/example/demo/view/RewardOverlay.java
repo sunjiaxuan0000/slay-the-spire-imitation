@@ -2,7 +2,6 @@ package com.example.demo.view;
 
 import com.example.demo.card.Card;
 import com.example.demo.card.CardFaceView;
-import com.example.demo.card.CardView;
 
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
