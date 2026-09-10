@@ -52,7 +52,7 @@ public class CardFaceView {
     private static final Image FACE_ABILITY = img("ability.png");
     private static final Image RIBBON_COMMON = img("normal.png"); // 4 白
     private static final Image RIBBON_RARE = img("rare.png");     // 3 蓝
-    private static final Image RIBBON_GOLD = img("gold.png");     // 2 金
+    private static final Image RIBBON_GOLD = img("gold.png");     // 1 金
     private static final Image POWER = img("power.png");
 
     /** 生成一张分层贴图卡面（150×210） */
@@ -96,7 +96,7 @@ public class CardFaceView {
         Image ribbon = switch (c.kind.weight) {
             case 4 -> RIBBON_COMMON;
             case 3 -> RIBBON_RARE;
-            case 2 -> RIBBON_GOLD;
+            case 1 -> RIBBON_GOLD;
             default -> RIBBON_COMMON;
         };
         ImageView ribbonView = new ImageView(ribbon);

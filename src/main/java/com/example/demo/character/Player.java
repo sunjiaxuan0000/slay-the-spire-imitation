@@ -14,7 +14,7 @@ public class Player {
     public static final String CHARACTER_NAME = "战士";
     public int maxHp = 80;
 
-    private int hp = maxHp;
+    public int hp = maxHp;
     public final List<Card> deck = new ArrayList<>();
     public final List<Relic> relics = new ArrayList<>(); // 本局获得的遗物
     public boolean restedAtCampfire = false; // 篝火休息后标记

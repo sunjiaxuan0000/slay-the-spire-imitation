@@ -1,5 +1,6 @@
 package com.example.demo.character;
 
+import com.example.demo.sound.SoundFx;
 import javafx.animation.FadeTransition;
 import javafx.animation.ScaleTransition;
 import javafx.geometry.Insets;
@@ -134,6 +135,8 @@ public class CharacterSelect extends StackPane {
     private void select() {
         if (selected) return;
         selected = true;
+
+        SoundFx.play("ironclad_attack");
 
         // 背景淡入“立绘”
         artBack.setVisible(true);

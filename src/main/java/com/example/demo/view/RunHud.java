@@ -34,6 +34,7 @@ public class RunHud extends VBox {
     private final StackPane deckIcon = new StackPane();
     private final Label deckBadge = new Label();
     private final HBox relicRow = new HBox(10);
+    private final HBox topRow = new HBox(18);
 
     public RunHud(Player player,
                   Consumer<Relic> onRelicClick,
@@ -43,7 +44,7 @@ public class RunHud extends VBox {
         this.player = player;
 
         // ---------- 第一行 ----------
-        HBox row1 = new HBox(18);
+        HBox row1 = topRow;
         row1.setAlignment(Pos.CENTER_LEFT);
         row1.setPadding(new Insets(8, 18, 8, 18));
         row1.setStyle("-fx-background-color: #111827;");
@@ -114,6 +115,20 @@ public class RunHud extends VBox {
     }
 
     private final Consumer<Relic> onRelicClick;
+
+    /**
+     * 开发者模式：在 HUD 上挂一个橙色的「开」按钮（在牌组图标左边），点开开发者面板。
+     * 只有设置里开了开发者模式时，外层才会调用这个方法。
+     */
+    public void addDevButton(Runnable onClick) {
+        StackPane dev = iconCard("开",
+                "linear-gradient(to bottom right, #fde68a, #f59e0b);", "#78350f");
+        Tooltip.install(dev, new Tooltip("开发者模式：修改牌组 / 手牌 / 遗物"));
+        dev.setOnMouseClicked(e -> onClick.run());
+
+        int idx = topRow.getChildren().indexOf(deckIcon);
+        topRow.getChildren().add(Math.max(0, idx), dev);
+    }
 
     /** 通用小图标（地图用） */
     private static StackPane iconCard(String glyph, String grad, String color) {

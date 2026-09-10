@@ -6,18 +6,25 @@ import com.example.demo.card.CardFaceView;
 import com.example.demo.character.CharacterSelect;
 import com.example.demo.character.Player;
 import com.example.demo.character.Relic;
+import com.example.demo.enemy.BigSlime;
+import com.example.demo.enemy.Duke_Porcodraco;
+import com.example.demo.enemy.Cultist_Pig;
 import com.example.demo.character.RelicFun;
-import com.example.demo.enemy.Boss;
-import com.example.demo.enemy.EliteSlime;
 import com.example.demo.enemy.Enemy;
+import com.example.demo.enemy.GuardPig;
 import com.example.demo.enemy.Slime;
+import com.example.demo.enemy.Veteran_Cultist_Pig;
 import com.example.demo.event.EventDef;
 import com.example.demo.event.EventView;
+import com.example.demo.operator.DevEntry;
 import com.example.demo.view.GameMap;
 import com.example.demo.view.MainMenu;
 import com.example.demo.view.MapView;
 import com.example.demo.view.RoomView;
 import com.example.demo.view.RunHud;
+import com.example.demo.view.SettingsView;
+import com.example.demo.sound.MusicFx;
+import com.example.demo.sound.SoundFx;
 
 import javafx.animation.Interpolator;
 import javafx.animation.KeyFrame;
@@ -36,6 +43,8 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
@@ -59,6 +68,9 @@ public class HelloApplication extends Application {
     private static final double W = 1280;
     private static final double H = 720;
 
+    /** 地图两侧黑边宽度（像素）——想调黑边宽窄就改这个数 */
+    private static final double MAP_SIDE_MARGIN = 190;
+
     /** 主菜单的固定尺寸：离开菜单时记录，返回菜单时强制恢复，防止被游戏场景带�?*/
     private double menuW = W;
     private double menuH = H;
@@ -68,16 +80,31 @@ public class HelloApplication extends Application {
     private BattleView activeBattle = null; // 进行中的战斗（供只读地图暂停/恢复�?
     private boolean battleMapOpen = false;  // 战斗里是否开着“只读地图�?
 
-    /** 按指定尺寸建场景 */
+    /** 按指定尺寸建场景（并自动挂上“点按钮出声”） */
     private Scene sizedAt(double w, double h, Parent root) {
-        return new Scene(root, (w > 0) ? w : W, (h > 0) ? h : H);
+        return decorate(new Scene(root, (w > 0) ? w : W, (h > 0) ? h : H));
     }
 
-    /** 按“窗口当前大小”建场景（游戏内场景用，保持用户当前窗口尺寸�?*/
+    /** 按“窗口当前大小”建场景（游戏内场景用，保持用户当前窗口尺寸） */
     private Scene sizedScene(Stage stage, Parent root) {
         double w = (stage.isShowing() && stage.getWidth() > 0) ? stage.getWidth() : W;
         double h = (stage.isShowing() && stage.getHeight() > 0) ? stage.getHeight() : H;
-        return new Scene(root, w, h);
+        return decorate(new Scene(root, w, h));
+    }
+
+    /** 给场景统一挂“点击各类按钮 → click.wav” */
+    private Scene decorate(Scene scene) {
+        scene.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, e -> {
+            javafx.scene.Node n = (javafx.scene.Node) e.getTarget();
+            while (n != null) {
+                if (n instanceof Button) {
+                    SoundFx.play("click");
+                    break;
+                }
+                n = n.getParent();
+            }
+        });
+        return scene;
     }
 
     @Override
@@ -103,8 +130,10 @@ public class HelloApplication extends Application {
 
     /** 主菜单场景：始终按“离开菜单时记录的尺寸”构�?*/
     private Scene buildMenuScene(Stage stage) {
+        MusicFx.playLoop("bgm_menu"); // 主菜单 BGM（没放 bgm_menu.wav 就静音）
         MainMenu menu = new MainMenu(
                 () -> startCharacterSelect(stage),
+                () -> showSettingsScene(stage),
                 () -> stage.close()
         );
         Scene scene = sizedAt(menuW, menuH, menu);
@@ -115,11 +144,22 @@ public class HelloApplication extends Application {
                 case DOWN  -> menu.nudge(0, step);
                 case LEFT  -> menu.nudge(-step, 0);
                 case RIGHT -> menu.nudge(step, 0);
+                case TAB   -> menu.selectNext();  // 切换方向键调节哪个按钮
                 case F3    -> menu.toggleDebug();
                 default    -> { }
             }
         });
         return scene;
+    }
+
+    /** 设置页面：音乐/音效音量 + 开发者模式开关；点“返回主菜单”或按 Esc 回去 */
+    private void showSettingsScene(Stage stage) {
+        SettingsView settings = new SettingsView(() -> returnToMenu(stage));
+        Scene scene = sizedAt(menuW, menuH, settings);
+        scene.setOnKeyPressed(e -> {
+            if (e.getCode() == KeyCode.ESCAPE) returnToMenu(stage);
+        });
+        stage.setScene(scene);
     }
 
     /** 角色选择场景（离开主菜单时记录当前窗口尺寸，返回时恢复�?*/
@@ -159,23 +199,44 @@ public class HelloApplication extends Application {
 
     /** 地图场景（战斗后回同一张地图也用这个） */
     private void showMapScene(Stage stage, GameMap map, Player player) {
-        // 地图页本身不显示右上角“地图”按�?
+        SoundFx.play("map"); // 进入地图页音效
+        MusicFx.playLoop("bgm_map"); // 地图 BGM（没放 bgm_map.wav 就保持安静）
+        // 地图页本身不显示右上角“地图”按钮
         RunHud hud = buildHud(player, map, () -> showWindow(page(mapPage(map))), false);
+        // 开发者模式：HUD 上多挂一个「开」按钮（地图场景没有战斗 → battle 传 null）
+        DevEntry.attachDevButton(hud, player, null, hud::refresh,
+                node -> showWindow(page(node)), this::closeWindow);
 
         ScrollPane scroll = new ScrollPane();
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER); // 隐藏滚动条（滚轮/拖动仍可用）
         scroll.setPannable(true);
         scroll.setMinSize(0, 0); // 内容再高也不许把窗口撑大（否则回主菜单会被拉大）
         scroll.setStyle("-fx-background: #0b1020; -fx-background-color: #0b1020;");
 
         MapView view = new MapView(map,
                 type -> handleArrive(stage, map, player, hud, type), scroll, true);
+        DevEntry.enableDevMap(view); // 开发者模式：任意节点都能点
         scroll.setContent(view);
+
+        // 让地图两侧留黑边：地图限宽居中，两侧露出黑底（HUD 仍占满宽度）
+        StackPane mapArea = new StackPane(scroll);
+        mapArea.setStyle("-fx-background-color: black;");
+        scroll.maxWidthProperty().bind(
+                mapArea.widthProperty().subtract(MAP_SIDE_MARGIN * 2));
+
+        // 右侧黑边处贴图例 example.png（宽度随黑边宽度自适应）
+        Node legend = legendNode();
+        if (legend != null) {
+            mapArea.getChildren().add(legend);
+            StackPane.setAlignment(legend, Pos.CENTER_RIGHT);
+            StackPane.setMargin(legend, new Insets(12, 6, 0, 0));
+        }
 
         BorderPane content = new BorderPane();
         content.setTop(hud);
-        content.setCenter(scroll);
+        content.setCenter(mapArea);
 
         Scene scene = wrapOverlay(stage, content);
         scene.setOnKeyPressed(e -> {
@@ -243,6 +304,7 @@ public class HelloApplication extends Application {
     /** 战斗场景：顶�?HUD + 战斗主体，外面再包整页窗口层 */
     private void startBattle(Stage stage, GameMap map, Player player,
                              GameMap.NodeType type, Enemy enemy) {
+        MusicFx.playLoop("bgm_battle"); // 战斗 BGM
         RunHud hud = buildHud(player, map, () -> openBattleMapReadOnly(stage, map), true);
 
         BattleView battle = new BattleView(player, hud, enemy,
@@ -272,6 +334,10 @@ public class HelloApplication extends Application {
         }, type == GameMap.NodeType.BOSS); // true=用 boss 战斗背景，否则 default 背景
         activeBattle = battle;
 
+        // 开发者模式：战斗里也能改牌组/手牌/遗物（手牌改完立刻重画）
+        DevEntry.attachDevButton(hud, player, battle, hud::refresh,
+                node -> showWindow(page(node)), this::closeWindow);
+
         BorderPane content = new BorderPane();
         content.setTop(hud);
         content.setCenter(battle);
@@ -297,15 +363,31 @@ public class HelloApplication extends Application {
         if (b == null) return;
         b.setPaused(true);
         battleMapOpen = true;
+        SoundFx.play("map"); // 进入地图页音效
 
         ScrollPane scroll = new ScrollPane();
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER); // 隐藏滚动条（滚轮/拖动仍可用）
         scroll.setPannable(true);
         scroll.setStyle("-fx-background: #0b1020; -fx-background-color: #0b1020;");
 
         MapView preview = new MapView(map, t -> { }, scroll, false); // 只读地图界面
         scroll.setContent(preview);
+
+        // 同样的两侧黑边：地图限宽居中
+        StackPane mapArea = new StackPane(scroll);
+        mapArea.setStyle("-fx-background-color: black;");
+        scroll.maxWidthProperty().bind(
+                mapArea.widthProperty().subtract(MAP_SIDE_MARGIN * 2));
+
+        // 右侧黑边处同样贴图例
+        Node legend2 = legendNode();
+        if (legend2 != null) {
+            mapArea.getChildren().add(legend2);
+            StackPane.setAlignment(legend2, Pos.TOP_RIGHT);
+            StackPane.setMargin(legend2, new Insets(12, 6, 0, 0));
+        }
 
         Button back = new Button("返回战斗");
         back.setFont(Font.font(17));
@@ -317,7 +399,7 @@ public class HelloApplication extends Application {
         StackPane.setMargin(back, new Insets(0, 30, 24, 0));
 
         StackPane window = new StackPane();
-        window.getChildren().addAll(scroll, back);
+        window.getChildren().addAll(mapArea, back);
 
         // 把“当前所在层”滚到屏幕中�?
         Platform.runLater(() -> preview.scrollToLayer(
@@ -345,6 +427,19 @@ public class HelloApplication extends Application {
         StackPane root = new StackPane();
         root.getChildren().addAll(content, overlayHost);
         return sizedScene(stage, root);
+    }
+
+    /** 右侧黑边上的图例（example.png），宽度自动跟随 MAP_SIDE_MARGIN */
+    private Node legendNode() {
+        var in = getClass().getResourceAsStream("/com/example/demo/icons/example.png");
+        if (in == null) return null;
+        ImageView iv = new ImageView(new Image(in));
+        iv.setPreserveRatio(true);
+        iv.setMouseTransparent(true);
+        double w = 300;
+        iv.setFitWidth(w);
+        iv.setFitHeight(w);
+        return iv;
     }
 
     // ================= 顶部 HUD（含三个整页窗口入口�?=================
@@ -428,6 +523,7 @@ public class HelloApplication extends Application {
         ScrollPane scroll = new ScrollPane();
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER); // 隐藏滚动条（滚轮/拖动仍可用）
         scroll.setPannable(true);
         scroll.setStyle("-fx-background: #0b1020; -fx-background-color: #0b1020;");
         scroll.setPrefSize(1060, 430);
@@ -502,12 +598,23 @@ public class HelloApplication extends Application {
 
     // ================= 地图节点事件 =================
 
+    /** 普通怪生成：前 5 层出史莱姆，第 6 层起史莱姆换成大史莱姆 */
+    private Enemy monsterForRow(GameMap map) {
+        int row = map.current == null ? 0 : map.current.row;
+        boolean cultist = Math.random() < 0.4;
+        if (row >= 5) {
+            return cultist ? new Veteran_Cultist_Pig() : new BigSlime();
+        }
+        return cultist ? new Cultist_Pig() : new Slime();
+    }
+
     private void handleArrive(Stage stage, GameMap map, Player player, RunHud hud,
                               GameMap.NodeType type) {
         switch (type) {
-            case MONSTER -> startBattle(stage, map, player, GameMap.NodeType.MONSTER, new Slime());
-            case ELITE   -> startBattle(stage, map, player, GameMap.NodeType.ELITE, new EliteSlime());
-            case BOSS    -> startBattle(stage, map, player, GameMap.NodeType.BOSS, new Boss());
+            case MONSTER -> startBattle(stage, map, player, GameMap.NodeType.MONSTER,
+                    monsterForRow(map));
+            case ELITE   -> startBattle(stage, map, player, GameMap.NodeType.ELITE, new GuardPig());
+            case BOSS    -> startBattle(stage, map, player, GameMap.NodeType.BOSS, new Duke_Porcodraco());
             case START   -> showRoomScene(stage, map, player);
             case EVENT   -> {
                 List<EventDef> events = EventDef.pool();
@@ -537,6 +644,17 @@ public class HelloApplication extends Application {
                 alert.showAndWait();
             }
         }
+    }
+
+    /** 宝箱：从遗物池随机给一个还没拿过的遗物 */
+    private Relic randomTreasure(Player player) {
+        List<Relic> pool = Relic.pool(); // 全部遗物（起点三选一 / 开发者面板用同一份）
+        pool.removeIf(r -> player.relics.stream().anyMatch(h -> h.name.equals(r.name)));
+        if (pool.isEmpty()) return null;
+        int idx = new java.util.Random().nextInt(pool.size());
+        Relic gained = pool.get(idx);
+        player.addRelic(gained);
+        return gained;
     }
 
     /** 随机奖励一张卡（事�?奖励用） */
