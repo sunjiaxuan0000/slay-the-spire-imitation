@@ -342,11 +342,11 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         intentRow.setAlignment(Pos.CENTER);
         intentRow.getChildren().addAll(eIntentIcon, eIntentNum);
 
-        enemyPortraitSize = enemy.isBoss ? 280 : 210;
+        enemyPortraitSize = enemy.getPortraitSize();
         StackPane portrait;
         if (enemy.hasPortrait) {
             enemyPortraitImg = new ImageView();
-            Image img = new Image(getClass().getResourceAsStream("/com/example/demo/portrait/" + enemy.name + ".png"));
+            Image img = new Image(getClass().getResourceAsStream("/com/example/demo/portrait/" + enemy.getPortraitName() + ".png"));
             enemyPortraitImg.setImage(img);
             enemyPortraitImg.setFitWidth(enemyPortraitSize);
             enemyPortraitImg.setFitHeight(enemyPortraitSize);
@@ -466,11 +466,6 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
                 glyph="反";
                 color ="#9400D3";
                 tip="意图·反弹伤害："+s.value+" 回合内，当你攻击时，受到造成伤害30%的伤害";
-            }
-            case SPIT -> {
-                glyph = "黏";
-                color = "#16a34a";
-                tip = "意图·吐黏液：向你的抽牌堆塞入 " + s.value + " 张黏液";
             }
             case RITUAL -> {
                 glyph = "祭";
@@ -782,7 +777,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         return switch (intent) {
             case ATTACK -> enemyOink();              // 出手叫声：BOSS 鱼龙叫 / 普通猪叫
             case DEFEND -> List.of("GainDefense");   // 复用已有的加盾音效
-            case BUFF, WEAKEN, REFLECT, SPIT, RITUAL -> List.of("zhou");
+            case BUFF, WEAKEN, REFLECT, RITUAL -> List.of("zhou");
         };
     }
 
@@ -817,16 +812,15 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
                 if (dmg > 0) SoundFx.play("GetHurt"); // 玩家被怪物攻击的受伤音效
                 hud.refresh();
                 if (player.hp() == 0) { playerDied(); return; }
+                // 攻击后附加效果：向玩家抽牌堆塞入黏液（史莱姆特有）
+                for (int i = 0; i < enemy.getSlimeOnAttack(); i++) {
+                    draw.add(Card.slime());
+                }
             }
             case DEFEND -> enemy.block += s.value; // 音效由 enemySoundOf(DEFEND) 播放
             case BUFF -> enemy.power += s.value;
             case WEAKEN -> weakTurns = Math.max(weakTurns, s.value);
             case REFLECT -> reflectTurns = Math.max(reflectTurns,s.value);
-            case SPIT -> {
-                for (int i = 0; i < s.value; i++) {
-                    draw.add(Card.slime());
-                }
-            }
             case RITUAL -> enemy.setRitualPower(s.value);
         }
         if (enemyWeak > 0) enemyWeak--;

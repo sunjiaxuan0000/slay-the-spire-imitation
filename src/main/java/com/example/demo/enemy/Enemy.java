@@ -19,7 +19,6 @@ public abstract class Enemy {
         BUFF("强化"),
         WEAKEN("虚弱"),
         REFLECT("反伤"),
-        SPIT("吐黏液"),
         RITUAL("仪式");
 
         public final String label;
@@ -52,6 +51,15 @@ public abstract class Enemy {
 
     /** 仪式：每回合开始自动增加的力量值，0 表示无仪式。由 RITUAL 意图激活。 */
     protected int ritualPower = 0;
+
+    /** 攻击后向玩家抽牌堆塞入的黏液牌数量，0 表示无此效果（史莱姆特有）。 */
+    protected int slimeOnAttack = 0;
+
+    /** 立绘文件名（不含扩展名），null 表示用 name 作为文件名。 */
+    protected String portraitName = null;
+
+    /** 立绘贴图尺寸（正方形边长），默认 210。 */
+    protected int portraitSize = 210;
 
     // ===== 意图轮盘 =====
     private final List<Step> plan;
@@ -99,6 +107,21 @@ public abstract class Enemy {
         return ritualPower;
     }
 
+    /** 攻击后塞入玩家抽牌堆的黏液牌数量 */
+    public int getSlimeOnAttack() {
+        return slimeOnAttack;
+    }
+
+    /** 立绘文件名（BigSlime 可复用史莱姆的图） */
+    public String getPortraitName() {
+        return portraitName != null ? portraitName : name;
+    }
+
+    /** 立绘贴图尺寸 */
+    public int getPortraitSize() {
+        return portraitSize;
+    }
+
     /** 设置仪式效果（由 RITUAL 意图触发） */
     public void setRitualPower(int value) {
         this.ritualPower = value;
@@ -121,7 +144,6 @@ public abstract class Enemy {
             case BUFF   -> s.intent.label + " 力量 +" + v;
             case WEAKEN -> s.intent.label + " 我方 " + v + " 回合";
             case REFLECT -> s.intent.label +"我方" + v + "回合";
-            case SPIT -> s.intent.label + " " + v + " 张黏液";
             case RITUAL -> s.intent.label + " 每回合力量 +" + v;
         };
     }

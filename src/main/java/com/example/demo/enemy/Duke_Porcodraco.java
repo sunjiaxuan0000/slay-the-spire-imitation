@@ -18,6 +18,7 @@ public class Duke_Porcodraco extends Enemy {
                 new Step(Intent.DEFEND, 10),
                 new Step(Intent.ATTACK, 16)
         ));
+        portraitSize = 280;  // BOSS 立绘更大
         this.secondPlan = List.of(
                 new Step(Intent.ATTACK, 18),
                 new Step(Intent.DEFEND, 16),
