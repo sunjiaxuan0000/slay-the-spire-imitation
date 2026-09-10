@@ -24,11 +24,9 @@ import javafx.scene.control.Label;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
-import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -49,6 +47,7 @@ import java.util.function.Consumer;
  */
 public class BattleView extends javafx.scene.layout.StackPane implements BattleState {
     private StackPane enemyPortrait;
+    private ImageView enemyPortraitImg;
     private SpriteAnimator playerAnim;
     private SpriteAnimator enemyAnim;
     private long lastFrameTime = 0;
@@ -81,6 +80,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     private int energy = 3;
     private int playerBlock = 0;
     private int weakTurns = 0;
+    private int reflectTurns = 0;
     private int enemyVulnerable = 0;
     private int enemyWeak = 0;
     private int pendingStrengthLoss = 0;
@@ -113,6 +113,10 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     private final javafx.scene.layout.StackPane eShield = new javafx.scene.layout.StackPane();
     private final Label eShieldNum = new Label();
     private final FlowPane eChips = new FlowPane(4, 4);
+    // 左下角仪式状态栏
+    private final Label ritualStatus = new Label();
+    // 破甲状态栏（BOSS 二阶段）
+    private final Label armorBreakStatus = new Label();
     // 中下
     private int turn = 0;
     private final Label turnLabel = new Label();
@@ -303,13 +307,13 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
 
         StackPane portrait;
         if (enemy.hasPortrait) {
-            ImageView portraitImg = new ImageView();
+            enemyPortraitImg = new ImageView();
             Image img = new Image(getClass().getResourceAsStream("/com/example/demo/portrait/" + enemy.name + ".png"));
-            portraitImg.setImage(img);
-            portraitImg.setFitWidth(210);
-            portraitImg.setFitHeight(210);
-            portraitImg.setPreserveRatio(true);
-            portrait = new StackPane(portraitImg);
+            enemyPortraitImg.setImage(img);
+            enemyPortraitImg.setFitWidth(210);
+            enemyPortraitImg.setFitHeight(210);
+            enemyPortraitImg.setPreserveRatio(true);
+            portrait = new StackPane(enemyPortraitImg);
         } else {
             portrait = BattleUiFactory.portrait(enemy.name.substring(0, 1),
                     "radial-gradient(center 35% 30%, radius 100%, #6b7280, #1f2937);");
@@ -329,10 +333,32 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         cluster.setAlignment(Pos.CENTER_LEFT);
         cluster.getChildren().addAll(eShield, eHpWrap);
 
+        // 仪式状态栏（敌怪血条左下角，青底白字）
+        ritualStatus.setTextFill(Color.WHITE);
+        ritualStatus.setFont(Font.font(14));
+        ritualStatus.setStyle("-fx-font-weight: bold; -fx-background-color: #0891b2; "
+                + "-fx-background-radius: 10; -fx-padding: 4 10 4 10;");
+        ritualStatus.setVisible(false);
+        HBox ritualRow = new HBox();
+        ritualRow.setAlignment(Pos.CENTER_LEFT);
+        ritualRow.setPrefWidth(286);
+        ritualRow.getChildren().add(ritualStatus);
+
+        // 破甲状态栏（BOSS 二阶段，灰底白字）
+        armorBreakStatus.setTextFill(Color.WHITE);
+        armorBreakStatus.setFont(Font.font(14));
+        armorBreakStatus.setStyle("-fx-font-weight: bold; -fx-background-color: #9ca3af; "
+                + "-fx-background-radius: 10; -fx-padding: 4 10 4 10;");
+        armorBreakStatus.setVisible(false);
+        HBox armorBreakRow = new HBox();
+        armorBreakRow.setAlignment(Pos.CENTER_LEFT);
+        armorBreakRow.setPrefWidth(286);
+        armorBreakRow.getChildren().add(armorBreakStatus);
+
         eChips.setPrefWrapLength(286);
         eChips.setAlignment(Pos.CENTER_LEFT);
 
-        box.getChildren().addAll(eName, intentRow, enemyPortrait, cluster, eChips);
+        box.getChildren().addAll(eName, intentRow, enemyPortrait, cluster, ritualRow, armorBreakRow, eChips);
         return box;
     }
 
@@ -396,6 +422,21 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
                 glyph = "强";
                 color = "#d97706";
                 tip = "意图·强化自身：力量 +" + s.value;
+            }
+            case REFLECT ->{
+                glyph="反";
+                color ="#9400D3";
+                tip="意图·反弹伤害："+s.value+" 回合，当你攻击时，受到造成伤害30%的伤害";
+            }
+            case SPIT -> {
+                glyph = "黏";
+                color = "#16a34a";
+                tip = "意图·吐黏液：向你的抽牌堆塞入 " + s.value + " 张黏液";
+            }
+            case RITUAL -> {
+                glyph = "祭";
+                color = "#8b5cf6";
+                tip = "意图·仪式：每回合开始力量 +" + s.value;
             }
             default -> {
                 glyph = "弱";
@@ -466,6 +507,8 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
 
     /** 出牌入口薄壳：具体结算规则见 {@link CardPlay#play(Card, BattleState)}。 */
     private void play(Card c) {
+        if (!playerTurn || battleOver) return;
+        if (c.cost < 0 || c.cost > energy) return;
         CardPlay.play(c, this);
     }
 
@@ -565,6 +608,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             dmg -= absorb;
         }
         enemy.hp = Math.max(0, enemy.hp - dmg);
+        applyReflect(dmg);
         if (enemy.hp == 0) victory();
     }
 
@@ -602,11 +646,26 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         if (!battleOver) refreshAll();
     }
 
+    /** 反伤：怪物处于反伤状态时，把玩家造成伤害的一定比例反弹给玩家（先扣格挡再扣血）。 */
+    private void applyReflect(int dmg) {
+        if (reflectTurns <= 0) return;
+        int reflectDmg = (int)(dmg * enemy.getReflectRate());
+        if (reflectDmg <= 0) return;
+        if (playerBlock > 0) {
+            int absorb = Math.min(playerBlock, reflectDmg);
+            playerBlock -= absorb;
+            reflectDmg -= absorb;
+        }
+        player.hp = Math.max(0, player.hp - reflectDmg);
+        hud.refresh();
+        if (player.hp == 0) playerDied();
+    }
     // ================= 怪物回合 =================
 
     private void endPlayerTurn() {
         if (!playerTurn || battleOver) return;
         playerTurn = false;
+        if (reflectTurns > 0) reflectTurns--;
 
         // 活动肌肉：回合结束时扣除本回合临时获得的力量
         if (pendingStrengthLoss > 0) {
@@ -627,7 +686,17 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         if (battleOver || paused) return;
 
         enemy.block = 0;
+        enemy.applyRitual();
+        boolean wasSecondPhase = enemy.isSecondPhase;
         enemy.checkPhaseTransition();
+        if (enemy.isSecondPhase && !wasSecondPhase) {
+            playPhaseTransition(this::performEnemyAction);
+        } else {
+            performEnemyAction();
+        }
+    }
+
+    private void performEnemyAction() {
         Enemy.Step s = enemy.current();
         switch (s.intent) {
             case ATTACK -> {
@@ -635,7 +704,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
                 int dmg = s.value + enemy.power;
                 if (enemyWeak > 0) dmg = dmg * 3 / 4;
                 if (enemy.isBoss && enemy.isSecondPhase && playerBlock > 0) {
-                    dmg = (int) Math.floor(dmg * 1.40);
+                    dmg = (int) Math.floor(dmg * 1.60);
                 }
                 if (playerBlock > 0) {
                     int absorb = Math.min(playerBlock, dmg);
@@ -650,6 +719,13 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             case DEFEND -> enemy.block += s.value;
             case BUFF -> enemy.power += s.value;
             case WEAKEN -> weakTurns = Math.max(weakTurns, s.value);
+            case REFLECT -> reflectTurns = Math.max(reflectTurns,s.value);
+            case SPIT -> {
+                for (int i = 0; i < s.value; i++) {
+                    draw.add(Card.slime());
+                }
+            }
+            case RITUAL -> enemy.setRitualPower(s.value);
         }
         if (enemyWeak > 0) enemyWeak--;
         enemy.advance();
@@ -662,6 +738,31 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             startPlayerTurn();
         });
         pause.play();
+    }
+
+    /** 转阶段动画：一阶段立绘淡出后，二阶段立绘在原地淡入。 */
+    private void playPhaseTransition(Runnable onDone) {
+        ImageView second = new ImageView();
+        Image img = new Image(getClass().getResourceAsStream(
+                "/com/example/demo/portrait/" + enemy.name + "二阶段.png"));
+        second.setImage(img);
+        second.setFitWidth(210);
+        second.setFitHeight(210);
+        second.setPreserveRatio(true);
+        second.setOpacity(0);
+        enemyPortrait.getChildren().add(second);
+
+        FadeTransition fadeOut = new FadeTransition(Duration.millis(500), enemyPortraitImg);
+        fadeOut.setFromValue(1.0);
+        fadeOut.setToValue(0.0);
+
+        FadeTransition fadeIn = new FadeTransition(Duration.millis(500), second);
+        fadeIn.setFromValue(0.0);
+        fadeIn.setToValue(1.0);
+
+        SequentialTransition seq = new SequentialTransition(fadeOut, fadeIn);
+        seq.setOnFinished(e -> onDone.run());
+        seq.play();
     }
 
     public void setPaused(boolean p) {
@@ -802,6 +903,28 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             eChips.getChildren().add(BattleUiFactory.statusChip("伤", enemyVulnerable, "#dc2626",
                     "易伤 " + enemyVulnerable + " 回合：承受伤害 ×1.5"));
         }
+        if (reflectTurns > 0) {
+            int pct = (int)(enemy.getReflectRate() * 100);
+            eChips.getChildren().add(BattleUiFactory.statusChip("反", reflectTurns, "#9400D3",
+                    "反伤 " + reflectTurns + " 回合：你攻击时受到造成伤害 " + pct + "% 的伤害"));
+        }
+
+        // 左下角仪式状态栏：仪式激活时显示每回合力量增长效果
+        int ritual = enemy.getRitualPower();
+        if (ritual > 0) {
+            ritualStatus.setText("仪式：每回合力量 +" + ritual);
+            ritualStatus.setVisible(true);
+        } else {
+            ritualStatus.setVisible(false);
+        }
+
+        // 破甲状态栏：BOSS 二阶段时显示特殊破甲机制
+        if (enemy.isBoss && enemy.isSecondPhase) {
+            armorBreakStatus.setText("破甲：你持盾时其攻击 ×1.6");
+            armorBreakStatus.setVisible(true);
+        } else {
+            armorBreakStatus.setVisible(false);
+        }
         if (enemyWeak > 0) {
             eChips.getChildren().add(BattleUiFactory.statusChip("弱", enemyWeak, "#7c3aed",
                     "虚弱 " + enemyWeak + " 回合：敌人造成的伤害 ×0.75"));
@@ -844,6 +967,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         Button btn = new Button();
         btn.setGraphic(face);
         btn.setStyle("-fx-background-color: transparent; -fx-padding: 0; -fx-cursor: hand;");
+        btn.setDisable(c.cost < 0 || c.cost > energy || !playerTurn || battleOver);
         btn.setDisable(!CardPlay.canPlay(c, this));
         btn.setOnAction(e -> {
             play(c);
