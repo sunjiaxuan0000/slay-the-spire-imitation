@@ -6,7 +6,7 @@ import com.example.demo.card.CardFaceView;
 import com.example.demo.character.CharacterSelect;
 import com.example.demo.character.Player;
 import com.example.demo.character.Relic;
-import com.example.demo.enemy.Boss;
+import com.example.demo.enemy.Duke_Porcodraco;
 import com.example.demo.enemy.Cultist_Pig;
 import com.example.demo.enemy.Enemy;
 import com.example.demo.enemy.GuardPig;
@@ -618,7 +618,7 @@ public class HelloApplication extends Application {
             case MONSTER -> startBattle(stage, map, player, GameMap.NodeType.MONSTER,
                     Math.random() < 0.4 ? new Cultist_Pig() : new Slime());
             case ELITE   -> startBattle(stage, map, player, GameMap.NodeType.ELITE, new GuardPig());
-            case BOSS    -> startBattle(stage, map, player, GameMap.NodeType.BOSS, new Boss());
+            case BOSS    -> startBattle(stage, map, player, GameMap.NodeType.BOSS, new Duke_Porcodraco());
             case START   -> showRoomScene(stage, map, player);
             case EVENT   -> {
                 List<EventDef> events = EventDef.pool();

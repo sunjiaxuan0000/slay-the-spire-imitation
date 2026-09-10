@@ -49,6 +49,7 @@ import java.util.function.Consumer;
 public class BattleView extends javafx.scene.layout.StackPane implements BattleState {
     private StackPane enemyPortrait;
     private ImageView enemyPortraitImg;
+    private double enemyPortraitSize = 210;  // 敌人立绘尺寸（BOSS 放大）
     private SpriteAnimator playerAnim;
     private SpriteAnimator enemyAnim;
     private long lastFrameTime = 0;
@@ -341,21 +342,22 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         intentRow.setAlignment(Pos.CENTER);
         intentRow.getChildren().addAll(eIntentIcon, eIntentNum);
 
+        enemyPortraitSize = enemy.isBoss ? 280 : 210;
         StackPane portrait;
         if (enemy.hasPortrait) {
             enemyPortraitImg = new ImageView();
             Image img = new Image(getClass().getResourceAsStream("/com/example/demo/portrait/" + enemy.name + ".png"));
             enemyPortraitImg.setImage(img);
-            enemyPortraitImg.setFitWidth(210);
-            enemyPortraitImg.setFitHeight(210);
+            enemyPortraitImg.setFitWidth(enemyPortraitSize);
+            enemyPortraitImg.setFitHeight(enemyPortraitSize);
             enemyPortraitImg.setPreserveRatio(true);
             portrait = new StackPane(enemyPortraitImg);
         } else {
             portrait = BattleUiFactory.portrait(enemy.name.substring(0, 1),
                     "radial-gradient(center 35% 30%, radius 100%, #6b7280, #1f2937);");
         }
-        portrait.setPrefSize(210, 210);
-        portrait.setMaxSize(210, 210);
+        portrait.setPrefSize(enemyPortraitSize, enemyPortraitSize);
+        portrait.setMaxSize(enemyPortraitSize, enemyPortraitSize);
         enemyPortrait = portrait;
 
         BattleUiFactory.hpWrap(eHpWrap, eHpFill, eHpText, 240, "#dc2626");
@@ -846,8 +848,8 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         Image img = new Image(getClass().getResourceAsStream(
                 "/com/example/demo/portrait/" + enemy.name + "二阶段.png"));
         second.setImage(img);
-        second.setFitWidth(210);
-        second.setFitHeight(210);
+        second.setFitWidth(enemyPortraitSize);
+        second.setFitHeight(enemyPortraitSize);
         second.setPreserveRatio(true);
         second.setOpacity(0);
         enemyPortrait.getChildren().add(second);

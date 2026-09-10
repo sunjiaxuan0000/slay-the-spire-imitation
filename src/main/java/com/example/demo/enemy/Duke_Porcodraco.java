@@ -6,11 +6,11 @@ import java.util.List;
  * BOSS：猪龙鱼公爵
  * 拥有双阶段机制 — 血量降至 50% 时切换到二阶段轮盘并重置指针。
  */
-public class Boss extends Enemy {
+public class Duke_Porcodraco extends Enemy {
 
     private final List<Step> secondPlan;
 
-    public Boss() {
+    public Duke_Porcodraco() {
         super("猪龙鱼公爵", 200, true, true, List.of(
                 new Step(Intent.BUFF, 3),
                 new Step(Intent.ATTACK, 13),
