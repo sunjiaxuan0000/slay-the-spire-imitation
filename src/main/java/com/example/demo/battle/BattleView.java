@@ -1,7 +1,9 @@
 package com.example.demo.battle;
 
+import com.example.demo.card.BattleState;
 import com.example.demo.card.Card;
 import com.example.demo.card.CardFaceView;
+import com.example.demo.card.CardPlay;
 import com.example.demo.card.CardView;
 import com.example.demo.character.Player;
 import com.example.demo.character.Relic;
@@ -22,11 +24,9 @@ import javafx.scene.control.Label;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
-import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -45,8 +45,9 @@ import java.util.function.Consumer;
  * 卡牌渲染委托 {@link CardView}，静态 UI 构件委托 {@link BattleUiFactory}，
  * 弹层（牌堆浏览/奖励/死亡）委托 view 包中各自的 Overlay 类。
  */
-public class BattleView extends javafx.scene.layout.StackPane {
+public class BattleView extends javafx.scene.layout.StackPane implements BattleState {
     private StackPane enemyPortrait;
+    private ImageView enemyPortraitImg;
     private SpriteAnimator playerAnim;
     private SpriteAnimator enemyAnim;
     private long lastFrameTime = 0;
@@ -79,6 +80,7 @@ public class BattleView extends javafx.scene.layout.StackPane {
     private int energy = 3;
     private int playerBlock = 0;
     private int weakTurns = 0;
+    private int reflectTurns = 0;
     private int enemyVulnerable = 0;
     private int playerStrength = 0;
     private boolean playerTurn = true;
@@ -297,13 +299,13 @@ public class BattleView extends javafx.scene.layout.StackPane {
 
         StackPane portrait;
         if (enemy.hasPortrait) {
-            ImageView portraitImg = new ImageView();
+            enemyPortraitImg = new ImageView();
             Image img = new Image(getClass().getResourceAsStream("/com/example/demo/portrait/" + enemy.name + ".png"));
-            portraitImg.setImage(img);
-            portraitImg.setFitWidth(210);
-            portraitImg.setFitHeight(210);
-            portraitImg.setPreserveRatio(true);
-            portrait = new StackPane(portraitImg);
+            enemyPortraitImg.setImage(img);
+            enemyPortraitImg.setFitWidth(210);
+            enemyPortraitImg.setFitHeight(210);
+            enemyPortraitImg.setPreserveRatio(true);
+            portrait = new StackPane(enemyPortraitImg);
         } else {
             portrait = BattleUiFactory.portrait(enemy.name.substring(0, 1),
                     "radial-gradient(center 35% 30%, radius 100%, #6b7280, #1f2937);");
@@ -389,6 +391,16 @@ public class BattleView extends javafx.scene.layout.StackPane {
                 color = "#d97706";
                 tip = "意图·强化自身：力量 +" + s.value;
             }
+            case REFLECT ->{
+                glyph="反";
+                color ="#9400D3";
+                tip="意图·反弹伤害："+s.value+" 回合，当你攻击时，受到造成伤害30%的伤害";
+            }
+            case SPIT -> {
+                glyph = "黏";
+                color = "#16a34a";
+                tip = "意图·吐黏液：向你的抽牌堆塞入 " + s.value + " 张黏液";
+            }
             default -> {
                 glyph = "弱";
                 color = "#7c3aed";
@@ -449,58 +461,79 @@ public class BattleView extends javafx.scene.layout.StackPane {
         return draw.remove(draw.size() - 1);
     }
 
+    // ================= 出牌（规则结算委托 CardPlay） =================
+
+    /** 出牌入口薄壳：具体结算规则见 {@link CardPlay#play(Card, BattleState)}。 */
     private void play(Card c) {
         if (!playerTurn || battleOver) return;
-        if (c.cost > energy) return;
-
-        energy -= c.cost;
-        if (c.damage > 0) {
-            for (int i = 0; i < c.hits; i++) {
-                int dmg = c.damage + playerStrength;
-                if (weakTurns > 0) dmg = dmg * 3 / 4;
-                if (enemyVulnerable > 0) dmg = dmg * 3 / 2;
-                damageEnemy(dmg);
-                if (battleOver) break;
-            }
-        }
-        if (c.kind == Card.Kind.BASH) {
-            enemyVulnerable += 2;
-        }
-        if (c.kind == Card.Kind.LIGHTNING) {
-            enemyVulnerable += 1;
-        }
-        if (c.kind == Card.Kind.KINDLE) {
-            playerStrength += 2;
-        }
-        if (c.kind == Card.Kind.BLEED) {
-            energy += 2;
-            player.damage(3);
-            hud.refresh();
-            if (player.hp() == 0) { playerDied(); return; }
-        }
-        if (c.kind == Card.Kind.RAGE) {
-            energy += 2;
-        }
-        if (c.kind == Card.Kind.OFFERING) {
-            player.damage(6);
-            playerAnim.triggerHurt();
-            energy += 2;
-            hud.refresh();
-            if (player.hp() == 0) { playerDied(); return; }
-        }
-        if (c.block > 0) playerBlock += c.block;
-        if (c.draw > 0) drawHand(c.draw);
-
-        hand.remove(c);
-        if (c.exhaust) {
-            // 消耗：不进入弃牌堆
-        } else {
-            discard.add(c);
-        }
-        if (!battleOver) refreshAll();
+        if (c.cost < 0 || c.cost > energy) return;
+        CardPlay.play(c, this);
     }
 
-    private void damageEnemy(int dmg) {
+    // ================= BattleState 实现 =================
+
+    @Override
+    public boolean isPlayerTurn() {
+        return playerTurn;
+    }
+
+    @Override
+    public boolean isBattleOver() {
+        return battleOver;
+    }
+
+    @Override
+    public int getEnergy() {
+        return energy;
+    }
+
+    @Override
+    public void spendEnergy(int amount) {
+        energy -= amount;
+    }
+
+    @Override
+    public void gainEnergy(int amount) {
+        energy += amount;
+    }
+
+    @Override
+    public int getStrength() {
+        return playerStrength;
+    }
+
+    @Override
+    public void gainStrength(int amount) {
+        playerStrength += amount;
+    }
+
+    @Override
+    public int getWeakTurns() {
+        return weakTurns;
+    }
+
+    @Override
+    public int getEnemyVulnerable() {
+        return enemyVulnerable;
+    }
+
+    @Override
+    public void addEnemyVulnerable(int amount) {
+        enemyVulnerable += amount;
+    }
+
+    @Override
+    public int getBlock() {
+        return playerBlock;
+    }
+
+    @Override
+    public void addBlock(int amount) {
+        playerBlock += amount;
+    }
+
+    @Override
+    public void damageEnemy(int dmg) {
         enemyAnim.triggerHitKnock();
         if (enemy.block > 0) {
             int absorb = Math.min(enemy.block, dmg);
@@ -508,14 +541,59 @@ public class BattleView extends javafx.scene.layout.StackPane {
             dmg -= absorb;
         }
         enemy.hp = Math.max(0, enemy.hp - dmg);
+        applyReflect(dmg);
         if (enemy.hp == 0) victory();
     }
 
+    @Override
+    public boolean loseHp(int hp, boolean withHurtAnim) {
+        player.damage(hp);
+        if (withHurtAnim) playerAnim.triggerHurt();
+        hud.refresh();
+        if (player.hp() == 0) { playerDied(); return true; }
+        return false;
+    }
+
+    @Override
+    public void drawCards(int n) {
+        drawHand(n);
+    }
+
+    @Override
+    public void onCardPlayed(Card c) {
+        hand.remove(c);
+        if (c.exhaust) {
+            // 消耗：不进入弃牌堆
+        } else {
+            discard.add(c);
+        }
+    }
+
+    @Override
+    public void refreshIfAlive() {
+        if (!battleOver) refreshAll();
+    }
+
+    /** 反伤：怪物处于反伤状态时，把玩家造成伤害的一定比例反弹给玩家（先扣格挡再扣血）。 */
+    private void applyReflect(int dmg) {
+        if (reflectTurns <= 0) return;
+        int reflectDmg = (int)(dmg * enemy.getReflectRate());
+        if (reflectDmg <= 0) return;
+        if (playerBlock > 0) {
+            int absorb = Math.min(playerBlock, reflectDmg);
+            playerBlock -= absorb;
+            reflectDmg -= absorb;
+        }
+        player.hp = Math.max(0, player.hp - reflectDmg);
+        hud.refresh();
+        if (player.hp == 0) playerDied();
+    }
     // ================= 怪物回合 =================
 
     private void endPlayerTurn() {
         if (!playerTurn || battleOver) return;
         playerTurn = false;
+        if (reflectTurns > 0) reflectTurns--;
 
         discard.addAll(hand);
         hand.clear();
@@ -530,7 +608,16 @@ public class BattleView extends javafx.scene.layout.StackPane {
         if (battleOver || paused) return;
 
         enemy.block = 0;
+        boolean wasSecondPhase = enemy.isSecondPhase;
         enemy.checkPhaseTransition();
+        if (enemy.isSecondPhase && !wasSecondPhase) {
+            playPhaseTransition(this::performEnemyAction);
+        } else {
+            performEnemyAction();
+        }
+    }
+
+    private void performEnemyAction() {
         Enemy.Step s = enemy.current();
         switch (s.intent) {
             case ATTACK -> {
@@ -552,6 +639,12 @@ public class BattleView extends javafx.scene.layout.StackPane {
             case DEFEND -> enemy.block += s.value;
             case BUFF -> enemy.power += s.value;
             case WEAKEN -> weakTurns = Math.max(weakTurns, s.value);
+            case REFLECT -> reflectTurns = Math.max(reflectTurns,s.value);
+            case SPIT -> {
+                for (int i = 0; i < s.value; i++) {
+                    draw.add(Card.slime());
+                }
+            }
         }
         enemy.advance();
 
@@ -563,6 +656,31 @@ public class BattleView extends javafx.scene.layout.StackPane {
             startPlayerTurn();
         });
         pause.play();
+    }
+
+    /** 转阶段动画：一阶段立绘淡出后，二阶段立绘在原地淡入。 */
+    private void playPhaseTransition(Runnable onDone) {
+        ImageView second = new ImageView();
+        Image img = new Image(getClass().getResourceAsStream(
+                "/com/example/demo/portrait/" + enemy.name + "二阶段.png"));
+        second.setImage(img);
+        second.setFitWidth(210);
+        second.setFitHeight(210);
+        second.setPreserveRatio(true);
+        second.setOpacity(0);
+        enemyPortrait.getChildren().add(second);
+
+        FadeTransition fadeOut = new FadeTransition(Duration.millis(500), enemyPortraitImg);
+        fadeOut.setFromValue(1.0);
+        fadeOut.setToValue(0.0);
+
+        FadeTransition fadeIn = new FadeTransition(Duration.millis(500), second);
+        fadeIn.setFromValue(0.0);
+        fadeIn.setToValue(1.0);
+
+        SequentialTransition seq = new SequentialTransition(fadeOut, fadeIn);
+        seq.setOnFinished(e -> onDone.run());
+        seq.play();
     }
 
     public void setPaused(boolean p) {
@@ -618,8 +736,11 @@ public class BattleView extends javafx.scene.layout.StackPane {
                 Card.hammer(), Card.impregnable(),
                 Card.doubleStrike(), Card.kindle(), Card.lightning(),
                 Card.rage(), Card.offering());
-        List<Integer> weights = List.of(
-                4, 4, 3, 3, 3, 2, 2, 4, 2, 4, 3, 2);
+        // 权重直接取自 Card.Kind.weight（4=白/普通，3=蓝/罕见，1=金/稀有），
+        // 避免与卡池硬编码的双份数据源不同步。
+        List<Integer> weights = pool.stream()
+                .map(c -> c.kind.weight)
+                .toList();
 
         List<Card> offers = new ArrayList<>();
         List<Card> remaining = new ArrayList<>(pool);
@@ -691,6 +812,11 @@ public class BattleView extends javafx.scene.layout.StackPane {
             eChips.getChildren().add(BattleUiFactory.statusChip("伤", enemyVulnerable, "#dc2626",
                     "易伤 " + enemyVulnerable + " 回合：承受伤害 ×1.5"));
         }
+        if (reflectTurns > 0) {
+            int pct = (int)(enemy.getReflectRate() * 100);
+            eChips.getChildren().add(BattleUiFactory.statusChip("反", reflectTurns, "#9400D3",
+                    "反伤 " + reflectTurns + " 回合：你攻击时受到造成伤害 " + pct + "% 的伤害"));
+        }
         refreshIntent();
 
         // 手牌
@@ -724,7 +850,7 @@ public class BattleView extends javafx.scene.layout.StackPane {
         Button btn = new Button();
         btn.setGraphic(face);
         btn.setStyle("-fx-background-color: transparent; -fx-padding: 0; -fx-cursor: hand;");
-        btn.setDisable(c.cost > energy || !playerTurn || battleOver);
+        btn.setDisable(c.cost < 0 || c.cost > energy || !playerTurn || battleOver);
         btn.setOnAction(e -> {
             play(c);
             refreshHandEnabled();

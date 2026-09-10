@@ -7,8 +7,8 @@ import com.example.demo.character.CharacterSelect;
 import com.example.demo.character.Player;
 import com.example.demo.character.Relic;
 import com.example.demo.enemy.Boss;
-import com.example.demo.enemy.EliteSlime;
 import com.example.demo.enemy.Enemy;
+import com.example.demo.enemy.GuardPig;
 import com.example.demo.enemy.Slime;
 import com.example.demo.event.EventDef;
 import com.example.demo.event.EventView;
@@ -35,6 +35,8 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
@@ -57,6 +59,9 @@ public class HelloApplication extends Application {
     /** 默认窗口分辨率（1280×720 = 16:9，和主菜单背景图同比例，铺满零裁切） */
     private static final double W = 1280;
     private static final double H = 720;
+
+    /** 地图两侧黑边宽度（像素）——想调黑边宽窄就改这个数 */
+    private static final double MAP_SIDE_MARGIN = 190;
 
     /** 主菜单的固定尺寸：离开菜单时记录，返回菜单时强制恢复，防止被游戏场景带�?*/
     private double menuW = W;
@@ -164,6 +169,7 @@ public class HelloApplication extends Application {
         ScrollPane scroll = new ScrollPane();
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER); // 隐藏滚动条（滚轮/拖动仍可用）
         scroll.setPannable(true);
         scroll.setMinSize(0, 0); // 内容再高也不许把窗口撑大（否则回主菜单会被拉大）
         scroll.setStyle("-fx-background: #0b1020; -fx-background-color: #0b1020;");
@@ -172,9 +178,23 @@ public class HelloApplication extends Application {
                 type -> handleArrive(stage, map, player, hud, type), scroll, true);
         scroll.setContent(view);
 
+        // 让地图两侧留黑边：地图限宽居中，两侧露出黑底（HUD 仍占满宽度）
+        StackPane mapArea = new StackPane(scroll);
+        mapArea.setStyle("-fx-background-color: black;");
+        scroll.maxWidthProperty().bind(
+                mapArea.widthProperty().subtract(MAP_SIDE_MARGIN * 2));
+
+        // 右侧黑边处贴图例 example.png（宽度随黑边宽度自适应）
+        Node legend = legendNode();
+        if (legend != null) {
+            mapArea.getChildren().add(legend);
+            StackPane.setAlignment(legend, Pos.CENTER_RIGHT);
+            StackPane.setMargin(legend, new Insets(12, 6, 0, 0));
+        }
+
         BorderPane content = new BorderPane();
         content.setTop(hud);
-        content.setCenter(scroll);
+        content.setCenter(mapArea);
 
         Scene scene = wrapOverlay(stage, content);
         scene.setOnKeyPressed(e -> {
@@ -289,11 +309,26 @@ public class HelloApplication extends Application {
         ScrollPane scroll = new ScrollPane();
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER); // 隐藏滚动条（滚轮/拖动仍可用）
         scroll.setPannable(true);
         scroll.setStyle("-fx-background: #0b1020; -fx-background-color: #0b1020;");
 
         MapView preview = new MapView(map, t -> { }, scroll, false); // 只读地图界面
         scroll.setContent(preview);
+
+        // 同样的两侧黑边：地图限宽居中
+        StackPane mapArea = new StackPane(scroll);
+        mapArea.setStyle("-fx-background-color: black;");
+        scroll.maxWidthProperty().bind(
+                mapArea.widthProperty().subtract(MAP_SIDE_MARGIN * 2));
+
+        // 右侧黑边处同样贴图例
+        Node legend2 = legendNode();
+        if (legend2 != null) {
+            mapArea.getChildren().add(legend2);
+            StackPane.setAlignment(legend2, Pos.TOP_RIGHT);
+            StackPane.setMargin(legend2, new Insets(12, 6, 0, 0));
+        }
 
         Button back = new Button("返回战斗");
         back.setFont(Font.font(17));
@@ -305,7 +340,7 @@ public class HelloApplication extends Application {
         StackPane.setMargin(back, new Insets(0, 30, 24, 0));
 
         StackPane window = new StackPane();
-        window.getChildren().addAll(scroll, back);
+        window.getChildren().addAll(mapArea, back);
 
         // 把“当前所在层”滚到屏幕中�?
         Platform.runLater(() -> preview.scrollToLayer(
@@ -333,6 +368,19 @@ public class HelloApplication extends Application {
         StackPane root = new StackPane();
         root.getChildren().addAll(content, overlayHost);
         return sizedScene(stage, root);
+    }
+
+    /** 右侧黑边上的图例（example.png），宽度自动跟随 MAP_SIDE_MARGIN */
+    private Node legendNode() {
+        var in = getClass().getResourceAsStream("/com/example/demo/icons/example.png");
+        if (in == null) return null;
+        ImageView iv = new ImageView(new Image(in));
+        iv.setPreserveRatio(true);
+        iv.setMouseTransparent(true);
+        double w = Math.max(40, MAP_SIDE_MARGIN - 12); // 比黑边略窄一点
+        iv.setFitWidth(w);
+        iv.setFitHeight(w);
+        return iv;
     }
 
     // ================= 顶部 HUD（含三个整页窗口入口�?=================
@@ -416,6 +464,7 @@ public class HelloApplication extends Application {
         ScrollPane scroll = new ScrollPane();
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER); // 隐藏滚动条（滚轮/拖动仍可用）
         scroll.setPannable(true);
         scroll.setStyle("-fx-background: #0b1020; -fx-background-color: #0b1020;");
         scroll.setPrefSize(1060, 430);
@@ -522,7 +571,7 @@ public class HelloApplication extends Application {
                               GameMap.NodeType type) {
         switch (type) {
             case MONSTER -> startBattle(stage, map, player, GameMap.NodeType.MONSTER, new Slime());
-            case ELITE   -> startBattle(stage, map, player, GameMap.NodeType.ELITE, new EliteSlime());
+            case ELITE   -> startBattle(stage, map, player, GameMap.NodeType.ELITE, new GuardPig());
             case BOSS    -> startBattle(stage, map, player, GameMap.NodeType.BOSS, new Boss());
             case START   -> showRoomScene(stage, map, player);
             case EVENT   -> {
