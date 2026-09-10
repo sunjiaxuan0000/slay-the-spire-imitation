@@ -66,6 +66,19 @@ public class Card {
 
     private static int nextId = 0;
 
+     /** 能否被打出：约定 cost &lt; 0 表示不可打出（如“伤口”）。 */
+    public boolean isPlayable() {
+        return cost >= 0;
+    }
+
+    /**
+     * 打出后是否离场（消耗）：显式消耗牌，或能力牌默认消耗。
+     * <p>与字段 {@link #exhaust} 区分：能力牌默认消耗但卡面不显示“消耗”文字。
+     */
+    public boolean isExhaustOnPlay() {
+        return exhaust || kind.type == Type.POWER;
+    }
+
     private Card(Kind kind, int cost, int damage, int block, int draw, boolean exhaust, int hits) {
         this.id = ++nextId;
         this.kind = kind;

@@ -82,6 +82,10 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     private int weakTurns = 0;
     private int reflectTurns = 0;
     private int enemyVulnerable = 0;
+    private int enemyWeak = 0;
+    private int pendingStrengthLoss = 0;
+    private boolean noDrawThisTurn = false;
+    private boolean brutality = false;
     private int playerStrength = 0;
     private boolean playerTurn = true;
     private boolean battleOver = false;
@@ -440,7 +444,9 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
                 glyph = "攻";
                 color = "#dc2626";
                 number = s.value + enemy.power;
-                tip = "意图·攻击：将对玩家造成 " + number + " 伤害";
+                if (enemyWeak > 0) number = number * 3 / 4;
+                tip = "意图·攻击：将对玩家造成 " + number + " 伤害"
+                        + (enemyWeak > 0 ? "（虚弱 ×0.75）" : "");
             }
             case DEFEND -> {
                 glyph = "防";
@@ -498,9 +504,13 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         playerBlock = 0;
         if (weakTurns > 0) weakTurns--;
         if (enemyVulnerable > 0) enemyVulnerable--;
+        noDrawThisTurn = false;
         energy = 3;
 
-        drawHand(5 + (hasRelic("请假条") ? 1 : 0));
+        // 残暴：每回合开始失去 1 点生命，随后多抽 1 张
+        if (brutality && loseHp(1, true)) return;
+
+        drawHand(5 + (hasRelic("请假条") ? 1 : 0) + (brutality ? 1 : 0));
 
         if (turn == 1 && hasRelic("青铜怀表")) {
             playerBlock = 2;
@@ -510,6 +520,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     }
 
     private void drawHand(int n) {
+        if (noDrawThisTurn) return; // 战斗专注：本回合禁止再抽牌
         for (int i = 0; i < n; i++) {
             if (hand.size() >= HAND_LIMIT) break;
             Card c = drawOne();
@@ -590,6 +601,31 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     }
 
     @Override
+    public void addEnemyWeak(int amount) {
+        enemyWeak += amount;
+    }
+
+    @Override
+    public void doubleBlock() {
+        playerBlock *= 2;
+    }
+
+    @Override
+    public void loseStrengthAtTurnEnd(int amount) {
+        pendingStrengthLoss += amount;
+    }
+
+    @Override
+    public void forbidDrawThisTurn() {
+        noDrawThisTurn = true;
+    }
+
+    @Override
+    public void enableBrutality() {
+        brutality = true;
+    }
+
+    @Override
     public int getBlock() {
         return playerBlock;
     }
@@ -627,10 +663,15 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     }
 
     @Override
+    public void addToDrawPile(Card c) {
+        draw.add(c);
+    }
+
+    @Override
     public void onCardPlayed(Card c) {
         hand.remove(c);
-        if (c.exhaust) {
-            // 消耗：不进入弃牌堆
+        if (c.isExhaustOnPlay()) {
+            // 消耗（含能力牌）：不进入弃牌堆
         } else {
             discard.add(c);
         }
@@ -662,6 +703,12 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         playerTurn = false;
         if (reflectTurns > 0) reflectTurns--;
 
+        // 活动肌肉：回合结束时扣除本回合临时获得的力量
+        if (pendingStrengthLoss > 0) {
+            playerStrength -= pendingStrengthLoss;
+            pendingStrengthLoss = 0;
+        }
+
         discard.addAll(hand);
         hand.clear();
         refreshAll();
@@ -691,6 +738,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             case ATTACK -> {
                 enemyAnim.triggerAttackDash();
                 int dmg = s.value + enemy.power;
+                if (enemyWeak > 0) dmg = dmg * 3 / 4;
                 if (enemy.isBoss && enemy.isSecondPhase && playerBlock > 0) {
                     dmg = (int) Math.floor(dmg * 1.60);
                 }
@@ -715,6 +763,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             }
             case RITUAL -> enemy.setRitualPower(s.value);
         }
+        if (enemyWeak > 0) enemyWeak--;
         enemy.advance();
 
         refreshAll();
@@ -766,11 +815,17 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
 
     // ================= 胜负 =================
 
+    /** 战斗结束：清除战斗中产生的状态牌（伤口/黏液等），不遗留到后续牌组。 */
+    private void clearStatusCards() {
+        player.deck.removeIf(c -> c.kind.type == Card.Type.STATUS);
+    }
+
     private void victory() {
         gameTimer.stop();
         if (battleOver) return;
         battleOver = true;
         playerAnim.stop();
+        clearStatusCards();
         showReward();
     }
 
@@ -780,6 +835,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         diedShown = true;
         battleOver = true;
         playerAnim.stop();
+        clearStatusCards();
 
         deadDim.setVisible(true);
 
@@ -800,11 +856,13 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         pileOverlay.hide();
 
         List<Card> pool = List.of(
-                Card.bash(), Card.sweep(),
-                Card.pommelStrike(), Card.shrug(), Card.bleed(),
+                Card.sweep(), Card.bleed(),
+                Card.pommelStrike(), Card.shrug(),
                 Card.hammer(), Card.impregnable(),
                 Card.doubleStrike(), Card.kindle(), Card.lightning(),
-                Card.rage(), Card.offering());
+                Card.rage(), Card.offering(), Card.wildStrike(),
+                Card.fortify(), Card.focus(), Card.shockwave(),
+                Card.heavyBlade(), Card.adamantArm(), Card.brutality(), Card.flex());
         // 权重直接取自 Card.Kind.weight（4=白/普通，3=蓝/罕见，1=金/稀有），
         // 避免与卡池硬编码的双份数据源不同步。
         List<Integer> weights = pool.stream()
@@ -903,6 +961,10 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         } else {
             armorBreakStatus.setVisible(false);
         }
+        if (enemyWeak > 0) {
+            eChips.getChildren().add(BattleUiFactory.statusChip("弱", enemyWeak, "#7c3aed",
+                    "虚弱 " + enemyWeak + " 回合：敌人造成的伤害 ×0.75"));
+        }
         refreshIntent();
 
         // 手牌
@@ -922,9 +984,14 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     }
 
     private void refreshHandEnabled() {
-        for (var node : handBox.getChildren()) {
-            if (node instanceof Button btn) {
-                btn.setDisable(!playerTurn || battleOver);
+        // 仅处理“非玩家回合 / 战斗结束”时的整体禁用；
+        // 其余情况保留 refreshAll 中按 CardPlay.canPlay 逐张计算的结果，
+        // 避免把能量不足或不可打出的牌（如“伤口”）错误地重新启用。
+        if (!playerTurn || battleOver) {
+            for (var node : handBox.getChildren()) {
+                if (node instanceof Button btn) {
+                    btn.setDisable(true);
+                }
             }
         }
     }
@@ -937,6 +1004,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         btn.setGraphic(face);
         btn.setStyle("-fx-background-color: transparent; -fx-padding: 0; -fx-cursor: hand;");
         btn.setDisable(c.cost < 0 || c.cost > energy || !playerTurn || battleOver);
+        btn.setDisable(!CardPlay.canPlay(c, this));
         btn.setOnAction(e -> {
             play(c);
             refreshHandEnabled();

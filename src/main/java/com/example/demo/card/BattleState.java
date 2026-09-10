@@ -1,5 +1,4 @@
 package com.example.demo.card;
-
 /**
  * 打出一张牌时所需的战斗状态视图（从 BattleView 抽取）。
  * <p>
@@ -44,6 +43,9 @@ public interface BattleState {
     /** 增加敌人易伤层数 */
     void addEnemyVulnerable(int amount);
 
+    /** 给予敌人虚弱（敌人攻击伤害 ×0.75） */
+    void addEnemyWeak(int amount);
+
     /** 玩家当前格挡值 */
     int getBlock();
 
@@ -66,6 +68,21 @@ public interface BattleState {
 
     /** 抽 n 张牌（受手牌上限约束，具体规则由战斗流程实现） */
     void drawCards(int n);
+
+    /** 将一张牌放入抽牌堆（如“狂野打击”塞入一张“伤口”） */
+    void addToDrawPile(Card c);
+
+    /** 将玩家当前格挡翻倍（巩固） */
+    void doubleBlock();
+
+    /** 记录回合结束时需扣除的力量（活动肌肉的临时力量） */
+    void loseStrengthAtTurnEnd(int amount);
+
+    /** 本回合禁止再抽牌（战斗专注） */
+    void forbidDrawThisTurn();
+
+    /** 启用残暴：每回合开始失去 1 点生命并多抽 1 张 */
+    void enableBrutality();
 
     /** 卡牌结算后移出玩家手牌，并按“是否消耗”决定去向 */
     void onCardPlayed(Card c);
