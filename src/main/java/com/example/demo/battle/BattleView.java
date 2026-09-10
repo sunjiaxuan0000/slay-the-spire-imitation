@@ -1,7 +1,9 @@
 package com.example.demo.battle;
 
+import com.example.demo.card.BattleState;
 import com.example.demo.card.Card;
 import com.example.demo.card.CardFaceView;
+import com.example.demo.card.CardPlay;
 import com.example.demo.card.CardView;
 import com.example.demo.character.Player;
 import com.example.demo.character.Relic;
@@ -45,7 +47,7 @@ import java.util.function.Consumer;
  * 卡牌渲染委托 {@link CardView}，静态 UI 构件委托 {@link BattleUiFactory}，
  * 弹层（牌堆浏览/奖励/死亡）委托 view 包中各自的 Overlay 类。
  */
-public class BattleView extends javafx.scene.layout.StackPane {
+public class BattleView extends javafx.scene.layout.StackPane implements BattleState {
     private StackPane enemyPortrait;
     private SpriteAnimator playerAnim;
     private SpriteAnimator enemyAnim;
@@ -449,58 +451,77 @@ public class BattleView extends javafx.scene.layout.StackPane {
         return draw.remove(draw.size() - 1);
     }
 
+    // ================= 出牌（规则结算委托 CardPlay） =================
+
+    /** 出牌入口薄壳：具体结算规则见 {@link CardPlay#play(Card, BattleState)}。 */
     private void play(Card c) {
-        if (!playerTurn || battleOver) return;
-        if (c.cost > energy) return;
-
-        energy -= c.cost;
-        if (c.damage > 0) {
-            for (int i = 0; i < c.hits; i++) {
-                int dmg = c.damage + playerStrength;
-                if (weakTurns > 0) dmg = dmg * 3 / 4;
-                if (enemyVulnerable > 0) dmg = dmg * 3 / 2;
-                damageEnemy(dmg);
-                if (battleOver) break;
-            }
-        }
-        if (c.kind == Card.Kind.BASH) {
-            enemyVulnerable += 2;
-        }
-        if (c.kind == Card.Kind.LIGHTNING) {
-            enemyVulnerable += 1;
-        }
-        if (c.kind == Card.Kind.KINDLE) {
-            playerStrength += 2;
-        }
-        if (c.kind == Card.Kind.BLEED) {
-            energy += 2;
-            player.damage(3);
-            hud.refresh();
-            if (player.hp() == 0) { playerDied(); return; }
-        }
-        if (c.kind == Card.Kind.RAGE) {
-            energy += 2;
-        }
-        if (c.kind == Card.Kind.OFFERING) {
-            player.damage(6);
-            playerAnim.triggerHurt();
-            energy += 2;
-            hud.refresh();
-            if (player.hp() == 0) { playerDied(); return; }
-        }
-        if (c.block > 0) playerBlock += c.block;
-        if (c.draw > 0) drawHand(c.draw);
-
-        hand.remove(c);
-        if (c.exhaust) {
-            // 消耗：不进入弃牌堆
-        } else {
-            discard.add(c);
-        }
-        if (!battleOver) refreshAll();
+        CardPlay.play(c, this);
     }
 
-    private void damageEnemy(int dmg) {
+    // ================= BattleState 实现 =================
+
+    @Override
+    public boolean isPlayerTurn() {
+        return playerTurn;
+    }
+
+    @Override
+    public boolean isBattleOver() {
+        return battleOver;
+    }
+
+    @Override
+    public int getEnergy() {
+        return energy;
+    }
+
+    @Override
+    public void spendEnergy(int amount) {
+        energy -= amount;
+    }
+
+    @Override
+    public void gainEnergy(int amount) {
+        energy += amount;
+    }
+
+    @Override
+    public int getStrength() {
+        return playerStrength;
+    }
+
+    @Override
+    public void gainStrength(int amount) {
+        playerStrength += amount;
+    }
+
+    @Override
+    public int getWeakTurns() {
+        return weakTurns;
+    }
+
+    @Override
+    public int getEnemyVulnerable() {
+        return enemyVulnerable;
+    }
+
+    @Override
+    public void addEnemyVulnerable(int amount) {
+        enemyVulnerable += amount;
+    }
+
+    @Override
+    public int getBlock() {
+        return playerBlock;
+    }
+
+    @Override
+    public void addBlock(int amount) {
+        playerBlock += amount;
+    }
+
+    @Override
+    public void damageEnemy(int dmg) {
         enemyAnim.triggerHitKnock();
         if (enemy.block > 0) {
             int absorb = Math.min(enemy.block, dmg);
@@ -509,6 +530,35 @@ public class BattleView extends javafx.scene.layout.StackPane {
         }
         enemy.hp = Math.max(0, enemy.hp - dmg);
         if (enemy.hp == 0) victory();
+    }
+
+    @Override
+    public boolean loseHp(int hp, boolean withHurtAnim) {
+        player.damage(hp);
+        if (withHurtAnim) playerAnim.triggerHurt();
+        hud.refresh();
+        if (player.hp() == 0) { playerDied(); return true; }
+        return false;
+    }
+
+    @Override
+    public void drawCards(int n) {
+        drawHand(n);
+    }
+
+    @Override
+    public void onCardPlayed(Card c) {
+        hand.remove(c);
+        if (c.exhaust) {
+            // 消耗：不进入弃牌堆
+        } else {
+            discard.add(c);
+        }
+    }
+
+    @Override
+    public void refreshIfAlive() {
+        if (!battleOver) refreshAll();
     }
 
     // ================= 怪物回合 =================
