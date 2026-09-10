@@ -8,178 +8,255 @@ import javafx.geometry.Pos;
 import javafx.scene.Cursor;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.Tooltip;
+import javafx.scene.image.Image;
+import javafx.scene.layout.Background;
+import javafx.scene.layout.BackgroundImage;
+import javafx.scene.layout.BackgroundPosition;
+import javafx.scene.layout.BackgroundRepeat;
+import javafx.scene.layout.BackgroundSize;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 
 import java.util.List;
+import java.util.Random;
 
 /**
- * “起点房间”：在进入地图冒险前和 NPC 对话、选择初始遗物。
+ * “起点房间”：进入地图冒险前和 NPC 对话、选一个初始遗物。
  *
- * 构图仿照战斗界面但去掉所有战斗 UI：
- *   左边 = 角色立绘（无血量/状态）
- *   右边 = NPC + 对话框
- *   中间 = 三个初始遗物选项（选一个）
- * 只有选中遗物后，“离开房间”按钮才会出现。
+ * 版面（从上到下）：
+ *   …上半屏留白，露出背景图 nieo.png…
+ *   对话框   ← 随机台词，点一下换一句
+ *   遗物选项 1
+ *   遗物选项 2   ← 三个选项在屏幕下半部分，一行一个，格子写“名字 + 描述”
+ *   遗物选项 3
+ *   提示 + “离开房间”按钮（选中遗物后才出现）
+ *
+ * 背景用 nieo.png 等比铺满（cover），所以窗口怎么拉都不会变形。
  */
 public class RoomView extends StackPane {
 
-    private static final String CARD_STYLE = "-fx-background-color: rgba(30, 41, 59, 0.95); "
-            + "-fx-background-radius: 12; -fx-border-color: transparent; -fx-border-width: 2; "
-            + "-fx-border-radius: 12; -fx-padding: 10 14 10 14;";
-    private static final String CARD_STYLE_CHOSEN = "-fx-background-color: rgba(30, 41, 59, 0.95); "
-            + "-fx-background-radius: 12; -fx-border-color: #fbbf24; -fx-border-width: 2; "
-            + "-fx-border-radius: 12; -fx-padding: 10 14 10 14;";
+    /** 背景图路径（放 resources/com/example/demo/ 下） */
+    private static final String BG = "/com/example/demo/nieo.png";
+
+    /** 下半部分内容块的宽度（遗物格子、对话框都按这个宽） */
+    private static final double CONTENT_W = 880;
+
+    private static final String CARD_STYLE = "-fx-background-color: rgba(15, 23, 42, 0.82); "
+            + "-fx-background-radius: 12; -fx-border-color: rgba(148, 163, 184, 0.45); "
+            + "-fx-border-width: 2; -fx-border-radius: 12; -fx-padding: 12 18 12 18;";
+    private static final String CARD_STYLE_HOVER = "-fx-background-color: rgba(30, 41, 59, 0.92); "
+            + "-fx-background-radius: 12; -fx-border-color: rgba(226, 232, 240, 0.75); "
+            + "-fx-border-width: 2; -fx-border-radius: 12; -fx-padding: 12 18 12 18;";
+    private static final String CARD_STYLE_CHOSEN = "-fx-background-color: rgba(69, 26, 3, 0.92); "
+            + "-fx-background-radius: 12; -fx-border-color: #fbbf24; "
+            + "-fx-border-width: 3; -fx-border-radius: 12; -fx-padding: 12 18 12 18;";
 
     private final Player player;
     private final List<Relic> options;
+    private final List<String> dialogues; // 随机台词池
+    private final String npcName;
     private final Runnable onLeave;
+    private final Random rnd = new Random();
 
     private boolean chosen = false;
+    private int dialogIndex = -1;
+    private final List<Button> optionButtons = new java.util.ArrayList<>();
+
+    private final Label dialogText = new Label();
     private final Button leaveBtn = new Button("离开房间");
     private final Label hint = new Label("选择一个初始遗物后即可离开");
 
-    public RoomView(Player player, List<Relic> options,
-                    String npcName, String npcDialog, Runnable onLeave) {
+    /** 兼容旧写法：只给一句台词 */
+    public RoomView(Player player, List<Relic> options, String npcName,
+                    String npcDialog, Runnable onLeave) {
+        this(player, options, npcName, List.of(npcDialog), onLeave);
+    }
+
+    public RoomView(Player player, List<Relic> options, String npcName,
+                    List<String> dialogues, Runnable onLeave) {
         this.player = player;
         this.options = options;
+        this.npcName = npcName;
+        this.dialogues = (dialogues == null || dialogues.isEmpty())
+                ? List.of("……") : dialogues;
         this.onLeave = onLeave;
 
-        setStyle("-fx-background-color: linear-gradient(to bottom, #131a22, #1c2430);");
-
-        // ---- 三列：角色 | 遗物选项 | NPC ----
-        HBox columns = new HBox(40);
-        columns.setAlignment(Pos.CENTER);
-        columns.setPadding(new Insets(20, 40, 30, 40));
-
-        // 1) 左边：角色立绘（只有立绘，没有血量/状态等战斗 UI）
-        VBox left = new VBox(8);
-        left.setAlignment(Pos.CENTER);
-        left.setPrefWidth(280);
-        StackPane portrait = portrait("战",
-                "radial-gradient(center 35% 30%, radius 100%, #b45309, #451a03);");
-        portrait.setPrefSize(230, 230);
-        portrait.setMaxSize(230, 230);
-        left.getChildren().add(portrait);
-
-        // 2) 中间：三个初始遗物选项
-        VBox middle = new VBox(14);
-        middle.setAlignment(Pos.CENTER);
-        middle.setPrefWidth(340);
-
-        Label title = new Label("选择一个初始遗物");
-        title.setTextFill(Color.rgb(226, 232, 240));
-        title.setFont(Font.font(19));
-        middle.getChildren().add(title);
-
-        for (Relic r : options) {
-            middle.getChildren().add(buildRelicOption(r));
+        // ---- 背景：nieo.png 等比铺满 ----
+        Image bg = loadImage(BG);
+        if (bg != null) {
+            setBackground(cover(bg));
+        } else {
+            setStyle("-fx-background-color: linear-gradient(to bottom, #131a22, #1c2430);");
         }
 
-        hint.setTextFill(Color.rgb(148, 163, 184));
-        hint.setFont(Font.font(13));
-        middle.getChildren().add(hint);
+        // ---- 下半部分：对话框 → 三个遗物格子 → 提示/离开 ----
+        VBox lower = new VBox(11);
+        lower.setAlignment(Pos.CENTER);
+        lower.setMaxWidth(CONTENT_W);
 
-        // 3) 右边：NPC + 对话框
-        VBox right = new VBox(10);
-        right.setAlignment(Pos.CENTER);
-        right.setPrefWidth(360);
+        lower.getChildren().add(buildDialogBox());
+        for (Relic r : options) {
+            lower.getChildren().add(buildRelicRow(r));
+        }
+        lower.getChildren().add(buildFooter());
 
-        // 对话框
-        Label dialog = new Label("“" + npcDialog + "”");
-        dialog.setTextFill(Color.rgb(241, 245, 249));
-        dialog.setFont(Font.font(15));
-        dialog.setWrapText(true);
-        dialog.setMaxWidth(340);
-        StackPane bubble = new StackPane(dialog);
-        bubble.setPadding(new Insets(14));
-        bubble.setStyle("-fx-background-color: rgba(51, 65, 85, 0.9); -fx-background-radius: 14;");
+        StackPane.setAlignment(lower, Pos.BOTTOM_CENTER);
+        StackPane.setMargin(lower, new Insets(0, 20, -400, 20));
+        getChildren().add(lower);
 
-        // NPC 立绘
-        StackPane npcPortrait = portrait("猪",
-                "radial-gradient(center 35% 30%, radius 100%, #a3a3a3, #3f3f46);");
-        npcPortrait.setPrefSize(160, 160);
-        npcPortrait.setMaxSize(160, 160);
-
-        Label npcNameLabel = new Label(npcName);
-        npcNameLabel.setTextFill(Color.rgb(212, 212, 216));
-        npcNameLabel.setFont(Font.font(18));
-        npcNameLabel.setStyle("-fx-font-weight: bold;");
-
-        right.getChildren().addAll(bubble, npcPortrait, npcNameLabel);
-        columns.getChildren().addAll(left, middle, right);
-        getChildren().add(columns);
-
-        // ---- “离开房间”：选完遗物才出现 ----
-        leaveBtn.setFont(Font.font(17));
-        leaveBtn.setPrefSize(170, 46);
-        leaveBtn.setStyle("-fx-background-color: #16a34a; -fx-text-fill: white; "
-                + "-fx-background-radius: 12; -fx-cursor: hand;");
-        leaveBtn.setVisible(false);
-        leaveBtn.setOnAction(e -> onLeave.run());
-        StackPane.setAlignment(leaveBtn, Pos.BOTTOM_RIGHT);
-        StackPane.setMargin(leaveBtn, new Insets(0, 34, 28, 0));
-        getChildren().add(leaveBtn);
+        showRandomDialog(); // 开局随机一句
 
         // 左上角提示（Esc = 放弃本局回主菜单）
         Label esc = new Label("Esc 放弃本局回主菜单");
-        esc.setTextFill(Color.rgb(100, 116, 139));
+        esc.setTextFill(Color.rgb(203, 213, 225, 0.7));
         esc.setFont(Font.font(13));
         StackPane.setAlignment(esc, Pos.TOP_LEFT);
         StackPane.setMargin(esc, new Insets(14, 0, 0, 18));
         getChildren().add(esc);
     }
 
-    /** 单个遗物选项按钮 */
-    private Button buildRelicOption(Relic r) {
-        VBox card = new VBox(6);
-        card.setAlignment(Pos.CENTER_LEFT);
-        card.setPrefWidth(320);
+    // ================= 对话框 =================
 
+    /** 对话框：选项上方那条，点一下随机换一句台词 */
+    private StackPane buildDialogBox() {
+        Label nameTag = new Label(npcName);
+        nameTag.setTextFill(Color.rgb(253, 224, 71));
+        nameTag.setFont(Font.font(16));
+        nameTag.setStyle("-fx-font-weight: bold;");
+
+        dialogText.setTextFill(Color.rgb(241, 245, 249));
+        dialogText.setFont(Font.font(16));
+        dialogText.setWrapText(true);
+        dialogText.setMaxWidth(CONTENT_W - 70);
+
+        VBox box = new VBox(6, nameTag, dialogText);
+        box.setAlignment(Pos.CENTER_LEFT);
+
+        StackPane bubble = new StackPane(box);
+        bubble.setPadding(new Insets(14, 20, 14, 20));
+        bubble.setMaxWidth(CONTENT_W);
+        bubble.setMinHeight(104);
+        bubble.setStyle("-fx-background-color: rgba(15, 23, 42, 0.86); "
+                + "-fx-background-radius: 14; -fx-border-color: rgba(148, 163, 184, 0.5); "
+                + "-fx-border-width: 1; -fx-border-radius: 14;");
+        bubble.setCursor(Cursor.HAND);
+        Tooltip.install(bubble, new Tooltip("点一下换一句台词"));
+        bubble.setOnMouseClicked(e -> showRandomDialog());
+        StackPane.setAlignment(box, Pos.CENTER_LEFT);
+        return bubble;
+    }
+
+    /** 从台词池里随机挑一句（尽量不和上一句重复） */
+    private void showRandomDialog() {
+        if (dialogues.size() == 1) {
+            dialogIndex = 0;
+        } else {
+            int next;
+            do {
+                next = rnd.nextInt(dialogues.size());
+            } while (next == dialogIndex);
+            dialogIndex = next;
+        }
+        dialogText.setText("“" + dialogues.get(dialogIndex) + "”");
+    }
+
+    // ================= 遗物选项 =================
+
+    /** 一个遗物格子：一行搞定「名字 + 描述」 */
+    private Button buildRelicRow(Relic r) {
         Label name = new Label(r.name);
-        name.setTextFill(Color.WHITE);
-        name.setFont(Font.font(17));
+        name.setTextFill(Color.rgb(253, 224, 71));
+        name.setFont(Font.font(19));
         name.setStyle("-fx-font-weight: bold;");
+        name.setMinWidth(150);
 
         Label desc = new Label(r.desc);
-        desc.setTextFill(Color.rgb(203, 213, 225));
-        desc.setFont(Font.font(13));
-        desc.setWrapText(true);
+        desc.setTextFill(Color.rgb(226, 232, 240));
+        desc.setFont(Font.font(15));
+        desc.setWrapText(false); // 只占一行
+        desc.setMaxWidth(CONTENT_W - 240);
 
-        card.getChildren().addAll(name, desc);
+        HBox row = new HBox(16, name, desc);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setPrefWidth(CONTENT_W - 40);
 
         Button btn = new Button();
-        btn.setGraphic(card);
+        btn.setGraphic(row);
         btn.setStyle(CARD_STYLE);
         btn.setCursor(Cursor.HAND);
-        btn.setMaxWidth(340);
+        btn.setMaxWidth(CONTENT_W);
+        btn.setMinWidth(CONTENT_W);
+        btn.setPrefHeight(66);
+        btn.setOnMouseEntered(e -> {
+            if (!chosen) btn.setStyle(CARD_STYLE_HOVER);
+        });
+        btn.setOnMouseExited(e -> {
+            if (!chosen) btn.setStyle(CARD_STYLE);
+        });
         btn.setOnAction(e -> choose(r, btn));
+        optionButtons.add(btn);
         return btn;
     }
 
-    /** 选中一个遗物：加金框、禁用其它选项、出现离开按钮 */
+    /** 选中一个遗物：加金框、清掉其它选项的高亮、出现离开按钮 */
     private void choose(Relic r, Button btn) {
         if (chosen) return;
         chosen = true;
 
+        // 先把所有格子恢复普通样式，再高亮选中的那个
+        for (Button b : optionButtons) b.setStyle(CARD_STYLE);
         btn.setStyle(CARD_STYLE_CHOSEN);
+        btn.setDisable(false); // 保持可点（只是不再响应，choose 里有 chosen 守卫）
+
         player.addRelic(r); // 遗物记进玩家状态
         hint.setText("已获得：" + r.name + " —— 可以离开了");
         hint.setTextFill(Color.rgb(251, 191, 36));
         leaveBtn.setVisible(true);
     }
 
-    /** 圆形立绘占位（以后换成 ImageView） */
-    private static StackPane portrait(String glyph, String gradient) {
-        StackPane p = new StackPane();
-        p.setStyle("-fx-background-color: " + gradient + "; -fx-background-radius: 115;");
-        Label g = new Label(glyph);
-        g.setTextFill(Color.rgb(255, 255, 255, 0.85));
-        g.setFont(Font.font(96));
-        p.getChildren().add(g);
-        return p;
+    // ================= 底部 =================
+
+    private HBox buildFooter() {
+        hint.setTextFill(Color.rgb(226, 232, 240, 0.75));
+        hint.setFont(Font.font(14));
+
+        leaveBtn.setFont(Font.font(17));
+        leaveBtn.setPrefSize(170, 46);
+        leaveBtn.setStyle("-fx-background-color: #16a34a; -fx-text-fill: white; "
+                + "-fx-background-radius: 12; -fx-cursor: hand;");
+        leaveBtn.setVisible(false);
+        leaveBtn.setOnAction(e -> onLeave.run());
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        HBox footer = new HBox(16, hint, spacer, leaveBtn);
+        footer.setAlignment(Pos.CENTER_LEFT);
+        footer.setMaxWidth(CONTENT_W);
+        footer.setMinWidth(CONTENT_W);
+        return footer;
+    }
+
+    // ================= 工具 =================
+
+    private static Image loadImage(String path) {
+        var in = RoomView.class.getResourceAsStream(path);
+        return in == null ? null : new Image(in);
+    }
+
+    /** 背景图等比铺满（cover）：按窗口比例放大，多余部分居中裁掉 */
+    private static Background cover(Image image) {
+        return new Background(new BackgroundImage(
+                image,
+                BackgroundRepeat.NO_REPEAT,
+                BackgroundRepeat.NO_REPEAT,
+                BackgroundPosition.CENTER,
+                new BackgroundSize(1, 1, true, true, false, true)));
     }
 }

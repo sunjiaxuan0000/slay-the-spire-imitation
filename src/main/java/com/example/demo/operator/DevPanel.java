@@ -5,6 +5,7 @@ import com.example.demo.card.Card;
 import com.example.demo.card.CardFaceView;
 import com.example.demo.character.Player;
 import com.example.demo.character.Relic;
+import com.example.demo.character.RelicFun;
 
 import javafx.beans.value.ObservableValue;
 import javafx.geometry.Insets;
@@ -168,8 +169,9 @@ public class DevPanel extends VBox {
     }
 
     private void fillRelics() {
+        // 列出全部遗物（起点 + 精英 + 事件），点一下就是获得/移除
         FlowPane row = new FlowPane(8, 8);
-        for (Relic r : Relic.pool()) {
+        for (Relic r : RelicFun.allRelics()) {
             row.getChildren().add(relicChip(r, hasRelic(r.name)));
         }
 

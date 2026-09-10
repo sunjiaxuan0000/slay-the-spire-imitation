@@ -139,6 +139,15 @@ public class RelicFun {
         return new ArrayList<>(STARTER_RELICS);
     }
 
+    /** 全部遗物（起点 + 精英 + 事件），开发者模式面板用它列出所有可加/可删的遗物 */
+    public static List<Relic> allRelics() {
+        List<Relic> all = new ArrayList<>();
+        all.addAll(STARTER_RELICS);
+        all.addAll(ELITE_RELICS);
+        all.addAll(EVENT_RELICS);
+        return all;
+    }
+
     public static Relic randomEliteRelic(Player player) {
         // 过滤已持有的遗物，同时保留对应权重
         List<Relic> pool = new ArrayList<>();
