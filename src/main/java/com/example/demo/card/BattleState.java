@@ -67,6 +67,9 @@ public interface BattleState {
     /** 抽 n 张牌（受手牌上限约束，具体规则由战斗流程实现） */
     void drawCards(int n);
 
+    /** 将一张牌放入抽牌堆（如“狂野打击”塞入一张“伤口”） */
+    void addToDrawPile(Card c);
+
     /** 卡牌结算后移出玩家手牌，并按“是否消耗”决定去向 */
     void onCardPlayed(Card c);
 

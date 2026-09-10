@@ -547,6 +547,11 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     }
 
     @Override
+    public void addToDrawPile(Card c) {
+        draw.add(c);
+    }
+
+    @Override
     public void onCardPlayed(Card c) {
         hand.remove(c);
         if (c.exhaust) {
@@ -629,11 +634,17 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
 
     // ================= 胜负 =================
 
+    /** 战斗结束：清除战斗中产生的状态牌（伤口/黏液等），不遗留到后续牌组。 */
+    private void clearStatusCards() {
+        player.deck.removeIf(c -> c.kind.type == Card.Type.STATUS);
+    }
+
     private void victory() {
         gameTimer.stop();
         if (battleOver) return;
         battleOver = true;
         playerAnim.stop();
+        clearStatusCards();
         showReward();
     }
 
@@ -643,6 +654,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         diedShown = true;
         battleOver = true;
         playerAnim.stop();
+        clearStatusCards();
 
         deadDim.setVisible(true);
 
@@ -667,7 +679,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
                 Card.pommelStrike(), Card.shrug(), Card.bleed(),
                 Card.hammer(), Card.impregnable(),
                 Card.doubleStrike(), Card.kindle(), Card.lightning(),
-                Card.rage(), Card.offering());
+                Card.rage(), Card.offering(), Card.wildStrike());
         // 权重直接取自 Card.Kind.weight（4=白/普通，3=蓝/罕见，1=金/稀有），
         // 避免与卡池硬编码的双份数据源不同步。
         List<Integer> weights = pool.stream()
@@ -763,9 +775,14 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     }
 
     private void refreshHandEnabled() {
-        for (var node : handBox.getChildren()) {
-            if (node instanceof Button btn) {
-                btn.setDisable(!playerTurn || battleOver);
+        // 仅处理“非玩家回合 / 战斗结束”时的整体禁用；
+        // 其余情况保留 refreshAll 中按 CardPlay.canPlay 逐张计算的结果，
+        // 避免把能量不足或不可打出的牌（如“伤口”）错误地重新启用。
+        if (!playerTurn || battleOver) {
+            for (var node : handBox.getChildren()) {
+                if (node instanceof Button btn) {
+                    btn.setDisable(true);
+                }
             }
         }
     }
@@ -777,7 +794,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         Button btn = new Button();
         btn.setGraphic(face);
         btn.setStyle("-fx-background-color: transparent; -fx-padding: 0; -fx-cursor: hand;");
-        btn.setDisable(c.cost > energy || !playerTurn || battleOver);
+        btn.setDisable(!CardPlay.canPlay(c, this));
         btn.setOnAction(e -> {
             play(c);
             refreshHandEnabled();

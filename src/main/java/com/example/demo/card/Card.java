@@ -66,6 +66,11 @@ public class Card {
 
     private static int nextId = 0;
 
+    /** 能否被打出：约定 cost &lt; 0 表示不可打出（如“伤口”）。 */
+    public boolean isPlayable() {
+        return cost >= 0;
+    }
+
     private Card(Kind kind, int cost, int damage, int block, int draw, boolean exhaust, int hits) {
         this.id = ++nextId;
         this.kind = kind;

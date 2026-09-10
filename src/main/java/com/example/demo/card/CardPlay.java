@@ -11,9 +11,9 @@ public final class CardPlay {
     private CardPlay() {
     }
 
-    /** 判断一张牌当前是否满足打出条件（轮到玩家、战斗未结束、能量足够）。 */
+    /** 判断一张牌当前是否满足打出条件（牌本身可打出、轮到玩家、战斗未结束、能量足够）。 */
     public static boolean canPlay(Card c, BattleState s) {
-        return s.isPlayerTurn() && !s.isBattleOver() && c.cost <= s.getEnergy();
+        return c.isPlayable() && s.isPlayerTurn() && !s.isBattleOver() && c.cost <= s.getEnergy();
     }
 
     /**
@@ -45,6 +45,7 @@ public final class CardPlay {
             case BASH -> s.addEnemyVulnerable(2);
             case LIGHTNING -> s.addEnemyVulnerable(1);
             case KINDLE -> s.gainStrength(2);
+            case WILD_STRIKE -> s.addToDrawPile(Card.wound());
             case BLEED -> {
                 s.gainEnergy(2);
                 if (s.loseHp(3, false)) return; // 自伤致死：终止结算
