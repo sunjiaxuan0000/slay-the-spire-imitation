@@ -7,6 +7,7 @@ import com.example.demo.character.CharacterSelect;
 import com.example.demo.character.Player;
 import com.example.demo.character.Relic;
 import com.example.demo.enemy.Boss;
+import com.example.demo.enemy.Cultist_Pig;
 import com.example.demo.enemy.Enemy;
 import com.example.demo.enemy.GuardPig;
 import com.example.demo.enemy.Slime;
@@ -570,7 +571,8 @@ public class HelloApplication extends Application {
     private void handleArrive(Stage stage, GameMap map, Player player, RunHud hud,
                               GameMap.NodeType type) {
         switch (type) {
-            case MONSTER -> startBattle(stage, map, player, GameMap.NodeType.MONSTER, new Slime());
+            case MONSTER -> startBattle(stage, map, player, GameMap.NodeType.MONSTER,
+                    Math.random() < 0.4 ? new Cultist_Pig() : new Slime());
             case ELITE   -> startBattle(stage, map, player, GameMap.NodeType.ELITE, new GuardPig());
             case BOSS    -> startBattle(stage, map, player, GameMap.NodeType.BOSS, new Boss());
             case START   -> showRoomScene(stage, map, player);

@@ -112,6 +112,10 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     private final javafx.scene.layout.StackPane eShield = new javafx.scene.layout.StackPane();
     private final Label eShieldNum = new Label();
     private final FlowPane eChips = new FlowPane(4, 4);
+    // 左下角仪式状态栏
+    private final Label ritualStatus = new Label();
+    // 破甲状态栏（BOSS 二阶段）
+    private final Label armorBreakStatus = new Label();
     // 中下
     private int turn = 0;
     private final Label turnLabel = new Label();
@@ -360,10 +364,32 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         cluster.setAlignment(Pos.CENTER_LEFT);
         cluster.getChildren().addAll(eShield, eHpWrap);
 
+        // 仪式状态栏（敌怪血条左下角，青底白字）
+        ritualStatus.setTextFill(Color.WHITE);
+        ritualStatus.setFont(Font.font(14));
+        ritualStatus.setStyle("-fx-font-weight: bold; -fx-background-color: #0891b2; "
+                + "-fx-background-radius: 10; -fx-padding: 4 10 4 10;");
+        ritualStatus.setVisible(false);
+        HBox ritualRow = new HBox();
+        ritualRow.setAlignment(Pos.CENTER_LEFT);
+        ritualRow.setPrefWidth(286);
+        ritualRow.getChildren().add(ritualStatus);
+
+        // 破甲状态栏（BOSS 二阶段，灰底白字）
+        armorBreakStatus.setTextFill(Color.WHITE);
+        armorBreakStatus.setFont(Font.font(14));
+        armorBreakStatus.setStyle("-fx-font-weight: bold; -fx-background-color: #9ca3af; "
+                + "-fx-background-radius: 10; -fx-padding: 4 10 4 10;");
+        armorBreakStatus.setVisible(false);
+        HBox armorBreakRow = new HBox();
+        armorBreakRow.setAlignment(Pos.CENTER_LEFT);
+        armorBreakRow.setPrefWidth(286);
+        armorBreakRow.getChildren().add(armorBreakStatus);
+
         eChips.setPrefWrapLength(286);
         eChips.setAlignment(Pos.CENTER_LEFT);
 
-        box.getChildren().addAll(eName, intentRow, enemyPortrait, cluster, eChips);
+        box.getChildren().addAll(eName, intentRow, enemyPortrait, cluster, ritualRow, armorBreakRow, eChips);
         return box;
     }
 
@@ -435,6 +461,11 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
                 glyph = "黏";
                 color = "#16a34a";
                 tip = "意图·吐黏液：向你的抽牌堆塞入 " + s.value + " 张黏液";
+            }
+            case RITUAL -> {
+                glyph = "祭";
+                color = "#8b5cf6";
+                tip = "意图·仪式：每回合开始力量 +" + s.value;
             }
             default -> {
                 glyph = "弱";
@@ -644,6 +675,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         if (battleOver || paused) return;
 
         enemy.block = 0;
+        enemy.applyRitual();
         boolean wasSecondPhase = enemy.isSecondPhase;
         enemy.checkPhaseTransition();
         if (enemy.isSecondPhase && !wasSecondPhase) {
@@ -660,7 +692,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
                 enemyAnim.triggerAttackDash();
                 int dmg = s.value + enemy.power;
                 if (enemy.isBoss && enemy.isSecondPhase && playerBlock > 0) {
-                    dmg = (int) Math.floor(dmg * 1.40);
+                    dmg = (int) Math.floor(dmg * 1.60);
                 }
                 if (playerBlock > 0) {
                     int absorb = Math.min(playerBlock, dmg);
@@ -681,6 +713,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
                     draw.add(Card.slime());
                 }
             }
+            case RITUAL -> enemy.setRitualPower(s.value);
         }
         enemy.advance();
 
@@ -852,6 +885,23 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             int pct = (int)(enemy.getReflectRate() * 100);
             eChips.getChildren().add(BattleUiFactory.statusChip("反", reflectTurns, "#9400D3",
                     "反伤：" + reflectTurns + " 回合内：你攻击时受到造成伤害 " + pct + "% 的伤害"));
+        }
+
+        // 左下角仪式状态栏：仪式激活时显示每回合力量增长效果
+        int ritual = enemy.getRitualPower();
+        if (ritual > 0) {
+            ritualStatus.setText("仪式：每回合力量 +" + ritual);
+            ritualStatus.setVisible(true);
+        } else {
+            ritualStatus.setVisible(false);
+        }
+
+        // 破甲状态栏：BOSS 二阶段时显示特殊破甲机制
+        if (enemy.isBoss && enemy.isSecondPhase) {
+            armorBreakStatus.setText("破甲：你持盾时其攻击 ×1.6");
+            armorBreakStatus.setVisible(true);
+        } else {
+            armorBreakStatus.setVisible(false);
         }
         refreshIntent();
 
