@@ -156,27 +156,8 @@ public class RunHud extends VBox {
 
         relicRow.getChildren().clear();
         for (Relic r : player.relics) {
-            relicRow.getChildren().add(buildRelicIcon(r));
+            relicRow.getChildren().add(r.buildIcon(onRelicClick));
         }
         relicRow.setVisible(!player.relics.isEmpty());
-    }
-
-    /** 单个遗物小图标：悬停看名字/效果，点击让外层弹整页详情 */
-    private StackPane buildRelicIcon(Relic r) {
-        StackPane icon = new StackPane();
-        icon.setPrefSize(30, 30);
-        icon.setMaxSize(30, 30);
-        icon.setCursor(javafx.scene.Cursor.HAND);
-        icon.setStyle("-fx-background-color: #7c3aed; -fx-background-radius: 8;");
-
-        Label g = new Label(r.name.substring(0, 1));
-        g.setTextFill(Color.WHITE);
-        g.setFont(Font.font(14));
-        g.setStyle("-fx-font-weight: bold;");
-        icon.getChildren().add(g);
-
-        Tooltip.install(icon, new Tooltip(r.name + "\n" + r.desc));
-        icon.setOnMouseClicked(e -> onRelicClick.accept(r));
-        return icon;
     }
 }

@@ -6,6 +6,7 @@ import com.example.demo.card.CardFaceView;
 import com.example.demo.character.CharacterSelect;
 import com.example.demo.character.Player;
 import com.example.demo.character.Relic;
+import com.example.demo.character.RelicFun;
 import com.example.demo.enemy.Boss;
 import com.example.demo.enemy.EliteSlime;
 import com.example.demo.enemy.Enemy;
@@ -252,6 +253,17 @@ public class HelloApplication extends Application {
                 if (type == GameMap.NodeType.BOSS) {
                     returnToMenu(stage); // 通关
                 } else {
+                    if (type == GameMap.NodeType.ELITE) {
+                        Relic relic = RelicFun.randomEliteRelic(player);
+                        if (relic != null) {
+                            hud.refresh();
+                            Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                            alert.setTitle("精英战利品");
+                            alert.setHeaderText(null);
+                            alert.setContentText("击败精英怪，获得遗物：「" + relic.name + "」\n" + relic.desc);
+                            alert.showAndWait();
+                        }
+                    }
                     showMapScene(stage, map, player);
                 }
             } else {
@@ -340,9 +352,9 @@ public class HelloApplication extends Application {
     private RunHud buildHud(Player player, GameMap map, Runnable onMapClick, boolean showMapIcon) {
         return new RunHud(
                 player,
-                r -> showWindow(page(relicPage(r))),   // 点遗物图�?
-                () -> showWindow(page(deckPage(player))), // 点牌组图�?
-                onMapClick,                           // 点地图图标（场景自定义）
+                r -> showWindow(page(r.buildPage(this::closeWindow))),
+                () -> showWindow(page(deckPage(player))),
+                onMapClick,
                 showMapIcon
         );
     }
@@ -442,35 +454,7 @@ public class HelloApplication extends Application {
     }
 
     /** 遗物页：大图�?+ 详细介绍 */
-    private VBox relicPage(Relic r) {
-        StackPane icon = new StackPane();
-        icon.setPrefSize(96, 96);
-        icon.setMaxSize(96, 96);
-        icon.setStyle("-fx-background-color: #7c3aed; -fx-background-radius: 18;");
-        Label g = new Label(r.name.substring(0, 1));
-        g.setTextFill(Color.WHITE);
-        g.setFont(Font.font(44));
-        g.setStyle("-fx-font-weight: bold;");
-        icon.getChildren().add(g);
 
-        Label name = new Label(r.name);
-        name.setTextFill(Color.WHITE);
-        name.setFont(Font.font(26));
-        name.setStyle("-fx-font-weight: bold;");
-
-        Label desc = new Label(r.desc);
-        desc.setTextFill(Color.rgb(203, 213, 225));
-        desc.setFont(Font.font(16));
-        desc.setWrapText(true);
-        desc.setMaxWidth(360);
-
-        VBox panel = new VBox(12);
-        panel.setAlignment(Pos.CENTER);
-        panel.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
-        panel.setStyle("-fx-background-color: #1e293b; -fx-background-radius: 16; -fx-padding: 22 30 16 30;");
-        panel.getChildren().addAll(icon, name, desc, closeButton());
-        return panel;
-    }
 
     private Button closeButton() {
         Button close = new Button("关闭");
@@ -533,6 +517,7 @@ public class HelloApplication extends Application {
             case REST    -> {
                 int before = player.hp();
                 player.heal(player.maxHp);
+                player.restedAtCampfire = true; // 标记篝火休息，用于古茶具套装遗物
                 hud.refresh();
                 Alert alert = new Alert(Alert.AlertType.INFORMATION);
                 alert.setTitle("节点事件");
@@ -541,7 +526,7 @@ public class HelloApplication extends Application {
                 alert.showAndWait();
             }
             case TREASURE -> {
-                Relic gained = randomTreasure(player);
+                Relic gained =  RelicFun.randomEliteRelic(player);
                 hud.refresh();
                 Alert alert = new Alert(Alert.AlertType.INFORMATION);
                 alert.setTitle("宝箱");
@@ -552,21 +537,6 @@ public class HelloApplication extends Application {
                 alert.showAndWait();
             }
         }
-    }
-
-    /** 宝箱：从遗物池随机给一个还没拿过的遗物 */
-    private Relic randomTreasure(Player player) {
-        List<Relic> pool = new ArrayList<>(List.of(
-                new Relic("青铜怀表", "战斗开始时获得 2 点格挡"),
-                new Relic("请假条", "每回合多抽 1 张牌"),
-                new Relic("保温杯", "每场战斗开始时恢复 10 点生命")
-        ));
-        pool.removeIf(r -> player.relics.stream().anyMatch(h -> h.name.equals(r.name)));
-        if (pool.isEmpty()) return null;
-        int idx = new java.util.Random().nextInt(pool.size());
-        Relic gained = pool.get(idx);
-        player.addRelic(gained);
-        return gained;
     }
 
     /** 随机奖励一张卡（事�?奖励用） */
@@ -630,7 +600,7 @@ public class HelloApplication extends Application {
                 yield "获得卡牌：「" + c.kind.label + "」加入牌组（#" + c.id + "）";
             }
             case ADD_RELIC -> {
-                Relic r = randomTreasure(player);
+                Relic r = RelicFun.randomEventRelic(player);
                 yield r == null
                         ? "遗物池里已经没有新遗物了……"
                         : "获得遗物：「" + r.name + "」\n" + r.desc;
@@ -641,11 +611,7 @@ public class HelloApplication extends Application {
 
     /** 起点房间：NPC + 三选一初始遗物 */
     private void showRoomScene(Stage stage, GameMap map, Player player) {
-        List<Relic> starters = List.of(
-                new Relic("青铜怀表", "战斗开始时获得 2 点格挡"),
-                new Relic("请假条", "每回合多抽 1 张牌"),
-                new Relic("保温杯", "每场战斗开始时恢复 10 点生命")
-        );
+        List<Relic> starters = RelicFun.starterRelics();
 
         RoomView room = new RoomView(
                 player, starters, "猪神",

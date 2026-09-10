@@ -12,11 +12,12 @@ import java.util.List;
 public class Player {
 
     public static final String CHARACTER_NAME = "战士";
-    public final int maxHp = 80;
+    public int maxHp = 80;
 
     private int hp = maxHp;
     public final List<Card> deck = new ArrayList<>();
     public final List<Relic> relics = new ArrayList<>(); // 本局获得的遗物
+    public boolean restedAtCampfire = false; // 篝火休息后标记
 
     public Player() {
         deck.addAll(starterDeck()); // 起始牌组
@@ -48,5 +49,11 @@ public class Player {
 
     public void damage(int amount) {
         hp = Math.max(0, hp - amount);
+    }
+
+    /** 增加最大生命值，同时恢复等量生命 */
+    public void increaseMaxHp(int amount) {
+        maxHp += amount;
+        hp += amount;
     }
 }

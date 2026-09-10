@@ -4,7 +4,7 @@ import com.example.demo.card.Card;
 import com.example.demo.card.CardFaceView;
 import com.example.demo.card.CardView;
 import com.example.demo.character.Player;
-import com.example.demo.character.Relic;
+import com.example.demo.character.RelicFun;
 import com.example.demo.enemy.Enemy;
 import com.example.demo.view.BattleUiFactory;
 import com.example.demo.view.DeathOverlay;
@@ -85,6 +85,14 @@ public class BattleView extends javafx.scene.layout.StackPane {
     private boolean battleOver = false;
     private boolean paused = false;
     private boolean pendingTurnStart = false;
+    private boolean playedCardThisTurn = false;
+    private boolean firstAttackUsed = false;
+    private boolean firstDamageTriggered = false;
+    private int attackCardsPlayedThisTurn = 0;
+    private boolean fanBonusApplied = false;
+    private int skillCardsPlayedThisTurn = 0;
+    private boolean letterOpenerUsed = false;
+    private boolean noodleBonusUsed = false;
 
     // ===== 动画已统一委托给 SpriteAnimator =====
 
@@ -212,13 +220,21 @@ public class BattleView extends javafx.scene.layout.StackPane {
         draw.addAll(player.deck);
         Collections.shuffle(draw, rnd);
 
-        if (hasRelic("保温杯")) {
-            player.heal(10);
-            hud.refresh();
+        RelicFun.onBattleStart(player);
+        playerStrength += RelicFun.extraStrength(player);
+        // 忘情牛肉面：战斗开始时获得 3 点力量，仅第一回合有效
+        if (RelicFun.hasRelic(player, "忘情牛肉面")) {
+            playerStrength += 3;
         }
+        hud.refresh();
         initAnimators();
         gameTimer.start();
         startPlayerTurn();
+        // 牛来：战斗开始时对敌人造成 3 点伤害
+        if (RelicFun.hasRelic(player, "牛来")) {
+            enemy.hp = Math.max(0, enemy.hp - 3);
+            if (enemy.hp == 0) victory();
+        }
     }
 
     // ================= 动画（统一委托 SpriteAnimator） =================
@@ -229,12 +245,6 @@ public class BattleView extends javafx.scene.layout.StackPane {
         enemyAnim = new SpriteAnimator(enemyPortrait, false, 42, -32);
     }
 
-    private boolean hasRelic(String name) {
-        for (Relic r : player.relics) {
-            if (r.name.equals(name)) return true;
-        }
-        return false;
-    }
 
     // ================= 面板搭建 =================
 
@@ -420,12 +430,28 @@ public class BattleView extends javafx.scene.layout.StackPane {
         if (weakTurns > 0) weakTurns--;
         if (enemyVulnerable > 0) enemyVulnerable--;
         energy = 3;
-
-        drawHand(5 + (hasRelic("请假条") ? 1 : 0));
-
-        if (turn == 1 && hasRelic("青铜怀表")) {
-            playerBlock = 2;
+        // 古茶具套装：篝火休息后下一场战斗第一回合 +2 能量
+        if (turn == 1) {
+            energy += RelicFun.teaSetEnergy(player);
         }
+        // 孙子兵法：上回合未出牌则获得 1 点额外能量
+        if (!playedCardThisTurn && turn > 1 && RelicFun.hasRelic(player, "孙子兵法")) {
+            energy += 1;
+        }
+        playedCardThisTurn = false;
+        attackCardsPlayedThisTurn = 0;
+        fanBonusApplied = false;
+        skillCardsPlayedThisTurn = 0;
+        letterOpenerUsed = false;
+
+        drawHand(5 + RelicFun.extraDraw(player));
+
+        // 英雄宝典：战斗开始时增加一张免费能力牌
+        if (turn == 1 && RelicFun.hasRelic(player, "英雄宝典")) {
+            hand.add(Card.freePower());
+        }
+
+        playerBlock += RelicFun.startBlock(player, turn);
 
         refreshAll();
     }
@@ -454,9 +480,37 @@ public class BattleView extends javafx.scene.layout.StackPane {
         if (c.cost > energy) return;
 
         energy -= c.cost;
+        playedCardThisTurn = true;
+        // 精致折扇：追踪攻击牌数量
+        if (c.kind.type == Card.Type.ATTACK) {
+            attackCardsPlayedThisTurn++;
+            if (attackCardsPlayedThisTurn >= 3 && !fanBonusApplied
+                    && RelicFun.hasRelic(player, "精致折扇")) {
+                fanBonusApplied = true;
+                playerBlock += 4;
+            }
+        }
+        // 开信刀：追踪技能牌数量
+        if (c.kind.type == Card.Type.SKILL) {
+            skillCardsPlayedThisTurn++;
+            if (skillCardsPlayedThisTurn >= 3 && !letterOpenerUsed
+                    && RelicFun.hasRelic(player, "开信刀")) {
+                letterOpenerUsed = true;
+                damageEnemy(5);
+            }
+            // 鸟面翁：每打出一张技能牌恢复 2 点生命
+            if (RelicFun.hasRelic(player, "鸟面翁")) {
+                player.heal(2);
+            }
+        }
         if (c.damage > 0) {
             for (int i = 0; i < c.hits; i++) {
                 int dmg = c.damage + playerStrength;
+                // 赤牛：每场战斗第一次攻击额外 +8 伤害
+                if (!firstAttackUsed) {
+                    dmg += RelicFun.firstAttackBonus(player);
+                    firstAttackUsed = true;
+                }
                 if (weakTurns > 0) dmg = dmg * 3 / 4;
                 if (enemyVulnerable > 0) dmg = dmg * 3 / 2;
                 damageEnemy(dmg);
@@ -474,7 +528,7 @@ public class BattleView extends javafx.scene.layout.StackPane {
         }
         if (c.kind == Card.Kind.BLEED) {
             energy += 2;
-            player.damage(3);
+            takeDamage(3);
             hud.refresh();
             if (player.hp() == 0) { playerDied(); return; }
         }
@@ -482,7 +536,7 @@ public class BattleView extends javafx.scene.layout.StackPane {
             energy += 2;
         }
         if (c.kind == Card.Kind.OFFERING) {
-            player.damage(6);
+            takeDamage(6);
             playerAnim.triggerHurt();
             energy += 2;
             hud.refresh();
@@ -507,8 +561,23 @@ public class BattleView extends javafx.scene.layout.StackPane {
             enemy.block -= absorb;
             dmg -= absorb;
         }
+        // 发条靴：未被格挡的伤害 ≤ 5 时提升为 8
+        dmg = RelicFun.boostLowDamage(player, dmg);
         enemy.hp = Math.max(0, enemy.hp - dmg);
         if (enemy.hp == 0) victory();
+    }
+
+    /** 玩家受到伤害，处理百年积木遗物效果 */
+    private void takeDamage(int dmg) {
+        if (dmg <= 0) return;
+        int hpBefore = player.hp();
+        player.damage(dmg);
+        // 百年积木：每场战斗第一次失去生命值时抽 3 张牌
+        if (!firstDamageTriggered && player.hp() < hpBefore
+                && RelicFun.hasRelic(player, "百年积木")) {
+            firstDamageTriggered = true;
+            drawHand(3);
+        }
     }
 
     // ================= 怪物回合 =================
@@ -516,6 +585,21 @@ public class BattleView extends javafx.scene.layout.StackPane {
     private void endPlayerTurn() {
         if (!playerTurn || battleOver) return;
         playerTurn = false;
+
+        // 忘情牛肉面：第一回合结束后移除临时 3 点力量
+        if (turn == 1 && !noodleBonusUsed && RelicFun.hasRelic(player, "忘情牛肉面")) {
+            noodleBonusUsed = true;
+            playerStrength -= 3;
+        }
+
+        // 奥利哈钢：回合结束时若无格挡，获得 6 点格挡
+        if (playerBlock == 0 && RelicFun.hasRelic(player, "奥利哈钢")) {
+            playerBlock += 6;
+        }
+        // taffy：回合结束时生命值高于 50% 额外获得 5 点格挡
+        if (player.hp() * 2 > player.maxHp && RelicFun.hasRelic(player, "taffy")) {
+            playerBlock += 5;
+        }
 
         discard.addAll(hand);
         hand.clear();
@@ -544,7 +628,7 @@ public class BattleView extends javafx.scene.layout.StackPane {
                     playerBlock -= absorb;
                     dmg -= absorb;
                 }
-                player.damage(dmg);
+                takeDamage(dmg);
                 playerAnim.triggerHurt();
                 hud.refresh();
                 if (player.hp() == 0) { playerDied(); return; }
@@ -584,6 +668,8 @@ public class BattleView extends javafx.scene.layout.StackPane {
         if (battleOver) return;
         battleOver = true;
         playerAnim.stop();
+        RelicFun.onBattleEnd(player);
+        hud.refresh();
         showReward();
     }
 

@@ -117,4 +117,11 @@ public class Card {
     public static Card flex()        { return new Card(Kind.FLEX, 0, 0, 0); } // 临时力量效果在 play() 中处理
     public static Card wound()       { return new Card(Kind.WOUND, -1, 0, 0); } // -1 表示无法打出
     public static Card slime()       { return new Card(Kind.SLIME, 1, 0, 0, 0, true); } // 可打出，消耗
+
+    /** 英雄宝典遗物：随机生成一张不消耗能量的能力牌 */
+    public static Card freePower() {
+        Kind[] powers = { Kind.KINDLE, Kind.BRUTALITY };
+        Kind k = powers[new java.util.Random().nextInt(powers.length)];
+        return new Card(k, 0, 0, 0, 0);
+    }
 }
