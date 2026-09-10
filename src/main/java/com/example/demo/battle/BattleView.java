@@ -959,7 +959,6 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         playerAnim.stop();
         RelicFun.onBattleEnd(player);
         hud.refresh();
-        showReward();
         playerAnim.stop();   // 冻结双方待机呼吸，交给倒地动画接管
         enemyAnim.stop();
         clearStatusCards();
