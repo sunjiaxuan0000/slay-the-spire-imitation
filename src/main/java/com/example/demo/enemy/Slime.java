@@ -12,6 +12,7 @@ public class Slime extends Enemy {
         super("史莱姆", 28, true, false, List.of(
                 new Step(Intent.ATTACK, 8),
                 new Step(Intent.DEFEND, 5),
+                new Step(Intent.SPIT, 2),
                 new Step(Intent.ATTACK, 7),
                 new Step(Intent.BUFF, 2)
         ));

@@ -8,7 +8,7 @@ import java.util.List;
  * 每个怪物有自己的"意图轮盘"（attack/defend/buff/weaken 循环），
  * 每回合怪物的行动 = 当前轮到的意图，执行完转到下一个。
  *
- * 子类：{@link Slime}（普通怪）、{@link EliteSlime}（精英怪）、{@link Boss}（BOSS）。
+ * 子类：{@link Slime}（普通怪）、{@link GuardPig}（精英怪）、{@link Boss}（BOSS）。
  */
 public abstract class Enemy {
 
@@ -17,7 +17,10 @@ public abstract class Enemy {
         ATTACK("攻击"),
         DEFEND("防御"),
         BUFF("强化"),
-        WEAKEN("虚弱");
+        WEAKEN("虚弱"),
+        REFLECT("反伤"),
+        SPIT("吐黏液"),
+        RITUAL("仪式");
 
         public final String label;
         Intent(String label) { this.label = label; }
@@ -39,10 +42,16 @@ public abstract class Enemy {
     public final int maxHp;
     public int hp;
     public int block;       // 当前格挡值
-    public int power;        // 力量：加到攻击伤害上（强化获得）
+    public int power;// 力量：加到攻击伤害上（强化获得）
     public final boolean isBoss;
     public boolean isSecondPhase = false;  // BOSS 二阶段标记（仅 Boss 子类会触发）
     public final boolean hasPortrait;
+
+    /** 反伤比例（0~1）：玩家对其造成伤害时反弹该比例的伤害，0 表示无反伤。子类在构造中设置。 */
+    protected double reflectRate = 0;
+
+    /** 仪式：每回合开始自动增加的力量值，0 表示无仪式。由 RITUAL 意图激活。 */
+    protected int ritualPower = 0;
 
     // ===== 意图轮盘 =====
     private final List<Step> plan;
@@ -80,6 +89,28 @@ public abstract class Enemy {
     /** 二阶段检测，默认空实现，BOSS 覆写 */
     public void checkPhaseTransition() { }
 
+    /** 反伤比例（0~1），0 表示无反伤 */
+    public double getReflectRate() {
+        return reflectRate;
+    }
+
+    /** 仪式每回合增加的力量值 */
+    public int getRitualPower() {
+        return ritualPower;
+    }
+
+    /** 设置仪式效果（由 RITUAL 意图触发） */
+    public void setRitualPower(int value) {
+        this.ritualPower = value;
+    }
+
+    /** 每回合开始时调用：仪式生效则自动增加力量 */
+    public void applyRitual() {
+        if (ritualPower > 0) {
+            power += ritualPower;
+        }
+    }
+
     /** 描述当前意图的文字 */
     public String intentText() {
         Step s = current();
@@ -89,6 +120,9 @@ public abstract class Enemy {
             case DEFEND -> s.intent.label + " " + v;
             case BUFF   -> s.intent.label + " 力量 +" + v;
             case WEAKEN -> s.intent.label + " 我方 " + v + " 回合";
+            case REFLECT -> s.intent.label +"我方" + v + "回合";
+            case SPIT -> s.intent.label + " " + v + " 张黏液";
+            case RITUAL -> s.intent.label + " 每回合力量 +" + v;
         };
     }
 
