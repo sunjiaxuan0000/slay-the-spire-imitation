@@ -67,7 +67,7 @@ public final class CardPlay {
                 s.addEnemyVulnerable(4);
             }
             case ADAMANT_ARM -> s.addEnemyWeak(2);      // 金刚臂：敌人 2 层虚弱
-            case BRUTALITY -> s.enableBrutality();      // 残暴：启用每回合失去 1 血多抽 1 张
+            case BRUTALITY -> s.activatePower(Card.Kind.BRUTALITY); // 残暴：每回合失去 1 血多抽 1 张
             case FLEX -> {                              // 活动肌肉：+2 力量，回合结束 -2
                 s.gainStrength(2);
                 s.loseStrengthAtTurnEnd(2);

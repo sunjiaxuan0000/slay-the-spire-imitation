@@ -87,6 +87,15 @@ public final class BattleUiFactory {
 
     /** buff/debuff 图标 + 层数 */
     public static HBox statusChip(String glyph, int count, String color, String tip) {
+        return statusChip(glyph, String.valueOf(count), color, tip);
+    }
+
+    /** 无层数的能力图标（用于常驻能力牌，如残暴） */
+    public static HBox statusChip(String glyph, String color, String tip) {
+        return statusChip(glyph, null, color, tip);
+    }
+
+    private static HBox statusChip(String glyph, String count, String color, String tip) {
         StackPane icon = new StackPane();
         icon.setPrefSize(24, 24);
         icon.setMaxSize(24, 24);
@@ -97,15 +106,17 @@ public final class BattleUiFactory {
         g.setStyle("-fx-font-weight: bold;");
         icon.getChildren().add(g);
 
-        Label n = new Label(String.valueOf(count));
-        n.setTextFill(Color.WHITE);
-        n.setFont(Font.font(13));
-        n.setStyle("-fx-font-weight: bold;");
-
         HBox chip = new HBox(3);
         chip.setAlignment(Pos.CENTER_LEFT);
         chip.setPickOnBounds(true); // 整个图标+数字区域都能触发悬停提示
-        chip.getChildren().addAll(icon, n);
+        chip.getChildren().add(icon);
+        if (count != null) {
+            Label n = new Label(count);
+            n.setTextFill(Color.WHITE);
+            n.setFont(Font.font(13));
+            n.setStyle("-fx-font-weight: bold;");
+            chip.getChildren().add(n);
+        }
         attachHover(chip, tip); // Tooltip + 屏幕描述条
         return chip;
     }
