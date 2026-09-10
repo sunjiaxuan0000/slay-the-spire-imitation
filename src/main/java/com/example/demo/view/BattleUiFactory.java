@@ -17,13 +17,35 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 
+import java.util.function.Consumer;
+
 /**
  * 战斗界面静态 UI 构造工具：从 BattleView 抽出的纯 UI 拼装方法，
  * 不依赖战斗状态，便于复用与单独测试。
  */
 public final class BattleUiFactory {
 
+    /**
+     * 悬停描述回调：BattleView 会把它接到画面上的"描述条"上。
+     * 悬停图标时传入描述文字，移开时传空串。这样不依赖 Tooltip 也能看到描述。
+     */
+    public static Consumer<String> hoverConsumer;
+
     private BattleUiFactory() {
+    }
+
+    /** 给任意节点挂上悬停描述（Tooltip + 描述条 双保险） */
+    public static void attachHover(javafx.scene.Node node, String tip) {
+        node.setPickOnBounds(true);
+        Tooltip t = new Tooltip(tip);
+        t.setShowDelay(javafx.util.Duration.millis(150)); // 默认 1 秒太久
+        Tooltip.install(node, t);
+        node.setOnMouseEntered(e -> {
+            if (hoverConsumer != null) hoverConsumer.accept(tip);
+        });
+        node.setOnMouseExited(e -> {
+            if (hoverConsumer != null) hoverConsumer.accept("");
+        });
     }
 
     /** 血条：底槽 + 填充 + 数字/数字文字，包进 wrap（wrap 负责“有格挡=金属框”） */
@@ -82,8 +104,9 @@ public final class BattleUiFactory {
 
         HBox chip = new HBox(3);
         chip.setAlignment(Pos.CENTER_LEFT);
+        chip.setPickOnBounds(true); // 整个图标+数字区域都能触发悬停提示
         chip.getChildren().addAll(icon, n);
-        Tooltip.install(chip, new Tooltip(tip));
+        attachHover(chip, tip); // Tooltip + 屏幕描述条
         return chip;
     }
 
