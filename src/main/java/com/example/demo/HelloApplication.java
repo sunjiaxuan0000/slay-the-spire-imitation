@@ -635,6 +635,25 @@ public class HelloApplication extends Application {
                         ? "遗物池里已经没有新遗物了……"
                         : "获得遗物：「" + r.name + "」\n" + r.desc;
             }
+            case RANDOM_WATER ->{
+                int before = player.hp();
+                if(Math.random()<0.5){
+                    player.heal(10);
+                    yield "你喝下泉水...运气不错，恢复 10 点生命：" + before + " → " + player.hp();
+                }else{
+                    player.damage(10);
+                    yield "你喝下泉水...糟糕，失去 10 点生命：" + before + " → " + player.hp();
+                }
+            }
+            case CURSE -> {
+                int before = player.hp();
+                player.damage(opt.amount);              // 扣血（amount = 10）
+                Card wound = Card.wound();              // 每次都新建一张"伤口"，不复用实例
+                player.deck.add(wound);
+                yield "你感受到一股冰冷的力量涌入身体……\n"
+                        + "失去 " + opt.amount + " 点生命：" + before + " → " + player.hp() + "\n"
+                        + "获得卡牌：「" + wound.kind.label + "」加入牌组";
+            }
             case NOTHING -> opt.effectDesc + "（无事发生）";
         };
     }

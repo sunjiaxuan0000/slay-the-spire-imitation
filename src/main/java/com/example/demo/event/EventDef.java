@@ -1,6 +1,7 @@
 package com.example.demo.event;
 
 import java.util.List;
+import java.util.Locale;
 
 /**
  * 地图事件：名字 + 描述 + 若干选项（选项名 + 选项实际效果说明 + 效果参数）。
@@ -14,7 +15,9 @@ public class EventDef {
         DAMAGE,        // 扣血（amount = 扣多少）
         ADD_CARD,      // 往牌组加一张随机牌
         ADD_RELIC,     // 获得一件未持有的随机遗物
-        NOTHING        // 无事发生
+        NOTHING,// 无事发生
+        RANDOM_WATER,//随机掉血或回血
+        CURSE//接受诅咒：扣 10 点生命 + 往牌组加一张"伤口"（诅咒祭坛专用）
     }
 
     /** 一个选项 */
@@ -71,7 +74,64 @@ public class EventDef {
                                 new Option("要一张卡牌", "随机一张卡牌加入牌组", Action.ADD_CARD, 0),
                                 new Option("喝口热茶", "回复 10 点生命", Action.HEAL, 10),
                                 new Option("无视摊主", "径直走开", Action.NOTHING, 0)
+                        )),
+                new EventDef(
+                        "神秘泉水",
+                        "一汪清澈的泉水出现在你面前。\n"
+                        +"水面平静得有些诡异，你无法判断它是否安全。",
+                        List.of(
+                                new Option("饮用泉水",
+                                "50% 概率回复 15 点生命，50% 概率失去 10 点生命",
+                                Action.RANDOM_WATER,
+                                0
+                        ),
+                                new Option(
+                                "离开",
+                                "什么也没发生",
+                                Action.NOTHING,
+                                0
                         ))
+                        ),
+                new EventDef(
+                       "神秘书籍" ,
+                        "一本落满灰尘的古老书籍静静地躺在石台上。\n"
+                        +"书页没有文字，只有一道道看不懂的符号。\n"
+                                + "当你靠近时，书页竟自行翻动起来……",
+                        List.of(
+                                new Option("阅读书籍",
+                                "获得一张随机卡牌",
+                                Action.ADD_CARD,
+                                0
+                        ),
+                                new Option(
+                                "离开",
+                                "什么也没发生",
+                                Action.NOTHING,
+                                0
+                        )
+                        )
+                ),
+                new EventDef(
+                        "诅咒祭坛",
+                        "一座漆黑的祭坛矗立在道路中央。\n"
+                                + "祭坛周围没有任何声音，只有中央的一枚黑色符文散发着微弱的光。\n"
+                                + "你能感觉到其中蕴含着某种力量，但这股力量似乎并不免费。",
+                        List.of(
+                                new Option("接受诅咒",
+                                        "失去 10 点生命，获得一张“伤口”",
+                                        Action.CURSE,
+                                        10
+                                ),
+                                new Option(
+                                        "离开",
+                                        "什么也不发生",
+                                        Action.NOTHING,
+                                        0
+                                )
+                        )
+                )
+
+
         );
     }
 }
