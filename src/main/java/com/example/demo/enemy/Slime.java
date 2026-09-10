@@ -10,7 +10,7 @@ import java.util.List;
 public class Slime extends Enemy {
 
     public Slime() {
-        super("史莱姆", 28, true, false, List.of(
+        super("史莱姆", 36, true, false, List.of(
                 new Step(Intent.ATTACK, 8),
                 new Step(Intent.DEFEND, 5),
                 new Step(Intent.WEAKEN, 2)

@@ -12,7 +12,7 @@ public class Cultist_Pig extends Enemy {
     private boolean ritualDone = false;
 
     public Cultist_Pig() {
-        super("邪教猪", 45, true, false, List.of(
+        super("邪教猪", 50, true, false, List.of(
                 new Step(Intent.RITUAL, 2),
                 new Step(Intent.ATTACK, 6)
         ));
