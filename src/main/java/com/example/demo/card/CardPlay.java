@@ -31,8 +31,10 @@ public final class CardPlay {
 
         // 攻击：按段数结算，段间若战斗已结束（击杀）则停止
         if (c.damage > 0) {
+            int strength = s.getStrength();
+            if (c.kind == Card.Kind.HEAVY_BLADE) strength *= 3; // 重刃：力量按 3 倍计入
             for (int i = 0; i < c.hits; i++) {
-                int dmg = c.damage + s.getStrength();
+                int dmg = c.damage + strength;
                 if (s.getWeakTurns() > 0) dmg = dmg * 3 / 4;
                 if (s.getEnemyVulnerable() > 0) dmg = dmg * 3 / 2;
                 s.damageEnemy(dmg);
@@ -54,6 +56,21 @@ public final class CardPlay {
             case OFFERING -> {
                 if (s.loseHp(6, true)) return;  // 自伤致死：终止结算
                 s.gainEnergy(2);
+            }
+            case FORTIFY -> s.doubleBlock();            // 巩固：当前格挡翻倍
+            case FOCUS -> {                             // 战斗专注：抽 3 张，本回合禁抽
+                s.drawCards(3);
+                s.forbidDrawThisTurn();
+            }
+            case SHOCKWAVE -> {                         // 震荡波：敌人 4 虚弱 / 4 易伤
+                s.addEnemyWeak(4);
+                s.addEnemyVulnerable(4);
+            }
+            case ADAMANT_ARM -> s.addEnemyWeak(2);      // 金刚臂：敌人 2 层虚弱
+            case BRUTALITY -> s.enableBrutality();      // 残暴：启用每回合失去 1 血多抽 1 张
+            case FLEX -> {                              // 活动肌肉：+2 力量，回合结束 -2
+                s.gainStrength(2);
+                s.loseStrengthAtTurnEnd(2);
             }
             default -> {
             }
