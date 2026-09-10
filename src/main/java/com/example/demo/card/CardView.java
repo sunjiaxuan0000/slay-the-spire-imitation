@@ -33,6 +33,16 @@ public class CardView {
             case LIGHTNING -> "#ca8a04";
             case RAGE -> "#7e22ce";
             case OFFERING -> "#581c87";
+            case FORTIFY -> "#334155";
+            case FOCUS -> "#0e7490";
+            case SHOCKWAVE -> "#6d28d9";
+            case HEAVY_BLADE -> "#9f1239";
+            case WILD_STRIKE -> "#9a3412";
+            case ADAMANT_ARM -> "#be123c";
+            case BRUTALITY -> "#701a75";
+            case FLEX -> "#a16207";
+            case WOUND -> "#3f3f46";
+            case SLIME -> "#047857";
         };
     }
 

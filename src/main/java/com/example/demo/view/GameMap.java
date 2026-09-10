@@ -108,7 +108,7 @@ public class GameMap {
             }
 
             // 全图统一密度：每层 4~5 个房间
-            int count = 4 + rnd.nextInt(2);
+            int count = 3 + rnd.nextInt(3);
 
             // 列号：以“随机游走”的方式选连续列（相对上一行最多偏 2 列）
             // → 相邻两层错开，不会形成一整条竖直直线
@@ -163,10 +163,10 @@ public class GameMap {
         }
         if (roll < 30) return NodeType.EVENT;
 
-        if (row < 5) return NodeType.MONSTER;  // 宝箱之前纯普通怪
+        if (row < 4) return NodeType.MONSTER;  // 宝箱之前纯普通怪
 
         // 精英概率随楼层逐渐提高
-        int eliteChance = (row)*6; // 20% → 45%
+        int eliteChance = (row+1)*6; // 20% → 45%
         eliteChance = Math.min(50, eliteChance);
         if (rnd.nextInt(100) >= eliteChance || banElite) return NodeType.MONSTER;
         return NodeType.ELITE;

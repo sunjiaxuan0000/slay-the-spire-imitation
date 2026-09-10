@@ -1,6 +1,7 @@
 package com.example.demo.battle;
 
 import com.example.demo.card.Card;
+import com.example.demo.card.CardFaceView;
 import com.example.demo.card.CardView;
 import com.example.demo.character.Player;
 import com.example.demo.character.Relic;
@@ -160,6 +161,7 @@ public class BattleView extends javafx.scene.layout.StackPane {
 
         HBox fighters = new HBox(10);
         fighters.setAlignment(Pos.CENTER);
+        fighters.setFillHeight(false); // 列不随高度拉伸，避免“画面拉伸”感
 
         VBox left = buildLeftPanel();
         leftCol = left;
@@ -337,7 +339,7 @@ public class BattleView extends javafx.scene.layout.StackPane {
         turnLabel.setFont(Font.font(24));
         turnLabel.setStyle("-fx-font-weight: bold;");
 
-        Label sub = new Label("角色先手，轮到你行动");
+        Label sub = new Label("");
         sub.setTextFill(Color.rgb(120, 113, 108));
         sub.setFont(Font.font(14));
 
@@ -716,10 +718,11 @@ public class BattleView extends javafx.scene.layout.StackPane {
     }
 
     private Button buildCardButton(Card c) {
-        VBox card = CardView.buildCardGraphic(c);
+        // 多层贴图卡面（固定尺寸容器，手牌高度稳定，防止打牌/换回合时画面跳动）
+        javafx.scene.layout.StackPane face = CardFaceView.buildAt(c, 128);
 
         Button btn = new Button();
-        btn.setGraphic(card);
+        btn.setGraphic(face);
         btn.setStyle("-fx-background-color: transparent; -fx-padding: 0; -fx-cursor: hand;");
         btn.setDisable(c.cost > energy || !playerTurn || battleOver);
         btn.setOnAction(e -> {

@@ -2,6 +2,7 @@ package com.example.demo;
 
 import com.example.demo.battle.BattleView;
 import com.example.demo.card.Card;
+import com.example.demo.card.CardFaceView;
 import com.example.demo.character.CharacterSelect;
 import com.example.demo.character.Player;
 import com.example.demo.character.Relic;
@@ -382,7 +383,7 @@ public class HelloApplication extends Application {
         FlowPane cards = new FlowPane(8, 8);
         cards.setPrefWrapLength(900);
         for (Card c : sorted) {
-            cards.getChildren().add(miniCard(c));
+            cards.getChildren().add(CardFaceView.buildAt(c, 120)); // 分层贴图卡面
         }
 
         ScrollPane scroll = new ScrollPane(cards);

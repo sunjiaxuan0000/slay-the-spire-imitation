@@ -1,6 +1,7 @@
 package com.example.demo.view;
 
 import com.example.demo.card.Card;
+import com.example.demo.card.CardFaceView;
 import com.example.demo.card.CardView;
 
 import javafx.geometry.Pos;
@@ -79,11 +80,15 @@ public class RewardOverlay extends StackPane {
         rewardChosen = false;
         rewardBox.getChildren().clear();
         for (Card c : offers) {
-            rewardBox.getChildren().add(
-                    CardView.buildRewardButton(c, chosen -> {
-                        rewardChosen = true;
-                        onChoose.accept(chosen);
-                    }));
+            Button b = new Button();
+            b.setGraphic(CardFaceView.build(c)); // 多层贴图卡面
+            b.setStyle("-fx-background-color: transparent; -fx-padding: 0; -fx-cursor: hand;");
+            b.setOnAction(e -> {
+                if (rewardChosen) return;
+                rewardChosen = true;
+                onChoose.accept(c);
+            });
+            rewardBox.getChildren().add(b);
         }
         setVisible(true);
     }
