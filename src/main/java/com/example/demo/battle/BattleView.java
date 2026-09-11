@@ -14,6 +14,7 @@ import com.example.demo.view.BattleUiFactory;
 import com.example.demo.view.DeathOverlay;
 import com.example.demo.view.CardFlyFx;
 import com.example.demo.view.PileOverlay;
+import com.example.demo.view.RemoveCardOverlay;
 import com.example.demo.view.RewardOverlay;
 import com.example.demo.view.SpriteAnimator;
 import com.example.demo.view.RunHud;
@@ -1504,57 +1505,36 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             onDone.run();
             return;
         }
-        removeOneCard(count, onDone);
+        showRemovePicker(count, onDone);
     }
 
-    /** 递归移除单张卡牌 */
-    private void removeOneCard(int remaining, Runnable onDone) {
+    /**
+     * 弹出「删牌页」让玩家选一张移除；还有剩余就再弹一次。
+     *
+     * <p><b>⚠ 这里绝对不能用 {@code Alert.showAndWait()}</b>。本方法是
+     * {@code showReward()} → 由 {@code enemyDied()} 里 {@code seq.setOnFinished(...)} 调进来的，
+     * 也就是跑在<b>动画回调</b>里，而 JavaFX 明确禁止在动画/布局处理中 {@code showAndWait}，
+     * 会抛 {@code IllegalStateException: showAndWait is not allowed during animation or layout processing}
+     * —— 玩家点完 Boss 就卡死在战斗界面，既没有删牌框也拿不到卡牌奖励。
+     * {@link RemoveCardOverlay} 是普通节点，天然没这个限制。
+     */
+    private void showRemovePicker(int remaining, Runnable onDone) {
         if (remaining <= 0 || player.deck.isEmpty()) {
             onDone.run();
             return;
         }
 
-        javafx.scene.control.Alert alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.CONFIRMATION);
-        alert.setTitle("空鸟笼");
-        alert.setHeaderText("选择一张卡牌从卡组中移除（还剩 " + remaining + " 张）");
-        alert.getDialogPane().setPrefSize(500, 400);
-
-        javafx.scene.layout.VBox cardList = new javafx.scene.layout.VBox(8);
-        cardList.setPadding(new javafx.geometry.Insets(10));
-
-        for (Card c : player.deck) {
-            javafx.scene.control.Button cardBtn = new javafx.scene.control.Button(c.kind.label + "  ——  " + c.kind.desc);
-            cardBtn.setPrefWidth(460);
-            cardBtn.setStyle("-fx-background-color: #2d3748; -fx-text-fill: white; "
-                    + "-fx-background-radius: 8; -fx-cursor: hand; -fx-padding: 10;");
-            cardBtn.setOnMouseEntered(e ->
-                cardBtn.setStyle("-fx-background-color: #4a5568; -fx-text-fill: white; "
-                        + "-fx-background-radius: 8; -fx-cursor: hand; -fx-padding: 10;"));
-            cardBtn.setOnMouseExited(e ->
-                cardBtn.setStyle("-fx-background-color: #2d3748; -fx-text-fill: white; "
-                        + "-fx-background-radius: 8; -fx-cursor: hand; -fx-padding: 10;"));
-            cardBtn.setOnAction(e -> {
-                player.deck.remove(c);
-                alert.close();
-                removeOneCard(remaining - 1, onDone);
-            });
-            cardList.getChildren().add(cardBtn);
-        }
-
-        javafx.scene.control.ScrollPane scrollPane = new javafx.scene.control.ScrollPane(cardList);
-        scrollPane.setFitToWidth(true);
-        scrollPane.setPrefHeight(300);
-        alert.getDialogPane().setContent(scrollPane);
-
-        // 移除默认按钮，只保留卡牌选择和取消
-        alert.getDialogPane().getButtonTypes().clear();
-        alert.getDialogPane().getButtonTypes().add(javafx.scene.control.ButtonType.CANCEL);
-
-        alert.showAndWait().ifPresent(btnType -> {
-            if (btnType == javafx.scene.control.ButtonType.CANCEL) {
-                onDone.run();
-            }
-        });
+        RemoveCardOverlay picker = new RemoveCardOverlay(
+                player,
+                "空鸟笼 · 选择一张牌移除（还剩 " + remaining + " 张）",
+                c -> {
+                    player.deck.remove(c);
+                    hud.refresh();                        // 右上角牌组角标同步
+                    showRemovePicker(remaining - 1, onDone);
+                },
+                onDone);                                  // 「取消」= 跳过剩余删牌，继续流程
+        getChildren().add(picker); // BattleView 是 StackPane：铺在最上层盖住战斗界面
+        picker.show();
     }
 
     /**

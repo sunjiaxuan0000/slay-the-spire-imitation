@@ -43,7 +43,7 @@ public class Card {
         BODY_SLAM("全身撞击","造成等同于你格挡值的伤害",Type.ATTACK,4),
         HEMOKINESIS("御血术","失去2点生命，造成15点伤害",Type.ATTACK,3),
         UPPERCUT("上勾拳","造成13点伤害，给予1层虚弱，给予1层易伤",Type.ATTACK,3),
-        LIMIT_BREAK("突破限制","将你的力量翻倍，消耗",Type.SKILL,1),
+        LIMIT_BREAK("突破极限","将你的力量翻倍，消耗",Type.SKILL,1),
         DEMON_FORM("恶魔形态","每回合增加两点力量",Type.POWER,1),
         TRUE_GRIT("坚毅","获得7点格挡，随机消耗一张手牌",Type.SKILL,4),
         FEEL_NO_PAIN("无惧疼痛","每有一张牌被消耗，获得 3 点格挡",Type.POWER,3),

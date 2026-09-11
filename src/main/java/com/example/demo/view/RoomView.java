@@ -1,15 +1,12 @@
 package com.example.demo.view;
 
-import com.example.demo.card.Card;
 import com.example.demo.character.Player;
 import com.example.demo.character.Relic;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
-import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
-import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
@@ -228,46 +225,24 @@ public class RoomView extends StackPane {
         leaveBtn.setVisible(true);
     }
 
-    /** 破镜效果：让玩家选择一张卡牌删除 */
+    /**
+     * 破镜效果：让玩家选择一张卡牌删除。
+     *
+     * <p>版面走 {@link RemoveCardOverlay}，与牌组页（{@code HelloApplication.deckPage}）同款 ——
+     * 深色面板 + 24px 标题 + 卡面滚动区，区别只是这里的卡面可以点。
+     */
     private void removeCardFromDeck() {
         if (player.deck.isEmpty()) return;
-        
-        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-        alert.setTitle("破镜");
-        alert.setHeaderText("选择一张卡牌从卡组中移除");
-        alert.getDialogPane().setPrefSize(500, 400);
-        
-        VBox cardList = new VBox(8);
-        cardList.setPadding(new Insets(10));
-        
-        for (Card c : player.deck) {
-            Button cardBtn = new Button(c.kind.label + "  ——  " + c.kind.desc);
-            cardBtn.setPrefWidth(460);
-            cardBtn.setStyle("-fx-background-color: #2d3748; -fx-text-fill: white; "
-                    + "-fx-background-radius: 8; -fx-cursor: hand; -fx-padding: 10;");
-            cardBtn.setOnMouseEntered(e -> 
-                cardBtn.setStyle("-fx-background-color: #4a5568; -fx-text-fill: white; "
-                        + "-fx-background-radius: 8; -fx-cursor: hand; -fx-padding: 10;"));
-            cardBtn.setOnMouseExited(e -> 
-                cardBtn.setStyle("-fx-background-color: #2d3748; -fx-text-fill: white; "
-                        + "-fx-background-radius: 8; -fx-cursor: hand; -fx-padding: 10;"));
-            cardBtn.setOnAction(e -> {
-                player.deck.remove(c);
-                alert.close();
-            });
-            cardList.getChildren().add(cardBtn);
-        }
-        
-        javafx.scene.control.ScrollPane scrollPane = new javafx.scene.control.ScrollPane(cardList);
-        scrollPane.setFitToWidth(true);
-        scrollPane.setPrefHeight(300);
-        alert.getDialogPane().setContent(scrollPane);
-        
-        // 移除默认按钮，只保留卡牌选择
-        alert.getDialogPane().getButtonTypes().clear();
-        alert.getDialogPane().getButtonTypes().add(ButtonType.CANCEL);
-        
-        alert.showAndWait();
+
+        RemoveCardOverlay picker = new RemoveCardOverlay(
+                player,
+                "破镜 · 选择一张牌移除",
+                c -> {
+                    player.deck.remove(c);
+                    hint.setText("已移除：" + c.kind.label + " —— 可以离开了");
+                });
+        getChildren().add(picker); // RoomView 是 StackPane：铺在最上层盖住整个房间
+        picker.show();
     }
 
     // ================= 底部 =================

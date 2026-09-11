@@ -314,20 +314,24 @@ public class HelloApplication extends Application {
             activeBattle = null;
             battleMapOpen = false;
             if (won) {
-                // 所有战斗胜利后都回到地图
+                // ★ 精英战利品必须在切回地图【之前】发。
+                //   showMapScene 会新建一个 RunHud 并 setScene，之后再去 hud.refresh()
+                //   刷的只是战斗场景那个已经被丢弃的 HUD —— 地图上的遗物栏不会更新。
+                //   （宝箱那条路是对的：它先 randomEliteRelic 再 hud.refresh 当前场景的 HUD。）
+                Relic eliteRelic = (type == GameMap.NodeType.ELITE)
+                        ? RelicFun.randomEliteRelic(player)
+                        : null;
+
+                // 所有战斗胜利后都回到地图（新 HUD 是拿加过遗物的 player 建的，所以会带上它）
                 showMapScene(stage, map, player);
-                
+
                 if (type == GameMap.NodeType.BOSS) {
                     // Boss 战胜利：延迟返回主菜单，让玩家看到通关画面
                     PauseTransition delay = new PauseTransition(Duration.millis(2000));
                     delay.setOnFinished(e -> returnToMenu(stage));
                     delay.play();
-                } else if (type == GameMap.NodeType.ELITE) {
-                    Relic relic = RelicFun.randomEliteRelic(player);
-                    if (relic != null) {
-                        hud.refresh();
-                        RelicObtainToast.show(stage.getScene(), relic, null);
-                    }
+                } else if (eliteRelic != null) {
+                    RelicObtainToast.show(stage.getScene(), eliteRelic, null);
                 }
                 // 普通怪物：直接回到地图，无额外操作
             } else {

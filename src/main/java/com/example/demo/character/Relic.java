@@ -56,7 +56,7 @@ public  class Relic {
             new Relic("猫", "每场战斗开始时获得 10 点格挡", "relic/mao.png"),
             new Relic("孙子兵法", "若一回合未出牌，下回合获得 1 点额外能量", "relic/ArtofWar.png"),
             new Relic("发条靴", "造成 ≤ 5 的未被格挡伤害时，提升为 8", "relic/TheBoot.png"),
-            new Relic("赤牛", "每场战斗第一次攻击造成 8 点额外伤害"),
+            new Relic("赤牛", "每场战斗第一次攻击造成 8 点额外伤害", "relic/chiniu.png"),
             new Relic("金刚杵", "每场战斗开始时获得 1 点力量", "relic/Vajra.png"),
             new Relic("小血瓶", "每场战斗开始时恢复 2 点生命", "relic/Blood_vial.png"),
             new Relic("草莓", "最大生命值提升 7 点", "relic/Strawberry.png"),
