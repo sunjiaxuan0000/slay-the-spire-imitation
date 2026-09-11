@@ -18,9 +18,11 @@ public class Player {
     public final List<Card> deck = new ArrayList<>();
     public final List<Relic> relics = new ArrayList<>(); // 本局获得的遗物
     public boolean restedAtCampfire = false; // 篝火休息后标记
+    public int leaveNoteBattles = 0; // 请假条：剩余生效战斗场次
 
     public Player() {
         deck.addAll(starterDeck()); // 起始牌组
+        relics.add(Relic.BURNING_BLOOD); // 战士固有初始遗物：燃烧之血（战斗结束回 6 血的被动，见 RelicFun.onBattleEnd）
     }
 
     /** 获得遗物（同名不重复拿，避免效果叠加） */
@@ -30,6 +32,8 @@ public class Player {
             if (have.name.equals(r.name)) return;
         }
         relics.add(r);
+        // 遗物获得时的即时效果（保温杯、请假条等）委托给 RelicFun
+        RelicFun.onRelicObtained(this, r, null);
     }
 
     /** 起始牌组：10 张 = 5 打击 + 4 防御 + 1 痛击 */

@@ -644,16 +644,6 @@ public class HelloApplication extends Application {
         }
     }
 
-    /** 宝箱：从遗物池随机给一个还没拿过的遗物 */
-    private Relic randomTreasure(Player player) {
-        List<Relic> pool = Relic.pool(); // 全部遗物（起点三选一 / 开发者面板用同一份）
-        pool.removeIf(r -> player.relics.stream().anyMatch(h -> h.name.equals(r.name)));
-        if (pool.isEmpty()) return null;
-        int idx = new java.util.Random().nextInt(pool.size());
-        Relic gained = pool.get(idx);
-        player.addRelic(gained);
-        return gained;
-    }
 
     /** 随机奖励一张卡（事�?奖励用） */
     private Card randomRewardCard() {

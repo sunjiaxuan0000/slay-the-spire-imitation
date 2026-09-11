@@ -43,6 +43,7 @@ public abstract class Enemy {
     public int block;       // 当前格挡值
     public int power;// 力量：加到攻击伤害上（强化获得）
     public final boolean isBoss;
+    public final boolean isElite;  // 精英怪标记
     public boolean isSecondPhase = false;  // BOSS 二阶段标记（仅 Boss 子类会触发）
     public final boolean hasPortrait;
 
@@ -66,11 +67,16 @@ public abstract class Enemy {
     private int planIndex = 0;
 
     protected Enemy(String name, int maxHp, boolean hasPortrait, boolean isBoss, List<Step> plan) {
+        this(name, maxHp, hasPortrait, isBoss, false, plan);
+    }
+
+    protected Enemy(String name, int maxHp, boolean hasPortrait, boolean isBoss, boolean isElite, List<Step> plan) {
         this.name = name;
         this.maxHp = maxHp;
         this.hp = maxHp;
         this.hasPortrait = hasPortrait;
         this.isBoss = isBoss;
+        this.isElite = isElite;
         this.plan = new ArrayList<>(plan);
     }
 

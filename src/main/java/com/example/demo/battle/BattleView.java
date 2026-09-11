@@ -5,6 +5,7 @@ import com.example.demo.card.Card;
 import com.example.demo.card.CardFaceView;
 import com.example.demo.card.CardPlay;
 import com.example.demo.character.Player;
+import com.example.demo.character.Relic;
 import com.example.demo.character.RelicFun;
 import com.example.demo.enemy.Enemy;
 import com.example.demo.sound.SoundFx;
@@ -107,7 +108,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     private boolean fanBonusApplied = false;
     private int skillCardsPlayedThisTurn = 0;
     private boolean letterOpenerUsed = false;
-    private boolean noodleBonusUsed = false;
+    private Relic bossRelicObtained = null; // Boss 战获得的遗物
 
     // ===== 动画已统一委托给 SpriteAnimator =====
 
@@ -257,20 +258,21 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         draw.addAll(player.deck);
         Collections.shuffle(draw, rnd);
 
-        RelicFun.onBattleStart(player);
-        playerStrength += RelicFun.extraStrength(player);
-        // 忘情牛肉面：战斗开始时获得 3 点力量，仅第一回合有效
-        if (RelicFun.hasRelic(player, "忘情牛肉面")) {
-            playerStrength += 3;
+        // 遗物战斗开始效果（请假条、小血瓶、忘情牛肉面、金刚杵）
+        playerStrength += RelicFun.onBattleStart(player);
+        // 请假条：设置怪物血量为 1
+        if (RelicFun.isLeaveNoteActive(player)) {
+            enemy.hp = 1;
         }
         hud.refresh();
         initAnimators();
         gameTimer.start();
-        SoundFx.playAny(enemyOink()); // 怪物登场音效（BOSS 用鱼龙叫，普通怪用普通猪叫）
+        SoundFx.playAny(enemyOink());
         startPlayerTurn();
-        // 牛来：战斗开始时对敌人造成 3 点伤害
-        if (RelicFun.hasRelic(player, "牛来")) {
-            enemy.hp = Math.max(0, enemy.hp - 3);
+        // 牛来：对敌人造成伤害
+        int bsd = RelicFun.battleStartDamage(player);
+        if (bsd > 0) {
+            enemy.hp = Math.max(0, enemy.hp - bsd);
             if (enemy.hp == 0) victory();
         }
     }
@@ -522,14 +524,8 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         if (enemyVulnerable > 0) enemyVulnerable--;
         noDrawThisTurn = false;
         energy = 3;
-        // 古茶具套装：篝火休息后下一场战斗第一回合 +2 能量
-        if (turn == 1) {
-            energy += RelicFun.teaSetEnergy(player);
-        }
-        // 孙子兵法：上回合未出牌则获得 1 点额外能量
-        if (!playedCardThisTurn && turn > 1 && RelicFun.hasRelic(player, "孙子兵法")) {
-            energy += 1;
-        }
+        // 遗物额外能量（奴隶贩子颈环、古茶具套装、孙子兵法）
+        energy += RelicFun.extraEnergy(player, enemy, turn, playedCardThisTurn);
         playedCardThisTurn = false;
         attackCardsPlayedThisTurn = 0;
         fanBonusApplied = false;
@@ -540,12 +536,10 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         int brutality = powerStacks.getOrDefault(Card.Kind.BRUTALITY, 0);
         if (brutality > 0 && loseHp(brutality, true)) return;
 
-        drawHand(5 + (RelicFun.hasRelic(player, "请假条") ? 1 : 0) + brutality);
+        drawHand(5 + brutality);
 
-        // 英雄宝典：战斗开始时增加一张免费能力牌
-        if (turn == 1 && RelicFun.hasRelic(player, "英雄宝典")) {
-            hand.add(Card.freePower());
-        }
+        // 英雄宝典：第一回合添加免费能力牌
+        RelicFun.addTurnStartCards(player, hand, turn);
 
         playerBlock += RelicFun.startBlock(player, turn);
 
@@ -788,7 +782,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         player.damage(dmg);
         // 百年积木：每场战斗第一次失去生命值时抽 3 张牌
         if (!firstDamageTriggered && player.hp() < hpBefore
-                && RelicFun.hasRelic(player, "百年积木")) {
+                && RelicFun.shouldDrawOnFirstDamage(player, true)) {
             firstDamageTriggered = true;
             drawHand(3);
         }
@@ -809,19 +803,12 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         }
 
         // 忘情牛肉面：第一回合结束后移除临时 3 点力量
-        if (turn == 1 && !noodleBonusUsed && RelicFun.hasRelic(player, "忘情牛肉面")) {
-            noodleBonusUsed = true;
+        if (RelicFun.shouldRemoveNoodleBonus(player, turn)) {
             playerStrength -= 3;
         }
 
-        // 奥利哈钢：回合结束时若无格挡，获得 6 点格挡
-        if (playerBlock == 0 && RelicFun.hasRelic(player, "奥利哈钢")) {
-            playerBlock += 6;
-        }
-        // taffy：回合结束时生命值高于 50% 额外获得 5 点格挡
-        if (player.hp() * 2 > player.maxHp && RelicFun.hasRelic(player, "taffy")) {
-            playerBlock += 5;
-        }
+        // 遗物回合结束格挡（奥利哈钢、taffy）
+        playerBlock += RelicFun.endTurnBlock(player, playerBlock, player.hp(), player.maxHp);
 
         discard.addAll(hand);
         hand.clear();
@@ -970,6 +957,10 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         battleOver = true;
         playerAnim.stop();
         RelicFun.onBattleEnd(player);
+        // Boss 战胜利：获得 Boss 遗物（池为空时跳过）
+        if (enemy.isBoss) {
+            bossRelicObtained = RelicFun.randomBossRelic(player);
+        }
         hud.refresh();
         playerAnim.stop();   // 冻结双方待机呼吸，交给倒地动画接管
         enemyAnim.stop();
@@ -1025,6 +1016,19 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     private void showReward() {
         pileOverlay.hide();
 
+        String action = RelicFun.bossVictoryAction(bossRelicObtained);
+        if ("REMOVE_CARDS".equals(action)) {
+            removeCardsFromDeck(2, this::showCardReward);
+        } else if ("CHOOSE_ELITE".equals(action)) {
+            RelicFun.showEliteRelicChoice(player, this::showCardReward);
+        } else {
+            showCardReward();
+        }
+    }
+
+    /** 显示卡牌奖励选择 */
+    private void showCardReward() {
+
         List<Card> pool = List.of(
                 Card.sweep(), Card.bleed(),
                 Card.pommelStrike(), Card.shrug(),
@@ -1062,6 +1066,66 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             player.deck.add(c);
             rewardOverlay.hide();
             onFinish.accept(true);
+        });
+    }
+
+    /** 移除卡牌：显示 UI 让玩家选择移除 count 张牌，完成后调用 onDone */
+    private void removeCardsFromDeck(int count, Runnable onDone) {
+        if (player.deck.size() <= count) {
+            // 牌组不足，直接跳过
+            onDone.run();
+            return;
+        }
+        removeOneCard(count, onDone);
+    }
+
+    /** 递归移除单张卡牌 */
+    private void removeOneCard(int remaining, Runnable onDone) {
+        if (remaining <= 0 || player.deck.isEmpty()) {
+            onDone.run();
+            return;
+        }
+
+        javafx.scene.control.Alert alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.CONFIRMATION);
+        alert.setTitle("空鸟笼");
+        alert.setHeaderText("选择一张卡牌从卡组中移除（还剩 " + remaining + " 张）");
+        alert.getDialogPane().setPrefSize(500, 400);
+
+        javafx.scene.layout.VBox cardList = new javafx.scene.layout.VBox(8);
+        cardList.setPadding(new javafx.geometry.Insets(10));
+
+        for (Card c : player.deck) {
+            javafx.scene.control.Button cardBtn = new javafx.scene.control.Button(c.kind.label + "  ——  " + c.kind.desc);
+            cardBtn.setPrefWidth(460);
+            cardBtn.setStyle("-fx-background-color: #2d3748; -fx-text-fill: white; "
+                    + "-fx-background-radius: 8; -fx-cursor: hand; -fx-padding: 10;");
+            cardBtn.setOnMouseEntered(e ->
+                cardBtn.setStyle("-fx-background-color: #4a5568; -fx-text-fill: white; "
+                        + "-fx-background-radius: 8; -fx-cursor: hand; -fx-padding: 10;"));
+            cardBtn.setOnMouseExited(e ->
+                cardBtn.setStyle("-fx-background-color: #2d3748; -fx-text-fill: white; "
+                        + "-fx-background-radius: 8; -fx-cursor: hand; -fx-padding: 10;"));
+            cardBtn.setOnAction(e -> {
+                player.deck.remove(c);
+                alert.close();
+                removeOneCard(remaining - 1, onDone);
+            });
+            cardList.getChildren().add(cardBtn);
+        }
+
+        javafx.scene.control.ScrollPane scrollPane = new javafx.scene.control.ScrollPane(cardList);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setPrefHeight(300);
+        alert.getDialogPane().setContent(scrollPane);
+
+        // 移除默认按钮，只保留卡牌选择和取消
+        alert.getDialogPane().getButtonTypes().clear();
+        alert.getDialogPane().getButtonTypes().add(javafx.scene.control.ButtonType.CANCEL);
+
+        alert.showAndWait().ifPresent(btnType -> {
+            if (btnType == javafx.scene.control.ButtonType.CANCEL) {
+                onDone.run();
+            }
         });
     }
 
