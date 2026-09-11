@@ -3,6 +3,7 @@ package com.example.demo;
 import com.example.demo.battle.BattleView;
 import com.example.demo.card.Card;
 import com.example.demo.card.CardFaceView;
+import com.example.demo.card.CardRewardPool;
 import com.example.demo.character.CharacterSelect;
 import com.example.demo.character.Player;
 import com.example.demo.character.Relic;
@@ -187,8 +188,9 @@ public class HelloApplication extends Application {
         stage.setScene(buildMenuScene(stage));
     }
 
-    /** 开始一局：新玩家 + 新地�?*/
+    /** 开始一局：新玩家 + 新地图 */
     private void startMap(Stage stage) {
+        CardRewardPool.resetPity(); // 新的一局：怜悯偏移回归初始值
         Player player = new Player();
         GameMap map = GameMap.generate();
         showMapScene(stage, map, player);

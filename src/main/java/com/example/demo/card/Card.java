@@ -16,45 +16,45 @@ public class Card {
 
     /** 牌的种类 */
     public enum Kind {
-        STRIKE("打击", "造成 6 点伤害", Type.ATTACK, 4),
-        DEFEND("防御", "获得 5 点格挡", Type.SKILL, 4),
-        BASH("痛击", "造成 8 点伤害，给予敌人 2 层易伤", Type.ATTACK, 4),
-        SWEEP("铁斩波", "造成 5 点伤害，获得 5 点格挡", Type.ATTACK, 4),
-        POMMEL("剑柄打击", "造成 9 点伤害，抽 1 张牌", Type.ATTACK, 3),
-        SHRUG("耸肩无视", "获得 8 点格挡，抽 1 张牌", Type.SKILL, 3),
-        BLEED("放血", "获得 2 点能量，自己失去 3 点生命", Type.SKILL, 3),
+        STRIKE("打击", "造成 6 点伤害", Type.ATTACK, 3),
+        DEFEND("防御", "获得 5 点格挡", Type.SKILL, 3),
+        BASH("痛击", "造成 8 点伤害，给予敌人 2 层易伤", Type.ATTACK, 3),
+        SWEEP("铁斩波", "造成 5 点伤害，获得 5 点格挡", Type.ATTACK, 3),
+        POMMEL("剑柄打击", "造成 9 点伤害，抽 1 张牌", Type.ATTACK, 2),
+        SHRUG("耸肩无视", "获得 8 点格挡，抽 1 张牌", Type.SKILL, 2),
+        BLEED("放血", "获得 2 点能量，自己失去 3 点生命", Type.SKILL, 2),
         HAMMER("重锤", "造成 32 点伤害", Type.ATTACK, 1),
         IMPREGNABLE("岿然不动", "获得 30 点格挡，消耗", Type.SKILL, 1),
-        DOUBLE_STRIKE("双重打击", "造成 5 点伤害两次", Type.ATTACK, 4),
-        KINDLE("燃烧", "获得 2 层力量", Type.POWER, 3),
-        LIGHTNING("闪电霹雳", "对敌人造成 6 点伤害，给予 1 层易伤", Type.ATTACK, 4),
-        RAGE("盛怒", "获得 2 点能量，消耗", Type.SKILL, 3),
+        DOUBLE_STRIKE("双重打击", "造成 5 点伤害两次", Type.ATTACK, 3),
+        KINDLE("燃烧", "获得 2 层力量", Type.POWER, 2),
+        LIGHTNING("闪电霹雳", "对敌人造成 6 点伤害，给予 1 层易伤", Type.ATTACK, 3),
+        RAGE("盛怒", "获得 2 点能量，消耗", Type.SKILL, 2),
         OFFERING("祭品", "自己失去 6 点生命，获得 2 点能量，抽 3 张牌，消耗", Type.SKILL, 1),
-        FORTIFY("巩固", "将你当前的格挡翻倍", Type.SKILL, 3),
-        FOCUS("战斗专注", "抽 3 张牌，本回合不能再抽牌", Type.SKILL, 3),
-        SHOCKWAVE("震荡波", "给予敌人 4 层虚弱，4 层易伤，消耗", Type.SKILL, 3),
-        HEAVY_BLADE("重刃", "造成 14 点伤害，力量在重刃上发挥 3 倍效果", Type.ATTACK, 4),
-        WILD_STRIKE("狂野打击", "造成 12 点伤害，将一张“伤口”放入你的抽牌堆", Type.ATTACK, 4),
-        ADAMANT_ARM("金刚臂", "造成 12 点伤害，给予 2 层虚弱", Type.ATTACK, 4),
+        FORTIFY("巩固", "将你当前的格挡翻倍", Type.SKILL, 2),
+        FOCUS("战斗专注", "抽 3 张牌，本回合不能再抽牌", Type.SKILL, 2),
+        SHOCKWAVE("震荡波", "给予敌人 4 层虚弱，4 层易伤，消耗", Type.SKILL, 2),
+        HEAVY_BLADE("重刃", "造成 14 点伤害，力量在重刃上发挥 3 倍效果", Type.ATTACK, 3),
+        WILD_STRIKE("狂野打击", "造成 12 点伤害，将一张“伤口”放入你的抽牌堆", Type.ATTACK, 3),
+        ADAMANT_ARM("金刚臂", "造成 12 点伤害，给予 2 层虚弱", Type.ATTACK, 3),
         BRUTALITY("残暴", "使用后每回合开始时失去一点体力，多抽一张牌", Type.POWER, 1),
-        FLEX("活动肌肉", "获得 2 点力量，回合结束时失去 2 点力量", Type.SKILL, 4),
-        POWER_THROUGH("硬撑", "获得 15 点格挡，将两张伤口加入手牌", Type.SKILL, 3),
-        SOUL_SEVER("断魂斩", "消耗手牌中所有的非攻击牌，造成 16 点伤害", Type.ATTACK, 3),
-        BODY_SLAM("全身撞击","造成等同于你格挡值的伤害",Type.ATTACK,4),
-        HEMOKINESIS("御血术","失去2点生命，造成15点伤害",Type.ATTACK,3),
-        UPPERCUT("上勾拳","造成13点伤害，给予1层虚弱，给予1层易伤",Type.ATTACK,3),
+        FLEX("活动肌肉", "获得 2 点力量，回合结束时失去 2 点力量", Type.SKILL, 3),
+        POWER_THROUGH("硬撑", "获得 15 点格挡，将两张伤口加入手牌", Type.SKILL, 2),
+        SOUL_SEVER("断魂斩", "消耗手牌中所有的非攻击牌，造成 16 点伤害", Type.ATTACK, 2),
+        BODY_SLAM("全身撞击","造成等同于你格挡值的伤害",Type.ATTACK,3),
+        HEMOKINESIS("御血术","失去2点生命，造成15点伤害",Type.ATTACK,2),
+        UPPERCUT("上勾拳","造成13点伤害，给予1层虚弱，给予1层易伤",Type.ATTACK,2),
         LIMIT_BREAK("突破极限","将你的力量翻倍，消耗",Type.SKILL,1),
         DEMON_FORM("恶魔形态","每回合增加两点力量",Type.POWER,1),
-        TRUE_GRIT("坚毅","获得7点格挡，随机消耗一张手牌",Type.SKILL,4),
-        FEEL_NO_PAIN("无惧疼痛","每有一张牌被消耗，获得 3 点格挡",Type.POWER,3),
-        WOUND("伤口", "无法被打出", Type.STATUS, 4),
-        SLIME("黏液", "消耗", Type.STATUS, 4);
+        TRUE_GRIT("坚毅","获得7点格挡，随机消耗一张手牌",Type.SKILL,3),
+        FEEL_NO_PAIN("无惧疼痛","每有一张牌被消耗，获得 3 点格挡",Type.POWER,2),
+        WOUND("伤口", "无法被打出", Type.STATUS, 3),
+        SLIME("黏液", "消耗", Type.STATUS, 3);
         
 
         public final String label;
         public final String desc;
         public final Type type;
-        public final int weight; // 奖励池权重（4=白卡/普通，3=蓝卡/罕见，1=金卡/稀有）
+        public final int weight; // 品质：1=金卡，2=蓝卡，3=白卡（仅表示品质，不再是抽取权重）
 
         Kind(String label, String desc, Type type, int weight) {
             this.label = label;

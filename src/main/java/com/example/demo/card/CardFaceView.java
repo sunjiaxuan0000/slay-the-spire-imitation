@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 层次（自底向上）：
  *   1) 卡面美术：art/&lt;Kind 名&gt;.png —— 垫在最底下，靠基础图的透明区域"漏"出来（没图就跳过这层）
  *   2) 基础卡面：ability.png(能力) / attack.png(攻击) / skill.png(技能)
- *   3) 稀有度飘带：normal.png(weight=4 白) / rare.png(3 蓝) / gold.png(2 金)，类型文字写在飘带中间
+ *   3) 稀有度飘带：normal.png(weight=3 白) / rare.png(2 蓝) / gold.png(1 金)，类型文字写在飘带中间
  *   4) 卡名：卡上方
  *   5) 描述：卡下方
  *   6) 能量徽章 power.png：左上角，上面写能量
@@ -273,8 +273,8 @@ public class CardFaceView {
     private static final Image FACE_ATTACK = img("attack.png");
     private static final Image FACE_SKILL = img("skill.png");
     private static final Image FACE_ABILITY = img("ability.png");
-    private static final Image RIBBON_COMMON = img("normal.png"); // 4 白
-    private static final Image RIBBON_RARE = img("rare.png");     // 3 蓝
+    private static final Image RIBBON_COMMON = img("normal.png"); // 3 白
+    private static final Image RIBBON_RARE = img("rare.png");     // 2 蓝
     private static final Image RIBBON_GOLD = img("gold.png");     // 1 金
     private static final Image POWER = img("power.png");
 
@@ -347,9 +347,9 @@ public class CardFaceView {
 
         // ---------- 2) 稀有度飘带（中间）+ 类型文字 ----------
         Image ribbon = switch (c.kind.weight) {
-            case 4 -> RIBBON_COMMON;
-            case 3 -> RIBBON_RARE;
-            case 1 -> RIBBON_GOLD;
+            case 3 -> RIBBON_COMMON; // 白卡
+            case 2 -> RIBBON_RARE;   // 蓝卡
+            case 1 -> RIBBON_GOLD;   // 金卡
             default -> RIBBON_COMMON;
         };
         ImageView ribbonView = new ImageView(ribbon);

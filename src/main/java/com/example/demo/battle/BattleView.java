@@ -4,6 +4,7 @@ import com.example.demo.card.BattleState;
 import com.example.demo.card.Card;
 import com.example.demo.card.CardFaceView;
 import com.example.demo.card.CardPlay;
+import com.example.demo.card.CardRewardPool;
 import com.example.demo.character.Player;
 import com.example.demo.character.Relic;
 import com.example.demo.character.RelicFun;
@@ -1464,29 +1465,9 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
                 Card.heavyBlade(), Card.adamantArm(), Card.brutality(), Card.flex(),
                 Card.powerThrough(), Card.soulSever(), Card.uppercut(), Card.bodySlam(),
                 Card.hemokinesis(), Card.limitBreak(), Card.feelNoPain(), Card.trueGrit());
-        // 权重取自卡牌基础权重（4=白/普通，3=蓝/罕见，1=金/稀有），
-        // 避免与卡池硬编码的双份数据源不同步；精英战使用专属权重。
-        List<Integer> weights = pool.stream()
-                .map(this::rewardWeight)
-                .toList();
-
-        List<Card> offers = new ArrayList<>();
-        List<Card> remaining = new ArrayList<>(pool);
-        List<Integer> remainingWeights = new ArrayList<>(weights);
-        for (int i = 0; i < 3; i++) {
-            int total = remainingWeights.stream().mapToInt(Integer::intValue).sum();
-            int r = rnd.nextInt(total);
-            int cumulative = 0;
-            for (int j = 0; j < remaining.size(); j++) {
-                cumulative += remainingWeights.get(j);
-                if (r < cumulative) {
-                    offers.add(remaining.get(j));
-                    remaining.remove(j);
-                    remainingWeights.remove(j);
-                    break;
-                }
-            }
-        }
+        // 抽取规则（品质概率 + 怜悯偏移）集中在 CardRewardPool；
+        // 精英战使用精英池（白 50% / 蓝 40% / 金 10%），普通战使用普通池（白 60% / 蓝 37% / 金 3%）。
+        List<Card> offers = CardRewardPool.draw(pool, 3, enemy.isElite);
 
         rewardOverlay.show(offers, (c, node) -> {
             player.deck.add(c);        // 数据照常即时结算（牌组数量随之更新）
@@ -1535,21 +1516,6 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
                 onDone);                                  // 「取消」= 跳过剩余删牌，继续流程
         getChildren().add(picker); // BattleView 是 StackPane：铺在最上层盖住战斗界面
         picker.show();
-    }
-
-    /**
-     * 卡牌进入奖励池的抽取权重。
-     * <p>
-     * 普通战斗沿用卡牌基础权重（4=白 / 3=蓝 / 1=金）；
-     * 精英战斗使用专属权重（金卡 2、蓝卡 3、白卡 3），提高金卡出现概率。
-     */
-    private int rewardWeight(Card c) {
-        if (!enemy.isElite) return c.kind.weight;
-        return switch (c.kind.weight) {
-            case 1 -> 2;   // 金卡（稀有）
-            case 3 -> 3;   // 蓝卡（罕见）
-            default -> 3;  // 白卡（普通，基础权重 4）
-        };
     }
 
     // ================= 刷新 =================
