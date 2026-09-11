@@ -5,6 +5,7 @@ import com.example.demo.character.Relic;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
@@ -155,6 +156,11 @@ public class RunHud extends VBox {
         StackPane.setAlignment(badge, Pos.BOTTOM_RIGHT);
         StackPane.setMargin(badge, new Insets(0, 2, 2, 0));
         badge.setVisible(false);
+    }
+
+    /** 牌组图标（右上角）；卡牌飞入牌组特效以此为终点。 */
+    public Node getDeckIcon() {
+        return deckIcon;
     }
 
     /** 刷新：血条 / 牌组数量 / 遗物图标 */

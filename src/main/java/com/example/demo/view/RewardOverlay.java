@@ -4,6 +4,7 @@ import com.example.demo.card.Card;
 import com.example.demo.card.CardFaceView;
 
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
@@ -15,7 +16,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 
 import java.util.List;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 /**
  * 胜利奖励弹层：怪物被击败后屏幕中央出现三张随机牌，点一张加入牌组，
@@ -73,9 +74,10 @@ public class RewardOverlay extends StackPane {
      * 展示三张奖励牌。
      *
      * @param offers   待选奖励牌（通常 3 张）
-     * @param onChoose 选中某张牌时的回调，参数为被选中的牌；外部负责隐藏弹层与结束战斗
+     * @param onChoose 选中某张牌时的回调，参数为被选中的牌和被点的按钮（按钮可作飞行起点）；
+     *                 外部负责隐藏弹层与结束战斗
      */
-    public void show(List<Card> offers, Consumer<Card> onChoose) {
+    public void show(List<Card> offers, BiConsumer<Card, Node> onChoose) {
         rewardChosen = false;
         rewardBox.getChildren().clear();
         for (Card c : offers) {
@@ -85,7 +87,7 @@ public class RewardOverlay extends StackPane {
             b.setOnAction(e -> {
                 if (rewardChosen) return;
                 rewardChosen = true;
-                onChoose.accept(c);
+                onChoose.accept(c, b);
             });
             rewardBox.getChildren().add(b);
         }

@@ -17,5 +17,6 @@ public class GuardPig extends Enemy {
                 new Step(Intent.ATTACK, 18)
         ));
         this.reflectRate = 0.3;   // 30% 反伤
+        this.isElite = true;      // 精英怪：战斗胜利后使用专属卡牌奖励权重
     }
 }

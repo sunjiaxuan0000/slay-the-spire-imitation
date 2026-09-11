@@ -43,7 +43,9 @@ public abstract class Enemy {
     public int block;       // 当前格挡值
     public int power;// 力量：加到攻击伤害上（强化获得）
     public final boolean isBoss;
-    public final boolean isElite;  // 精英怪标记
+
+    /** 是否为精英怪：精英战的卡牌奖励池使用专属权重（金卡 2 / 蓝卡 3 / 白卡 3）。 */
+    public boolean isElite = false;
     public boolean isSecondPhase = false;  // BOSS 二阶段标记（仅 Boss 子类会触发）
     public final boolean hasPortrait;
 
