@@ -93,6 +93,18 @@ public interface BattleState {
      */
     void activatePower(Card.Kind kind);
 
+    /**
+     * 消耗手牌中所有非攻击牌（断魂斩）。
+     * <p>这些牌确实被消耗，会触发“无惧疼痛”等消耗联动效果。
+     */
+    void exhaustNonAttackCardsInHand();
+
+    /**
+     * 随机消耗手牌中一张牌（坚毅）。
+     * <p>手牌为空时不做任何处理。被消耗的牌会触发“无惧疼痛”等消耗联动效果。
+     */
+    void exhaustRandomHandCard();
+
     /** 卡牌结算后移出玩家手牌，并按“是否消耗”决定去向 */
     void onCardPlayed(Card c);
 
