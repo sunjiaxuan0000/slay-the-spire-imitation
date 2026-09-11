@@ -1033,11 +1033,12 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
                 Card.rage(), Card.offering(), Card.wildStrike(),
                 Card.fortify(), Card.focus(), Card.shockwave(),
                 Card.heavyBlade(), Card.adamantArm(), Card.brutality(), Card.flex(),
-                Card.powerThrough(), Card.soulSever(), Card.uppercut());
-        // 权重直接取自 Card.Kind.weight（4=白/普通，3=蓝/罕见，1=金/稀有），
-        // 避免与卡池硬编码的双份数据源不同步。
+                Card.powerThrough(), Card.soulSever(), Card.uppercut(), Card.bodySlam(),
+                Card.hemokinesis(), Card.limitBreak());
+        // 权重取自卡牌基础权重（4=白/普通，3=蓝/罕见，1=金/稀有），
+        // 避免与卡池硬编码的双份数据源不同步；精英战使用专属权重。
         List<Integer> weights = pool.stream()
-                .map(c -> c.kind.weight)
+                .map(this::rewardWeight)
                 .toList();
 
         List<Card> offers = new ArrayList<>();
@@ -1063,6 +1064,21 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             rewardOverlay.hide();
             onFinish.accept(true);
         });
+    }
+
+    /**
+     * 卡牌进入奖励池的抽取权重。
+     * <p>
+     * 普通战斗沿用卡牌基础权重（4=白 / 3=蓝 / 1=金）；
+     * 精英战斗使用专属权重（金卡 2、蓝卡 3、白卡 3），提高金卡出现概率。
+     */
+    private int rewardWeight(Card c) {
+        if (!enemy.isElite) return c.kind.weight;
+        return switch (c.kind.weight) {
+            case 1 -> 2;   // 金卡（稀有）
+            case 3 -> 3;   // 蓝卡（罕见）
+            default -> 3;  // 白卡（普通，基础权重 4）
+        };
     }
 
     // ================= 刷新 =================

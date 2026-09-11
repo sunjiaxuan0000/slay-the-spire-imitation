@@ -40,7 +40,10 @@ public class Card {
         FLEX("活动肌肉", "获得 2 点力量，回合结束时失去 2 点力量", Type.SKILL, 4),
         POWER_THROUGH("硬撑", "获得 15 点格挡，将两张伤口加入手牌", Type.SKILL, 3),
         SOUL_SEVER("断魂术", "失去 2 点生命，造成 15 点伤害", Type.ATTACK, 3),
+        BODY_SLAM("全身撞击","造成你当前格挡值的伤害",Type.ATTACK,4),
+        HEMOKINESIS("御血术","失去2点生命，造成15点伤害",Type.ATTACK,3),
         UPPERCUT("上勾拳","造成13点伤害，给予1层虚弱，给予1层易伤",Type.ATTACK,3),
+        LIMIT_BREAK("突破限制","将你的力量翻倍，消耗",Type.SKILL,1),
         WOUND("伤口", "无法被打出", Type.STATUS, 4),
         SLIME("黏液", "消耗", Type.STATUS, 4);
         
@@ -134,8 +137,12 @@ public class Card {
     public static Card flex()        { return new Card(Kind.FLEX, 0, 0, 0); } // 临时力量效果在 play() 中处理
     public static Card powerThrough(){ return new Card(Kind.POWER_THROUGH, 1, 0, 15); } // 往手牌塞两张伤口的效果在 play() 中处理
     public static Card soulSever()   { return new Card(Kind.SOUL_SEVER, 1, 15, 0); } // 自伤 2 点生命的代价在 play() 中处理
+    public static Card limitBreak()  { return new Card(Kind.LIMIT_BREAK, 1, 0, 0,0,true); } // 将你的力量翻倍，消耗
+    public static Card hemokinesis() { return new Card(Kind.HEMOKINESIS, 1, 15, 0); } // 造成15点伤害，失去2点生命值
+    public static Card bodySlam()    { return new Card(Kind.BODY_SLAM, 1, 0, 0); } // 造成你当前格挡值的伤害
     public static Card wound()       { return new Card(Kind.WOUND, -1, 0, 0); } // -1 表示无法打出
     public static Card slime()       { return new Card(Kind.SLIME, 1, 0, 0, 0, true); } // 可打出，消耗
+    
     
 
     /** 英雄宝典遗物：随机生成一张不消耗能量的能力牌 */
@@ -178,6 +185,9 @@ public class Card {
             case WOUND -> wound();
             case SLIME -> slime();
             case UPPERCUT -> uppercut();
+            case BODY_SLAM -> bodySlam();
+            case HEMOKINESIS -> hemokinesis();
+            case LIMIT_BREAK -> limitBreak();
         };
     }
 }

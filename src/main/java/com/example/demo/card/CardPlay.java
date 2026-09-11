@@ -32,6 +32,9 @@ public final class CardPlay {
         // 断魂术：先失去 2 点生命作为代价（致死则终止结算，不造成伤害）
         if (c.kind == Card.Kind.SOUL_SEVER && s.loseHp(2, false)) return;
 
+        // 御血术：先失去 2 点生命作为代价（致死则终止结算，不造成伤害）
+        if (c.kind == Card.Kind.HEMOKINESIS && s.loseHp(2, false)) return;
+
         // 攻击：按段数结算，段间若战斗已结束（击杀）则停止
         if (c.damage > 0) {
             int strength = s.getStrength();
@@ -83,6 +86,8 @@ public final class CardPlay {
                 s.addEnemyWeak(1);
                 s.addEnemyVulnerable(1);
             } 
+            case BODY_SLAM -> s.damageEnemy(s.getBlock()); // 全身撞击：对敌人当造成前格挡值伤害
+            case LIMIT_BREAK -> s.gainStrength(s.getStrength()); // 突破极限：将你的力量翻倍
             default -> {
             }
         }
