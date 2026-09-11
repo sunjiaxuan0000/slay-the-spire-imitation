@@ -142,12 +142,32 @@ public abstract class Enemy {
         }
     }
 
+    /** 怪物回合开始的自效果：默认只结算仪式，子类可扩展（如护甲每回合自损） */
+    public void onTurnStart() {
+        applyRitual();
+    }
+
+    /** 本次攻击的基础伤害（不含力量/虚弱结算）。默认取轮盘数值，子类可按自身状态动态计算 */
+    public int baseAttackDamage(Step s) {
+        return s.value;
+    }
+
+    /** 格挡是否跨回合保留：默认每回合开始清空，护甲类敌人覆写为 true */
+    public boolean isBlockPersistent() {
+        return false;
+    }
+
+    /** 攻击是否改为削减玩家血量上限（而非直接扣血），默认 false */
+    public boolean cutsMaxHpOnAttack() {
+        return false;
+    }
+
     /** 描述当前意图的文字 */
     public String intentText() {
         Step s = current();
         int v = s.value;
         return switch (s.intent) {
-            case ATTACK -> s.intent.label + " " + (v + power);
+            case ATTACK -> s.intent.label + " " + (baseAttackDamage(s) + power + ritualPower);
             case DEFEND -> s.intent.label + " " + v;
             case BUFF   -> s.intent.label + " 力量 +" + v;
             case WEAKEN -> s.intent.label + " 我方 " + v + " 回合";

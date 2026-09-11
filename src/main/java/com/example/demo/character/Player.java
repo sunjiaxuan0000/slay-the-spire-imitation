@@ -60,4 +60,11 @@ public class Player {
         maxHp += amount;
         hp += amount;
     }
+
+    /** 削减最大生命值（巨猪骑士的攻击），当前生命同步夹到新上限；上限可减为 0 并判定死亡 */
+    public void reduceMaxHp(int amount) {
+        if (amount <= 0) return;
+        maxHp = Math.max(0, maxHp - amount);
+        hp = Math.max(0, Math.min(hp, maxHp));
+    }
 }

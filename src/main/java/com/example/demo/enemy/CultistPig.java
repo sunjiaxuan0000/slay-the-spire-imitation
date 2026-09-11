@@ -30,7 +30,7 @@ public class CultistPig extends Enemy {
 
     /** 老兵邪教猪（第 6 层起，复用邪教猪立绘但更小） */
     public static CultistPig veteran() {
-        return new CultistPig("老兵邪教猪", "邪教猪", 75, 8, 170);
+        return new CultistPig("老兵邪教猪", "邪教猪", 60, 8, 170);
     }
 
     @Override

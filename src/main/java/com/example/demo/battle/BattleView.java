@@ -8,6 +8,7 @@ import com.example.demo.character.Player;
 import com.example.demo.character.Relic;
 import com.example.demo.character.RelicFun;
 import com.example.demo.enemy.Enemy;
+import com.example.demo.enemy.GiantBoarKnight;
 import com.example.demo.sound.SoundFx;
 import com.example.demo.view.BattleUiFactory;
 import com.example.demo.view.DeathOverlay;
@@ -194,6 +195,9 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     private final Label ritualStatus = new Label();
     // 破甲状态栏（BOSS 二阶段）
     private final Label armorBreakStatus = new Label();
+    // 巨猪骑士：护甲状态栏 + 攻击数值构成（血条下方）
+    private final Label boarArmorStatus = new Label();
+    private final Label boarAttackInfo = new Label();
     // 中下
     private int turn = 0;
     private final Label turnLabel = new Label();
@@ -470,10 +474,24 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         armorBreakRow.setPrefWidth(286);
         armorBreakRow.getChildren().add(armorBreakStatus);
 
+        // 巨猪骑士：护甲栏（钢底白字）+ 攻击构成小字，均位于血条下方
+        boarArmorStatus.setTextFill(Color.WHITE);
+        boarArmorStatus.setFont(Font.font(13));
+        boarArmorStatus.setStyle("-fx-font-weight: bold; -fx-background-color: #475569; "
+                + "-fx-background-radius: 10; -fx-padding: 4 10 4 10;");
+        boarArmorStatus.setVisible(false);
+        boarAttackInfo.setTextFill(Color.rgb(203, 213, 225));
+        boarAttackInfo.setFont(Font.font(12));
+        boarAttackInfo.setVisible(false);
+        VBox boarInfo = new VBox(4);
+        boarInfo.setAlignment(Pos.CENTER_LEFT);
+        boarInfo.setPrefWidth(286);
+        boarInfo.getChildren().addAll(boarArmorStatus, boarAttackInfo);
+
         eChips.setPrefWrapLength(286);
         eChips.setAlignment(Pos.CENTER_LEFT);
 
-        box.getChildren().addAll(eName, intentRow, enemyPortrait, cluster, ritualRow, armorBreakRow, eChips);
+        box.getChildren().addAll(eName, intentRow, enemyPortrait, cluster, boarInfo, ritualRow, armorBreakRow, eChips);
         return box;
     }
 
@@ -523,10 +541,23 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             case ATTACK -> {
                 glyph = "攻";
                 color = "#dc2626";
-                number = s.value + enemy.power;
+                // 预览值 = 基础攻击 + 当前力量 + 仪式力量（下回合开始仪式会先生效再攻击）
+                int previewPower = enemy.power + enemy.getRitualPower();
+                number = enemy.baseAttackDamage(s) + previewPower;
+                System.err.println("[DEBUG refreshIntent] enemy=" + enemy.name + " power=" + enemy.power + " ritual=" + enemy.getRitualPower() + " base=" + enemy.baseAttackDamage(s) + " number=" + number);
                 if (enemyWeak > 0) number = number * 3 / 4;
+                // 猪龙鱼公爵二阶段：玩家有格挡时攻击 ×1.6
+                if (enemy.isBoss && enemy.isSecondPhase && playerBlock > 0) {
+                    number = (int) Math.floor(number * 1.60);
+                }
                 tip = "意图·攻击：将对玩家造成 " + number + " 伤害"
                         + (enemyWeak > 0 ? "（虚弱 ×0.75）" : "");
+                if (enemy.isBoss && enemy.isSecondPhase && playerBlock > 0) {
+                    tip += "（破甲 ×1.6）";
+                }
+                if (enemy.cutsMaxHpOnAttack()) {
+                    tip += "；该攻击不扣血，改为削减 " + (number * 4 / 5) + " 点血量上限（80%）";
+                }
             }
             case DEFEND -> {
                 glyph = "防";
@@ -1210,8 +1241,8 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     private void enemyAct() {
         if (battleOver || paused) return;
 
-        enemy.block = 0;
-        enemy.applyRitual();
+        if (!enemy.isBlockPersistent()) enemy.block = 0; // 护甲类敌人（巨猪骑士）护甲跨回合保留
+        enemy.onTurnStart();
         boolean wasSecondPhase = enemy.isSecondPhase;
         enemy.checkPhaseTransition();
         if (enemy.isSecondPhase && !wasSecondPhase) {
@@ -1257,7 +1288,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         switch (s.intent) {
             case ATTACK -> {
                 enemyAnim.triggerAttackDash();
-                int dmg = s.value + enemy.power;
+                int dmg = enemy.baseAttackDamage(s) + enemy.power;
                 if (enemyWeak > 0) dmg = dmg * 3 / 4;
                 if (enemy.isBoss && enemy.isSecondPhase && playerBlock > 0) {
                     dmg = (int) Math.floor(dmg * 1.60);
@@ -1267,7 +1298,12 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
                     playerBlock -= absorb;
                     dmg -= absorb;
                 }
-                takeDamage(dmg);
+                if (enemy.cutsMaxHpOnAttack()) {
+                    // 巨猪骑士：不直接扣血，改为削减 80% 血量上限
+                    player.reduceMaxHp(dmg * 4 / 5);
+                } else {
+                    takeDamage(dmg);
+                }
                 playerAnim.triggerHurt();
                 if (dmg > 0) SoundFx.play("GetHurt"); // 玩家被怪物攻击的受伤音效
                 hud.refresh();
@@ -1543,7 +1579,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         energyLabel.setText("能量 " + energy + " / 3");
 
         // 角色
-        double pRatio = (double) player.hp() / player.maxHp;
+        double pRatio = player.maxHp > 0 ? (double) player.hp() / player.maxHp : 0.0;
         pHpText.setText(player.hp() + " / " + player.maxHp);
         pHpFill.setPrefWidth(Math.max(0, 240.0 * pRatio));
         pHpFill.setStyle("-fx-background-color: " + (pRatio < 0.4 ? "#ef4444" : "#22c55e")
@@ -1603,6 +1639,38 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             ritualStatus.setVisible(false);
         }
 
+        // 巨猪骑士：血条下方显示护甲残量与攻击数值构成
+        if (enemy instanceof GiantBoarKnight boar) {
+            boarArmorStatus.setText("护甲 " + boar.block + " / " + GiantBoarKnight.MAX_ARMOR
+                    + (boar.isArmorBroken()
+                            ? "（已破甲）"
+                            : "（不随回合消失，每回合自损 4%）"));
+            boarArmorStatus.setVisible(true);
+
+            Enemy.Step s = boar.current();
+            if (s.intent == Enemy.Intent.ATTACK) {
+                int lost = boar.lostArmor();
+                int base = boar.baseAttackDamage(s);
+                int pct = boar.isArmorBroken() ? 2 : 3;
+                int constant = boar.isArmorBroken() ? 10 : 5;
+                StringBuilder txt = new StringBuilder("攻击构成：")
+                        .append(constant).append(" + 损甲").append(lost)
+                        .append("×").append(pct).append("% = ").append(base);
+                if (boar.power > 0) {
+                    txt.append("，+力量").append(boar.power).append(" → ").append(base + boar.power);
+                }
+                if (enemyWeak > 0) txt.append("（虚弱 ×0.75）");
+                txt.append("，命中削血量上限 80%");
+                boarAttackInfo.setText(txt.toString());
+                boarAttackInfo.setVisible(true);
+            } else {
+                boarAttackInfo.setVisible(false);
+            }
+        } else {
+            boarArmorStatus.setVisible(false);
+            boarAttackInfo.setVisible(false);
+        }
+
         // 破甲状态栏：BOSS 二阶段时显示特殊破甲机制
         if (enemy.isBoss && enemy.isSecondPhase) {
             armorBreakStatus.setText("破甲：你持盾时其攻击 ×1.6");
@@ -1656,9 +1724,27 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         endTurnBtn.setDisable(false);
     }
 
+    /**
+     * 生成战斗中卡面用的描述文字：把攻击牌的基础伤害替换为实际伤害（含力量/虚弱/易伤）。
+     * <ul>
+     *   <li>普通攻击牌：用正则替换描述中基础伤害数值为 {@link CardPlay#dealAttackDamage} 的结果</li>
+     *   <li>全身撞击：追加“（造成 X 点伤害）”，X 为实际格挡+力量后的伤害值</li>
+     *   <li>非攻击牌：原样返回</li>
+     * </ul>
+     */
+    private String battleDesc(Card c) {
+        if (c.damage <= 0 && c.kind != Card.Kind.BODY_SLAM) return c.kind.desc;
+        int actualDmg = CardPlay.dealAttackDamage(this, c);
+        if (c.kind == Card.Kind.BODY_SLAM) {
+            return c.kind.desc + "（造成 " + actualDmg + " 点伤害）";
+        }
+        return c.kind.desc.replaceFirst("\\b" + c.damage + "\\b", String.valueOf(actualDmg));
+    }
+
     private Button buildCardButton(Card c) {
         // 多层贴图卡面（固定尺寸容器，手牌高度稳定，防止打牌/换回合时画面跳动）
-        javafx.scene.layout.StackPane face = CardFaceView.buildAt(c, HAND_FACE_W);
+        // 战斗中描述文字用实际伤害数值（含力量/虚弱/易伤加成）
+        javafx.scene.layout.StackPane face = CardFaceView.buildAt(c, HAND_FACE_W, battleDesc(c));
 
         Button btn = new Button();
         btn.setGraphic(face);

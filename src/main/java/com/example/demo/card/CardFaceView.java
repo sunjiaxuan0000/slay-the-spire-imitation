@@ -113,7 +113,14 @@ public class CardFaceView {
 
     /** 按目标宽度等比生成卡面并外套固定尺寸容器（堆/组/列表浏览用），高度 = 宽 × 1.4 */
     public static StackPane buildAt(Card c, double width) {
-        Pane face = buildRaw(c);
+        return buildAt(c, width, c.kind.desc);
+    }
+
+    /**
+     * 按目标宽度等比生成卡面，描述文字使用 {@code descOverride}（战斗中用于显示含力量/易伤加成的实际数值）。
+     */
+    public static StackPane buildAt(Card c, double width, String descOverride) {
+        Pane face = buildRaw(c, descOverride);
         double scale = width / CARD_W;
         face.setScaleX(scale);
         face.setScaleY(scale);
@@ -137,6 +144,10 @@ public class CardFaceView {
     }
 
     private static Pane buildRaw(Card c) {
+        return buildRaw(c, c.kind.desc);
+    }
+
+    private static Pane buildRaw(Card c, String descOverride) {
         Pane root = new Pane();
         root.setPrefSize(CARD_W, CARD_H);
         root.setMaxSize(CARD_W, CARD_H);
@@ -206,7 +217,7 @@ public class CardFaceView {
         // ---------- 4) 描述（下方）：浅色底板 + 深灰褐正文，整块垂直居中 ----------
         root.getChildren().add(plate(DESC_PLATE_X, DESC_PLATE_Y, DESC_PLATE_W, DESC_PLATE_H));
 
-        Label desc = new Label(c.kind.desc);
+        Label desc = new Label(descOverride);
         desc.setTextFill(DESC_TEXT);
         desc.setFont(Font.font(DESC_FONT));
         desc.setStyle("-fx-text-fill: " + DESC_TEXT_CSS + ";");

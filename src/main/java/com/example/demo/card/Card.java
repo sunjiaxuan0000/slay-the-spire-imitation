@@ -40,7 +40,7 @@ public class Card {
         FLEX("活动肌肉", "获得 2 点力量，回合结束时失去 2 点力量", Type.SKILL, 4),
         POWER_THROUGH("硬撑", "获得 15 点格挡，将两张伤口加入手牌", Type.SKILL, 3),
         SOUL_SEVER("断魂斩", "消耗手牌中所有的非攻击牌，造成 16 点伤害", Type.ATTACK, 3),
-        BODY_SLAM("全身撞击","造成你当前格挡值的伤害",Type.ATTACK,4),
+        BODY_SLAM("全身撞击","造成等同于你格挡值的伤害",Type.ATTACK,4),
         HEMOKINESIS("御血术","失去2点生命，造成15点伤害",Type.ATTACK,3),
         UPPERCUT("上勾拳","造成13点伤害，给予1层虚弱，给予1层易伤",Type.ATTACK,3),
         LIMIT_BREAK("突破限制","将你的力量翻倍，消耗",Type.SKILL,1),

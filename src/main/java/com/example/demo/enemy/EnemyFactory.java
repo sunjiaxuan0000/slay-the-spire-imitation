@@ -41,4 +41,9 @@ public final class EnemyFactory {
             return spawnBase?Slime.base():Slime.big();
         }
     }
+
+    /** BOSS 房：猪龙鱼公爵 / 巨猪骑士各 50% */
+    public static Enemy boss() {
+        return Math.random() < 0.5 ? new DukePorcodraco() : new GiantBoarKnight();
+    }
 }

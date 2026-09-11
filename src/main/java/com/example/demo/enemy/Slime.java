@@ -20,9 +20,9 @@ public class Slime extends Enemy {
         this.portraitSize = portraitSize;
     }
 
-    /** 基础史莱姆（前 5 层） */
-    public static Slime base() {
-        return new Slime("史莱姆", null, 28, 8, 5, 210);
+                /** 基础史莱姆（前 5 层） */
+        public static Slime base() {
+            return new Slime("史莱姆", null, 36, 8, 5, 210);
     }
 
     /** 大史莱姆（第 6 层起，复用史莱姆立绘但更大） */

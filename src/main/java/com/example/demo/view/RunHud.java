@@ -166,7 +166,7 @@ public class RunHud extends VBox {
     /** 刷新：血条 / 牌组数量 / 遗物图标 */
     public void refresh() {
         hpText.setText(player.hp() + " / " + player.maxHp);
-        double ratio = (double) player.hp() / player.maxHp;
+        double ratio = player.maxHp > 0 ? (double) player.hp() / player.maxHp : 0.0;
         hpFill.setPrefWidth(Math.max(0, BAR_WIDTH * ratio));
         hpFill.setStyle("-fx-background-color: " + (ratio < 0.4 ? "#ef4444" : "#22c55e")
                 + "; -fx-background-radius: 7;");
