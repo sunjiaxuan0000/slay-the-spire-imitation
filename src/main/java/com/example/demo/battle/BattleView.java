@@ -46,9 +46,11 @@ import javafx.util.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -130,6 +132,37 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
 
     /** 本轮新抽到、还没播“飞入”演出的牌（refreshAll 末尾统一消费） */
     private final List<Card> pendingDrawFx = new ArrayList<>();
+
+    /**
+     * 正在等待 / 正在飞入的牌：这些牌的**真身**必须一直隐身，直到各自的 ghost 落位。
+     * <p>和 {@link #pendingDrawFx} 的区别：pendingDrawFx 在 flushDrawFx 里就清空了，
+     * 而本集合要一直留到 ghost 飞完 —— 因为错峰飞行期间手牌可能被 refreshAll 重建，
+     * 重建出来的新按钮默认是可见的，会把还没起飞的牌又亮出来。
+     */
+    private final Set<Card> drawFxInFlight = new LinkedHashSet<>();
+
+    /** 手牌按钮的基础 inline 样式 */
+    private static final String CARD_BTN_STYLE =
+            "-fx-background-color: transparent; -fx-padding: 0; -fx-cursor: hand;";
+
+    /**
+     * 手牌按钮的隐身样式。
+     *
+     * ★ 必须用 inline {@code -fx-opacity}，不能只用 {@code setOpacity(0)}：
+     * 抽牌演出期间 {@code animating=true} 会把所有手牌 {@code setDisable(true)}，
+     * 而 modena 对 {@code .button:disabled} 有 {@code -fx-opacity: 0.4}，
+     * CSS 优先级高于代码 setter，会把 setOpacity(0) 盖回去 ——
+     * 那正是“抽牌前先看到半透明真牌”的原因。
+     */
+    private static final String CARD_BTN_HIDDEN_STYLE = CARD_BTN_STYLE + " -fx-opacity: 0;";
+
+    /**
+     * 落位瞬间用的样式：全亮。
+     * 也要走 inline —— 演出还没结束，按钮仍是 :disabled，
+     * 一撤掉 inline 就会被 CSS 的 0.4 压暗，出现“亮一帧又变暗”的闪烁。
+     */
+    private static final String CARD_BTN_LANDED_STYLE = CARD_BTN_STYLE + " -fx-opacity: 1;";
+
     /** 抽牌演出期间锁住出牌与“结束回合”，避免演出和玩家操作打架 */
     private boolean animating = false;
 
@@ -702,12 +735,20 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         if (pendingDrawFx.isEmpty()) return;
         List<Card> cards = new ArrayList<>(pendingDrawFx);
         pendingDrawFx.clear();
+        drawFxInFlight.addAll(cards);
 
         // 演出期间锁住出牌与“结束回合”，免得玩家点到一张还没落位的牌。
         // 锁的时长跟真正的演出对齐（都放在 afterLayout 里起算），
         // 这样首回合那种“场景还没挂上”的情况也不会提前解锁。
         animating = true;
         refreshHandEnabled();
+
+        // ★ 立刻把真牌藏掉，就在这一帧、这个调用栈里。
+        //   不能等到 afterLayout 之后的 flyInOne —— 那时至少已经过了一帧，
+        //   错峰的最后一张更是要等 DRAW_STAGGER_MS*(n-1) 才轮到，
+        //   玩家会先看到整手牌闪一下（而且是 :disabled 的 0.4 半透明）。
+        hideInFlightCards();
+
         double total = DRAW_STAGGER_MS * (cards.size() - 1) + DRAW_FLY_MS + 80;
 
         afterLayout(() -> {
@@ -718,8 +759,31 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             delay(total, () -> {
                 animating = false;
                 if (!battleOver) refreshHandEnabled();
+                // 整段演出结束，把 inline 样式撤掉，交还给 CSS 决定手牌明暗
+                // （打不起的牌该是 0.4 就该是 0.4）
+                for (Node n : handBox.getChildren()) setCardNodeVisible(n);
             });
         });
+    }
+
+    /** 把「等待飞入」的牌的真身全部藏起来（幂等） */
+    private void hideInFlightCards() {
+        for (Card c : drawFxInFlight) setCardNodeHidden(findCardNode(c));
+    }
+
+    /** 真身隐身：走 inline style，避免和 {@code .button:disabled} 的 0.4 打架 */
+    private static void setCardNodeHidden(Node cardNode) {
+        if (cardNode instanceof Button b) b.setStyle(CARD_BTN_HIDDEN_STYLE);
+    }
+
+    /** ghost 落位：真身以全亮显示（演出未结束前仍是 disabled，不能撤 inline） */
+    private static void setCardNodeLanded(Node cardNode) {
+        if (cardNode instanceof Button b) b.setStyle(CARD_BTN_LANDED_STYLE);
+    }
+
+    /** 整段演出结束：撤掉 inline 的 -fx-opacity，让 CSS 重新决定明暗 */
+    private static void setCardNodeVisible(Node cardNode) {
+        if (cardNode instanceof Button b) b.setStyle(CARD_BTN_STYLE);
     }
 
     /** 一张牌从抽牌堆图标飞到它在手牌里的位置，落位后真牌才显现 */
@@ -728,7 +792,8 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         Point2D from = centerInLocal(drawIcon);
         Point2D to = centerInLocal(target);
         if (from == null || to == null) {   // 拿不到坐标就别演了，直接把牌显示出来
-            if (target != null) target.setOpacity(1);
+            drawFxInFlight.remove(c);
+            setCardNodeVisible(target);
             return;
         }
 
@@ -738,7 +803,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         ghost.setScaleY(0.5);
         ghost.setRotate(-20);
         ghost.setOpacity(0.85);
-        target.setOpacity(0);               // 真牌先隐身，等 ghost 落位再露出来
+        setCardNodeHidden(target); // 兜底：正常情况 flushDrawFx 里已经藏好了
 
         TranslateTransition move = new TranslateTransition(Duration.millis(DRAW_FLY_MS), ghost);
         move.setToX(to.getX() - from.getX());
@@ -760,7 +825,8 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         ParallelTransition all = new ParallelTransition(move, grow, spin, fade);
         all.setOnFinished(e -> {
             unmountGhost(ghost);
-            target.setOpacity(1);
+            drawFxInFlight.remove(c);
+            setCardNodeLanded(target); // 全亮落位；整段演出结束时才交还给 CSS
         });
         all.play();
     }
@@ -1463,7 +1529,8 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         Button btn = new Button();
         btn.setGraphic(face);
         btn.setUserData(c); // 飞行演出靠它把按钮和牌对上
-        btn.setStyle("-fx-background-color: transparent; -fx-padding: 0; -fx-cursor: hand;");
+        // 还没落位的牌（错峰飞行中手牌被重建）要保持隐身，否则会先亮出来再消失
+        btn.setStyle(drawFxInFlight.contains(c) ? CARD_BTN_HIDDEN_STYLE : CARD_BTN_STYLE);
         btn.setDisable(!CardPlay.canPlay(c, this) || animating);
         btn.setOnAction(e -> {
             play(c);
