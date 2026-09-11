@@ -6,7 +6,6 @@ import com.example.demo.card.CardFaceView;
 import com.example.demo.character.CharacterSelect;
 import com.example.demo.character.Player;
 import com.example.demo.character.Relic;
-import com.example.demo.enemy.DukePorcodraco;
 import com.example.demo.character.RelicFun;
 import com.example.demo.enemy.Enemy;
 import com.example.demo.enemy.EnemyFactory;
@@ -609,7 +608,7 @@ public class HelloApplication extends Application {
             case MONSTER -> startBattle(stage, map, player, GameMap.NodeType.MONSTER,
                     monsterForRow(map));
             case ELITE   -> startBattle(stage, map, player, GameMap.NodeType.ELITE, new GuardPig());
-            case BOSS    -> startBattle(stage, map, player, GameMap.NodeType.BOSS, new DukePorcodraco());
+            case BOSS    -> startBattle(stage, map, player, GameMap.NodeType.BOSS, EnemyFactory.boss());
             case START   -> showRoomScene(stage, map, player);
             case EVENT   -> {
                 List<EventDef> events = EventDef.pool();

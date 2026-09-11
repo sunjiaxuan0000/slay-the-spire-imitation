@@ -10,8 +10,8 @@ import java.util.List;
 public class GuardPig extends Enemy {
 
     public GuardPig() {
-        super("卫士猪", 70, true, false, true, List.of(
-                new Step(Intent.ATTACK, 15),
+        super("卫士猪", 80, true, false, true,List.of(
+                new Step(Intent.ATTACK, 20),
                 new Step(Intent.REFLECT, 2),
                 new Step(Intent.DEFEND, 20),
                 new Step(Intent.ATTACK, 18)
