@@ -1656,9 +1656,27 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         endTurnBtn.setDisable(false);
     }
 
+    /**
+     * 生成战斗中卡面用的描述文字：把攻击牌的基础伤害替换为实际伤害（含力量/虚弱/易伤）。
+     * <ul>
+     *   <li>普通攻击牌：用正则替换描述中基础伤害数值为 {@link CardPlay#dealAttackDamage} 的结果</li>
+     *   <li>全身撞击：追加“（造成 X 点伤害）”，X 为实际格挡+力量后的伤害值</li>
+     *   <li>非攻击牌：原样返回</li>
+     * </ul>
+     */
+    private String battleDesc(Card c) {
+        if (c.damage <= 0 && c.kind != Card.Kind.BODY_SLAM) return c.kind.desc;
+        int actualDmg = CardPlay.dealAttackDamage(this, c);
+        if (c.kind == Card.Kind.BODY_SLAM) {
+            return c.kind.desc + "（造成 " + actualDmg + " 点伤害）";
+        }
+        return c.kind.desc.replaceFirst("\\b" + c.damage + "\\b", String.valueOf(actualDmg));
+    }
+
     private Button buildCardButton(Card c) {
         // 多层贴图卡面（固定尺寸容器，手牌高度稳定，防止打牌/换回合时画面跳动）
-        javafx.scene.layout.StackPane face = CardFaceView.buildAt(c, HAND_FACE_W);
+        // 战斗中描述文字用实际伤害数值（含力量/虚弱/易伤加成）
+        javafx.scene.layout.StackPane face = CardFaceView.buildAt(c, HAND_FACE_W, battleDesc(c));
 
         Button btn = new Button();
         btn.setGraphic(face);
