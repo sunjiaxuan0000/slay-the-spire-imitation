@@ -121,6 +121,33 @@ public final class BattleUiFactory {
         return chip;
     }
 
+    /** 菱形状态标（自爆猪蓄势专用）：方块旋转 45° 成菱形，内文反向旋转保持正立 */
+    public static HBox diamondChip(String glyph, int count, String color, String tip) {
+        StackPane icon = new StackPane();
+        icon.setPrefSize(24, 24);
+        icon.setMaxSize(24, 24);
+        icon.setStyle("-fx-background-color: " + color + "; -fx-background-radius: 4;");
+        icon.setRotate(45);
+        Label g = new Label(glyph);
+        g.setTextFill(Color.WHITE);
+        g.setFont(Font.font(12));
+        g.setStyle("-fx-font-weight: bold;");
+        g.setRotate(-45); // 抵消菱形旋转，文字保持正立
+        icon.getChildren().add(g);
+
+        HBox chip = new HBox(3);
+        chip.setAlignment(Pos.CENTER_LEFT);
+        chip.setPickOnBounds(true);
+        chip.getChildren().add(icon);
+        Label n = new Label(String.valueOf(count));
+        n.setTextFill(Color.WHITE);
+        n.setFont(Font.font(13));
+        n.setStyle("-fx-font-weight: bold;");
+        chip.getChildren().add(n);
+        attachHover(chip, tip);
+        return chip;
+    }
+
     /** 立绘圆（占位，以后换成 ImageView） */
     public static StackPane portrait(String glyph, String gradient) {
         StackPane p = new StackPane();

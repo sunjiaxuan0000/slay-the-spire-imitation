@@ -31,16 +31,10 @@ import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Scene;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.Tooltip;
+import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.layout.FlowPane;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.Pane;
-import javafx.scene.layout.StackPane;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Ellipse;
 import javafx.scene.shape.Rectangle;
@@ -62,7 +56,7 @@ import java.util.function.Consumer;
  * 卡牌渲染委托 {@link CardFaceView}，静态 UI 构件委托 {@link BattleUiFactory}，
  * 弹层（牌堆浏览/奖励/死亡）委托 view 包中各自的 Overlay 类。
  */
-public class BattleView extends javafx.scene.layout.StackPane implements BattleState {
+public class BattleView extends StackPane implements BattleState {
     private StackPane enemyPortrait;
     private ImageView enemyPortraitImg;
     private double enemyPortraitSize = 210;  // 敌人立绘尺寸（BOSS 放大）
@@ -175,22 +169,22 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     // 角色(左)
     private final Label pName = new Label(Player.CHARACTER_NAME);
     private final Label pHpText = new Label();
-    private final javafx.scene.layout.Region pHpFill = new javafx.scene.layout.Region();
-    private final javafx.scene.layout.StackPane pHpWrap = new javafx.scene.layout.StackPane();
-    private final javafx.scene.layout.StackPane pShield = new javafx.scene.layout.StackPane();
+    private final Region pHpFill = new Region();
+    private final StackPane pHpWrap = new StackPane();
+    private final StackPane pShield = new StackPane();
     private final Label pShieldNum = new Label();
     private final FlowPane pChips = new FlowPane(4, 4);
     // 怪物(右)
     private final Label eName = new Label();
-    private final javafx.scene.layout.StackPane eIntentIcon = new javafx.scene.layout.StackPane();
+    private final StackPane eIntentIcon = new StackPane();
     private final Label eIntentNum = new Label();
     private Tooltip eIntentTip; // 意图悬停描述（只建一次）
     private String currentIntentTip = ""; // 意图描述文字（供屏幕描述条用）
     private final Label hoverBar = new Label(); // 悬停描述条（屏幕上方显示）
     private final Label eHpText = new Label();
-    private final javafx.scene.layout.Region eHpFill = new javafx.scene.layout.Region();
-    private final javafx.scene.layout.StackPane eHpWrap = new javafx.scene.layout.StackPane();
-    private final javafx.scene.layout.StackPane eShield = new javafx.scene.layout.StackPane();
+    private final Region eHpFill = new Region();
+    private final StackPane eHpWrap = new StackPane();
+    private final StackPane eShield = new StackPane();
     private final Label eShieldNum = new Label();
     private final FlowPane eChips = new FlowPane(4, 4);
     // 左下角仪式状态栏
@@ -212,8 +206,8 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     private final Label drawBadge = new Label();
     private final Label discardBadge = new Label();
     // 牌堆图标字形色：和卡面卡名 / 牌组图标「牌」统一用暖深咖 #4a3624
-    private final javafx.scene.layout.StackPane drawIcon = BattleUiFactory.pileIcon("抽", "#4a3624");
-    private final javafx.scene.layout.StackPane discardIcon = BattleUiFactory.pileIcon("弃", "#4a3624");
+    private final StackPane drawIcon = BattleUiFactory.pileIcon("抽", "#4a3624");
+    private final StackPane discardIcon = BattleUiFactory.pileIcon("弃", "#4a3624");
     // 弹层（委托给 view 包）
     private final PileOverlay pileOverlay = new PileOverlay();
     private RewardOverlay rewardOverlay;
@@ -250,7 +244,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         deadDim.setVisible(false);
         getChildren().add(deadDim);
 
-        javafx.scene.layout.BorderPane main = new javafx.scene.layout.BorderPane();
+        BorderPane main = new BorderPane();
         main.setStyle("-fx-background-color: transparent;");
 
         HBox fighters = new HBox(10);
@@ -336,7 +330,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         int bsd = RelicFun.battleStartDamage(player);
         if (bsd > 0) {
             enemy.hp = Math.max(0, enemy.hp - bsd);
-            if (enemy.hp == 0) victory();
+            resolveEnemyLethal();
         }
     }
 
@@ -546,7 +540,6 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
                 // 预览值 = 基础攻击 + 当前力量 + 仪式力量（下回合开始仪式会先生效再攻击）
                 int previewPower = enemy.power + enemy.getRitualPower();
                 number = enemy.baseAttackDamage(s) + previewPower;
-                System.err.println("[DEBUG refreshIntent] enemy=" + enemy.name + " power=" + enemy.power + " ritual=" + enemy.getRitualPower() + " base=" + enemy.baseAttackDamage(s) + " number=" + number);
                 if (enemyWeak > 0) number = number * 3 / 4;
                 // 猪龙鱼公爵二阶段：玩家有格挡时攻击 ×1.6
                 if (enemy.isBoss && enemy.isSecondPhase && playerBlock > 0) {
@@ -581,6 +574,21 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
                 color = "#8b5cf6";
                 tip = "意图·仪式：每回合开始力量 +" + s.value;
             }
+            case CHARGE -> {
+                glyph = "蓄";
+                color = "#b91c1c";
+                tip = "意图·蓄势：获得 " + s.value + " 层蓄势，每层使自爆伤害 +"
+                        + enemy.getChargeDamagePerStack()
+                        + "（当前自爆伤害 " + enemy.explodeDamage() + "）";
+            }
+            case EXPLODE -> {
+                glyph = "爆";
+                color = "#b91c1c";
+                number = enemy.explodeDamage();
+                tip = "意图·自爆：造成 " + number + " 点伤害（"
+                        + enemy.getChargeStacks() + " 层蓄势 × "
+                        + enemy.getChargeDamagePerStack() + "），自爆后死亡";
+            }
             default -> {
                 glyph = "弱";
                 color = "#7c3aed";
@@ -597,7 +605,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         eIntentIcon.getChildren().add(g);
 
         eIntentNum.setText(String.valueOf(number));
-        eIntentNum.setVisible(s.intent == Enemy.Intent.ATTACK);
+        eIntentNum.setVisible(s.intent == Enemy.Intent.ATTACK || s.intent == Enemy.Intent.EXPLODE);
         if (eIntentTip != null) eIntentTip.setText(tip); // 只更新文字，保证悬停稳定
         currentIntentTip = tip;                          // 供屏幕描述条使用
     }
@@ -1066,7 +1074,22 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         }
         enemy.hp = Math.max(0, enemy.hp - dmg);
         applyReflect(dmg);
-        if (enemy.hp == 0) victory();
+        resolveEnemyLethal();
+    }
+
+    /**
+     * 敌人 HP 归 0 的统一处理：
+     * 自爆猪等有濒死机制的敌人锁血 1 点、强制下次行动自爆；其余直接胜利。
+     * 锁血期间再受致命伤害保持 1 血，不再触发胜利。
+     */
+    private void resolveEnemyLethal() {
+        if (enemy.hp > 0) return;
+        if (enemy.isDeathLocked() || enemy.triggerDeathLock()) {
+            enemy.hp = 1;
+            refreshAll(); // 立即把意图刷新为自爆
+            return;
+        }
+        victory();
     }
 
     @Override
@@ -1270,7 +1293,8 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         return switch (intent) {
             case ATTACK -> enemyOink();              // 出手叫声：BOSS 鱼龙叫 / 普通猪叫
             case DEFEND -> List.of("GainDefense");   // 复用已有的加盾音效
-            case BUFF, WEAKEN, REFLECT, RITUAL -> List.of("zhou");
+            case BUFF, WEAKEN, REFLECT, RITUAL, CHARGE -> List.of("zhou");
+            case EXPLODE -> List.of("GetHurt");
         };
     }
 
@@ -1320,6 +1344,24 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             case WEAKEN -> weakTurns = Math.max(weakTurns, s.value);
             case REFLECT -> reflectTurns = Math.max(reflectTurns,s.value);
             case RITUAL -> enemy.setRitualPower(s.value);
+            case CHARGE -> enemy.addChargeStacks(s.value); // 叠蓄势，自爆伤害随之增加
+            case EXPLODE -> {
+                // 自爆猪锁血后的最终一击：蓄势层数 × 每层伤害，正常扣格挡/血量，自爆后死亡
+                enemyAnim.triggerAttackDash();
+                int dmg = enemy.explodeDamage();
+                if (playerBlock > 0) {
+                    int absorb = Math.min(playerBlock, dmg);
+                    playerBlock -= absorb;
+                    dmg -= absorb;
+                }
+                takeDamage(dmg);
+                playerAnim.triggerHurt();
+                if (dmg > 0) SoundFx.play("GetHurt");
+                hud.refresh();
+                if (player.hp() == 0) { playerDied(); return; }
+                victory(); // 自爆结算完，自爆猪死亡 → 胜利奖励
+                return;    // 不再推进轮盘 / 开启玩家回合
+            }
         }
         if (enemyWeak > 0) enemyWeak--;
         enemy.advance();
@@ -1628,6 +1670,12 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             eChips.getChildren().add(BattleUiFactory.statusChip("弱", enemyWeak, "#7c3aed",
                     "虚弱 " + enemyWeak + " 回合：敌人造成的伤害 ×0.75"));
         }
+        // 自爆猪蓄势：血条左下角红底白字菱形「蓄」标
+        if (enemy.getChargeStacks() > 0) {
+            eChips.getChildren().add(BattleUiFactory.diamondChip("蓄", enemy.getChargeStacks(), "#dc2626",
+                    "蓄势：每层蓄势造成 " + enemy.getChargeDamagePerStack()
+                            + " 点自爆伤害（当前自爆伤害 " + enemy.explodeDamage() + "）"));
+        }
         refreshIntent();
 
         // 手牌
@@ -1690,7 +1738,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     private Button buildCardButton(Card c) {
         // 多层贴图卡面（固定尺寸容器，手牌高度稳定，防止打牌/换回合时画面跳动）
         // 战斗中描述文字用实际伤害数值（含力量/虚弱/易伤加成）
-        javafx.scene.layout.StackPane face = CardFaceView.buildAt(c, HAND_FACE_W, battleDesc(c));
+        StackPane face = CardFaceView.buildAt(c, HAND_FACE_W, battleDesc(c));
 
         Button btn = new Button();
         btn.setGraphic(face);
