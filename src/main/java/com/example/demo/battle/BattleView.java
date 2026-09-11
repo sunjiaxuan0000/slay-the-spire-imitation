@@ -36,7 +36,9 @@ import javafx.scene.text.Font;
 import javafx.util.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.function.Consumer;
 
@@ -87,7 +89,13 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     private int enemyWeak = 0;
     private int pendingStrengthLoss = 0;
     private boolean noDrawThisTurn = false;
-    private boolean brutality = false;
+
+    /** 已激活的能力牌层数（能力牌可叠加，效果按层数累加；LinkedHashMap 保持登记顺序） */
+    private final Map<Card.Kind, Integer> powerStacks = new LinkedHashMap<>();
+
+    private record PowerBadge(String glyph, String color, String tip) {
+    }
+
     private int playerStrength = 0;
     private boolean playerTurn = true;
     private boolean battleOver = false;
@@ -529,10 +537,11 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         skillCardsPlayedThisTurn = 0;
         letterOpenerUsed = false;
 
-        // 残暴：每回合开始失去 1 点生命，随后多抽 1 张
-        if (brutality && loseHp(1, true)) return;
+        // 残暴：按层数每回合开始失去等量生命，随后多抽等量张（可叠加）
+        int brutality = powerStacks.getOrDefault(Card.Kind.BRUTALITY, 0);
+        if (brutality > 0 && loseHp(brutality, true)) return;
 
-        drawHand(5 + RelicFun.extraDraw(player) + (brutality ? 1 : 0));
+        drawHand(5 + (RelicFun.hasRelic(player, "请假条") ? 1 : 0) + brutality);
 
         // 英雄宝典：战斗开始时增加一张免费能力牌
         if (turn == 1 && RelicFun.hasRelic(player, "英雄宝典")) {
@@ -646,8 +655,18 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     }
 
     @Override
-    public void enableBrutality() {
-        brutality = true;
+    public void activatePower(Card.Kind kind) {
+        // 能力牌可叠加：层数 +1
+        powerStacks.merge(kind, 1, Integer::sum);
+    }
+
+    /** 能力牌 → 状态栏角标（新增常驻能力牌时在此登记即可自动显示；stacks 为当前层数） */
+    private PowerBadge powerBadgeOf(Card.Kind kind, int stacks) {
+        return switch (kind) {
+            case BRUTALITY -> new PowerBadge("残", "#701a75",
+                    "残暴 ×" + stacks + "：每回合开始失去 " + stacks + " 点生命，随后多抽 " + stacks + " 张");
+            default -> null;
+        };
     }
 
     @Override
@@ -670,8 +689,6 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             enemy.block -= absorb;
             dmg -= absorb;
         }
-        // 发条靴：未被格挡的伤害 ≤ 5 时提升为 8
-        dmg = RelicFun.boostLowDamage(player, dmg);
         enemy.hp = Math.max(0, enemy.hp - dmg);
         applyReflect(dmg);
         if (enemy.hp == 0) victory();
@@ -942,7 +959,6 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         playerAnim.stop();
         RelicFun.onBattleEnd(player);
         hud.refresh();
-        showReward();
         playerAnim.stop();   // 冻结双方待机呼吸，交给倒地动画接管
         enemyAnim.stop();
         clearStatusCards();
@@ -1060,6 +1076,13 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         if (playerStrength > 0) {
             pChips.getChildren().add(BattleUiFactory.statusChip("力", playerStrength, "#f59e0b",
                     "力量 +" + playerStrength + "：每段攻击伤害增加"));
+        }
+        for (Map.Entry<Card.Kind, Integer> e : powerStacks.entrySet()) {
+            PowerBadge badge = powerBadgeOf(e.getKey(), e.getValue());
+            if (badge != null) {
+                pChips.getChildren().add(BattleUiFactory.statusChip(
+                        badge.glyph(), e.getValue(), badge.color(), badge.tip()));
+            }
         }
 
         // 怪物

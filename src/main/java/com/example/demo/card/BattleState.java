@@ -81,8 +81,11 @@ public interface BattleState {
     /** 本回合禁止再抽牌（战斗专注） */
     void forbidDrawThisTurn();
 
-    /** 启用残暴：每回合开始失去 1 点生命并多抽 1 张 */
-    void enableBrutality();
+    /**
+     * 激活一张能力牌（如残暴）：
+     * 由战斗流程记录其持续效果，并在状态栏常驻显示其触发的能力。
+     */
+    void activatePower(Card.Kind kind);
 
     /** 卡牌结算后移出玩家手牌，并按“是否消耗”决定去向 */
     void onCardPlayed(Card c);
