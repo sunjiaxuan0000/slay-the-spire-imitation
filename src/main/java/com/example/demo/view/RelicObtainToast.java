@@ -42,7 +42,7 @@ public final class RelicObtainToast {
     /** 遗物图标尺寸 */
     private static final double ICON_SIZE = 96;
     /** 展示停留时间（毫秒） */
-    private static final double SHOW_MS = 3000;
+    private static final double SHOW_MS = 2000;
     /** 飞行动画时间（毫秒） */
     private static final double FLY_MS = 600;
 
@@ -128,13 +128,15 @@ public final class RelicObtainToast {
         fadeOut.setToValue(0);
 
         ParallelTransition flyAway = new ParallelTransition(shrink, fly, fadeOut);
-        flyAway.setOnFinished(e -> {
+        final Runnable cleanup = () -> {
             root.getChildren().remove(card);
             safeRun(onDone);
-        });
+        };
+        flyAway.setOnFinished(e -> cleanup.run());
 
         // 按顺序播放：出现 → 停留 → 飞走
         SequentialTransition seq = new SequentialTransition(appear, hold, flyAway);
+        seq.setOnFinished(e -> cleanup.run());
         seq.play();
     }
 
