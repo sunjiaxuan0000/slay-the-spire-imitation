@@ -314,28 +314,22 @@ public class HelloApplication extends Application {
             activeBattle = null;
             battleMapOpen = false;
             if (won) {
+                // 所有战斗胜利后都回到地图
+                showMapScene(stage, map, player);
+                
                 if (type == GameMap.NodeType.BOSS) {
-                    // Boss 战胜利：先回到地图，再返回主菜单（通关）
-                    showMapScene(stage, map, player);
-                    // 延迟返回主菜单，让玩家看到通关画面
+                    // Boss 战胜利：延迟返回主菜单，让玩家看到通关画面
                     PauseTransition delay = new PauseTransition(Duration.millis(2000));
                     delay.setOnFinished(e -> returnToMenu(stage));
                     delay.play();
-                } else {
-                    if (type == GameMap.NodeType.ELITE) {
-                        Relic relic = RelicFun.randomEliteRelic(player);
-                        if (relic != null) {
-                            hud.refresh();
-                            RelicObtainToast.show(stage.getScene(), relic, () -> {
-                                showMapScene(stage, map, player);
-                            });
-                        } else {
-                            showMapScene(stage, map, player);
-                        }
-                    } else {
-                        showMapScene(stage, map, player);
+                } else if (type == GameMap.NodeType.ELITE) {
+                    Relic relic = RelicFun.randomEliteRelic(player);
+                    if (relic != null) {
+                        hud.refresh();
+                        RelicObtainToast.show(stage.getScene(), relic, null);
                     }
                 }
+                // 普通怪物：直接回到地图，无额外操作
             } else {
                 returnToMenu(stage);     // 阵亡
             }
