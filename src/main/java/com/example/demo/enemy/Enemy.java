@@ -19,8 +19,8 @@ public abstract class Enemy {
         BUFF("强化"),
         WEAKEN("虚弱"),
         REFLECT("反伤"),
-        RITUAL("仪式");
-
+        RITUAL("仪式"),
+        CHARGE("蓄势");
         public final String label;
         Intent(String label) { this.label = label; }
     }
@@ -173,6 +173,7 @@ public abstract class Enemy {
             case WEAKEN -> s.intent.label + " 我方 " + v + " 回合";
             case REFLECT -> s.intent.label +"我方" + v + "回合";
             case RITUAL -> s.intent.label + " 每回合力量 +" + v;
+            case CHARGE -> s.intent.label + v + "层";
         };
     }
 
