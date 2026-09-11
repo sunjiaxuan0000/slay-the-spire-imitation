@@ -11,6 +11,7 @@ import com.example.demo.enemy.Enemy;
 import com.example.demo.sound.SoundFx;
 import com.example.demo.view.BattleUiFactory;
 import com.example.demo.view.DeathOverlay;
+import com.example.demo.view.CardFlyFx;
 import com.example.demo.view.PileOverlay;
 import com.example.demo.view.RewardOverlay;
 import com.example.demo.view.SpriteAnimator;
@@ -18,8 +19,15 @@ import com.example.demo.view.RunHud;
 
 import javafx.animation.*;
 import javafx.animation.AnimationTimer;
+import javafx.application.Platform;
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableValue;
+import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
+import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
+import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Tooltip;
@@ -32,6 +40,7 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Ellipse;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.util.Duration;
 import java.util.ArrayList;
@@ -109,6 +118,20 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     private int skillCardsPlayedThisTurn = 0;
     private boolean letterOpenerUsed = false;
     private boolean noodleBonusUsed = false;
+
+    // ===== 卡牌飞行演出（抽牌 / 进弃牌堆 / 消耗） =====
+    /** 手牌卡面宽度（与 buildCardButton 保持一致） */
+    private static final double HAND_FACE_W = 128;
+    private static final double DRAW_FLY_MS = 280;     // 抽牌：单张飞入时长
+    private static final double DRAW_STAGGER_MS = 85;  // 连抽时每张之间的错峰
+    private static final double DISCARD_FLY_MS = 300;  // 飞入弃牌堆时长
+    private static final double DUMP_STAGGER_MS = 55;  // 回合结束整手弃牌的错峰
+    private static final double EXHAUST_FX_MS = 420;   // 消耗演出时长
+
+    /** 本轮新抽到、还没播“飞入”演出的牌（refreshAll 末尾统一消费） */
+    private final List<Card> pendingDrawFx = new ArrayList<>();
+    /** 抽牌演出期间锁住出牌与“结束回合”，避免演出和玩家操作打架 */
+    private boolean animating = false;
 
     // ===== 动画已统一委托给 SpriteAnimator =====
 
@@ -550,6 +573,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
 
         playerBlock += RelicFun.startBlock(player, turn);
 
+        // refreshAll() 末尾的 flushDrawFx() 会消费 pendingDrawFx 并排好飞入演出
         refreshAll();
     }
 
@@ -560,6 +584,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             Card c = drawOne();
             if (c == null) break;
             hand.add(c);
+            pendingDrawFx.add(c); // 记下来，refreshAll 时补一段“从抽牌堆飞入”的演出
         }
     }
 
@@ -577,9 +602,255 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
 
     /** 出牌入口薄壳：具体结算规则见 {@link CardPlay#play(Card, BattleState)}。 */
     private void play(Card c) {
-        if (!playerTurn || battleOver) return;
+        if (!playerTurn || battleOver || animating) return;
         if (c.cost < 0 || c.cost > energy) return;
         CardPlay.play(c, this);
+    }
+
+    // ================= 卡牌飞行演出 =================
+    //
+    // 做法：数据照常即时结算（抽/弃/消耗都不变），只是在“牌离开手牌”的瞬间
+    // 复制一张只用于观看的卡面（ghost）挂在棋盘上层，让它从起点飞到终点，
+    // 飞完就摘掉。所以演出永远不会影响战斗逻辑，中途被打断也不会出错。
+
+    /** 手牌里这张牌对应的按钮（用 Card 身份比较，同名牌互不干扰） */
+    private Node findCardNode(Card c) {
+        for (Node n : handBox.getChildren()) {
+            if (n.getUserData() == c) return n;
+        }
+        return null;
+    }
+
+    /** 节点中心 → BattleView 局部坐标（节点还没挂上场景时返回 null） */
+    private Point2D centerInLocal(Node n) {
+        if (n == null || n.getScene() == null) return null;
+        Bounds b = n.localToScene(n.getLayoutBounds());
+        if (b == null) return null;
+        return sceneToLocal(b.getMinX() + b.getWidth() / 2, b.getMinY() + b.getHeight() / 2);
+    }
+
+    /** 手牌中某张牌当前的中心点（拿不到就返回 null） */
+    private Point2D centerOfCardNode(Card c) {
+        return centerInLocal(findCardNode(c));
+    }
+
+    /** 造一张只用来飞的卡面：不吃鼠标事件，也不参与父容器布局 */
+    private static StackPane ghostOf(Card c) {
+        StackPane g = CardFaceView.buildAt(c, HAND_FACE_W);
+        g.setMouseTransparent(true);
+        g.setManaged(false);
+        return g;
+    }
+
+    /** 把飞行卡面挂到“棋盘之上、弹窗之下”，并摆在指定中心点上 */
+    private void mountGhost(StackPane g, Point2D center) {
+        double w = HAND_FACE_W, h = HAND_FACE_W * 1.4;
+        g.resize(w, h);
+        g.relocate(center.getX() - w / 2, center.getY() - h / 2);
+        int idx = getChildren().indexOf(pileOverlay);
+        if (idx < 0) getChildren().add(g);
+        else getChildren().add(idx, g);
+    }
+
+    private void unmountGhost(Node g) {
+        getChildren().remove(g);
+    }
+
+    /**
+     * 等“已挂上场景 + 布局完成”后再执行。
+     * 构造期会直接调 startPlayerTurn()，那时场景还没挂上、节点也还没布局，
+     * 拿不到坐标，必须推迟到第一帧之后。
+     */
+    private void afterLayout(Runnable r) {
+        if (getScene() == null) {
+            sceneProperty().addListener(new ChangeListener<Scene>() {
+                @Override
+                public void changed(ObservableValue<? extends Scene> o, Scene oldS, Scene newS) {
+                    if (newS == null) return;
+                    sceneProperty().removeListener(this);
+                    Platform.runLater(() -> runLaidOut(r));
+                }
+            });
+            return;
+        }
+        Platform.runLater(() -> runLaidOut(r));
+    }
+
+    /** 强制走一遍 CSS + 布局，保证接下来读到的坐标是最新的 */
+    private void runLaidOut(Runnable r) {
+        Scene s = getScene();
+        if (s == null) return;
+        if (s.getRoot() != null) {
+            s.getRoot().applyCss();
+            s.getRoot().layout();
+        }
+        r.run();
+    }
+
+    private static void delay(double ms, Runnable r) {
+        if (ms <= 0) { r.run(); return; }
+        PauseTransition wait = new PauseTransition(Duration.millis(ms));
+        wait.setOnFinished(e -> r.run());
+        wait.play();
+    }
+
+    // ---- 演出一：抽牌堆 → 手牌 ----
+
+    /** 待播的飞入演出统一在这里排出去（由 refreshAll 末尾调用） */
+    private void flushDrawFx() {
+        if (pendingDrawFx.isEmpty()) return;
+        List<Card> cards = new ArrayList<>(pendingDrawFx);
+        pendingDrawFx.clear();
+
+        // 演出期间锁住出牌与“结束回合”，免得玩家点到一张还没落位的牌。
+        // 锁的时长跟真正的演出对齐（都放在 afterLayout 里起算），
+        // 这样首回合那种“场景还没挂上”的情况也不会提前解锁。
+        animating = true;
+        refreshHandEnabled();
+        double total = DRAW_STAGGER_MS * (cards.size() - 1) + DRAW_FLY_MS + 80;
+
+        afterLayout(() -> {
+            for (int i = 0; i < cards.size(); i++) {
+                final Card c = cards.get(i);
+                delay(DRAW_STAGGER_MS * i, () -> flyInOne(c));
+            }
+            delay(total, () -> {
+                animating = false;
+                if (!battleOver) refreshHandEnabled();
+            });
+        });
+    }
+
+    /** 一张牌从抽牌堆图标飞到它在手牌里的位置，落位后真牌才显现 */
+    private void flyInOne(Card c) {
+        Node target = findCardNode(c);
+        Point2D from = centerInLocal(drawIcon);
+        Point2D to = centerInLocal(target);
+        if (from == null || to == null) {   // 拿不到坐标就别演了，直接把牌显示出来
+            if (target != null) target.setOpacity(1);
+            return;
+        }
+
+        StackPane ghost = ghostOf(c);
+        mountGhost(ghost, from);
+        ghost.setScaleX(0.5);
+        ghost.setScaleY(0.5);
+        ghost.setRotate(-20);
+        ghost.setOpacity(0.85);
+        target.setOpacity(0);               // 真牌先隐身，等 ghost 落位再露出来
+
+        TranslateTransition move = new TranslateTransition(Duration.millis(DRAW_FLY_MS), ghost);
+        move.setToX(to.getX() - from.getX());
+        move.setToY(to.getY() - from.getY());
+        move.setInterpolator(Interpolator.EASE_OUT);
+
+        ScaleTransition grow = new ScaleTransition(Duration.millis(DRAW_FLY_MS), ghost);
+        grow.setToX(1);
+        grow.setToY(1);
+        grow.setInterpolator(Interpolator.EASE_OUT);
+
+        RotateTransition spin = new RotateTransition(Duration.millis(DRAW_FLY_MS), ghost);
+        spin.setToAngle(0);
+        spin.setInterpolator(Interpolator.EASE_OUT);
+
+        FadeTransition fade = new FadeTransition(Duration.millis(DRAW_FLY_MS), ghost);
+        fade.setToValue(1);
+
+        ParallelTransition all = new ParallelTransition(move, grow, spin, fade);
+        all.setOnFinished(e -> {
+            unmountGhost(ghost);
+            target.setOpacity(1);
+        });
+        all.play();
+    }
+
+    // ---- 演出二：手牌 → 弃牌堆 ----
+
+    /** 打出非消耗牌：卡面从手牌位置飞进右下角弃牌堆（边飞边缩小旋转） */
+    private void flyToDiscard(Card c, Point2D from) {
+        if (from == null) return;
+        Point2D to = centerInLocal(discardIcon);
+        if (to == null) return;
+        dumpOne(c, from, to, 0, 35);
+    }
+
+    /** 回合结束：整手牌错峰飞进弃牌堆 */
+    private void flyHandToDiscard(List<Card> cards, List<Point2D> froms) {
+        if (cards.isEmpty()) return;
+        afterLayout(() -> {
+            Point2D to = centerInLocal(discardIcon);
+            if (to == null) return;
+            for (int i = 0; i < cards.size(); i++) {
+                Point2D from = froms.get(i);
+                if (from == null) continue;
+                dumpOne(cards.get(i), from, to, DUMP_STAGGER_MS * i, 0);
+            }
+        });
+    }
+
+    private void dumpOne(Card c, Point2D from, Point2D to, double delayMs, double spinAngle) {
+        delay(delayMs, () -> {
+            StackPane ghost = ghostOf(c);
+            mountGhost(ghost, from);
+
+            TranslateTransition move = new TranslateTransition(Duration.millis(DISCARD_FLY_MS), ghost);
+            move.setToX(to.getX() - from.getX());
+            move.setToY(to.getY() - from.getY());
+            move.setInterpolator(Interpolator.EASE_BOTH);
+
+            ScaleTransition shrink = new ScaleTransition(Duration.millis(DISCARD_FLY_MS), ghost);
+            shrink.setToX(0.25);
+            shrink.setToY(0.25);
+
+            FadeTransition fade = new FadeTransition(Duration.millis(DISCARD_FLY_MS), ghost);
+            fade.setFromValue(1);
+            fade.setToValue(0.1);
+
+            RotateTransition spin = new RotateTransition(Duration.millis(DISCARD_FLY_MS), ghost);
+            spin.setToAngle(spinAngle);
+
+            ParallelTransition all = new ParallelTransition(move, shrink, fade, spin);
+            all.setOnFinished(e -> unmountGhost(ghost));
+            all.play();
+        });
+    }
+
+    // ---- 演出三：消耗牌燃尽 ----
+
+    /** 打出消耗牌：卡面在原地上浮、泛金、燃尽消失（不进弃牌堆） */
+    private void playExhaustFx(Card c, Point2D from) {
+        if (from == null) return;
+        StackPane ghost = ghostOf(c);
+        mountGhost(ghost, from);
+
+        Rectangle glow = new Rectangle(HAND_FACE_W, HAND_FACE_W * 1.4);
+        glow.setArcWidth(16);
+        glow.setArcHeight(16);
+        glow.setFill(Color.rgb(251, 191, 36, 0.85));
+        glow.setOpacity(0);
+        glow.setMouseTransparent(true);
+        ghost.getChildren().add(glow);
+
+        TranslateTransition rise = new TranslateTransition(Duration.millis(EXHAUST_FX_MS), ghost);
+        rise.setToY(-70);
+        rise.setInterpolator(Interpolator.EASE_OUT);
+
+        ScaleTransition blow = new ScaleTransition(Duration.millis(EXHAUST_FX_MS), ghost);
+        blow.setToX(1.18);
+        blow.setToY(1.18);
+
+        FadeTransition burn = new FadeTransition(Duration.millis(EXHAUST_FX_MS), ghost);
+        burn.setFromValue(1);
+        burn.setToValue(0);
+
+        FadeTransition flash = new FadeTransition(Duration.millis(130), glow);
+        flash.setFromValue(0);
+        flash.setToValue(0.9);
+
+        SequentialTransition seq = new SequentialTransition(
+                flash, new ParallelTransition(rise, blow, burn));
+        seq.setOnFinished(e -> unmountGhost(ghost));
+        seq.play();
     }
 
     // ================= BattleState 实现 =================
@@ -716,11 +987,14 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
 
     @Override
     public void onCardPlayed(Card c) {
+        // 先趁牌还在手牌里把位置记下来，之后 hand.remove + refreshAll 就找不到它了
+        Point2D from = centerOfCardNode(c);
         hand.remove(c);
         if (c.isExhaustOnPlay()) {
-            // 消耗（含能力牌）：不进入弃牌堆
+            playExhaustFx(c, from);   // 消耗（含能力牌）：原地燃尽，不进弃牌堆
         } else {
             discard.add(c);
+            flyToDiscard(c, from);    // 普通牌：飞进弃牌堆
         }
     }
 
@@ -811,9 +1085,15 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             playerBlock += 5;
         }
 
+        // 先记下每张手牌的位置，再把它们一起丢进弃牌堆（之后就找不到节点了）
+        List<Card> dumped = new ArrayList<>(hand);
+        List<Point2D> froms = new ArrayList<>();
+        for (Card c : dumped) froms.add(centerOfCardNode(c));
+
         discard.addAll(hand);
         hand.clear();
         refreshAll();
+        flyHandToDiscard(dumped, froms);
 
         PauseTransition pause = new PauseTransition(Duration.millis(700));
         pause.setOnFinished(e -> enemyAct());
@@ -1045,10 +1325,13 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             }
         }
 
-        rewardOverlay.show(offers, c -> {
-            player.deck.add(c);
+        rewardOverlay.show(offers, (c, node) -> {
+            player.deck.add(c);        // 数据照常即时结算（牌组数量随之更新）
+            hud.refresh();
             rewardOverlay.hide();
-            onFinish.accept(true);
+            // 获得的卡飞入牌组图标（ghost 卡面，落位后自动摘除，不阻塞流程）
+            CardFlyFx.flyIntoDeck(getScene(), node, hud.getDeckIcon(), c,
+                    () -> onFinish.accept(true));
         });
     }
 
@@ -1145,31 +1428,42 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         discardBadge.setText(String.valueOf(discard.size()));
         discardBadge.setVisible(discard.size() > 0);
 
-        endTurnBtn.setDisable(!playerTurn || battleOver);
+        endTurnBtn.setDisable(!playerTurn || battleOver || animating);
+
+        flushDrawFx(); // 新抽到的牌在这里补上“从抽牌堆飞入”的演出
     }
 
     private void refreshHandEnabled() {
-        // 仅处理“非玩家回合 / 战斗结束”时的整体禁用；
-        // 其余情况保留 refreshAll 中按 CardPlay.canPlay 逐张计算的结果，
+        // 非玩家回合 / 战斗结束 / 抽牌演出中：整体禁用；
+        // 其余情况按 CardPlay.canPlay 逐张重算，
         // 避免把能量不足或不可打出的牌（如“伤口”）错误地重新启用。
-        if (!playerTurn || battleOver) {
+        if (!playerTurn || battleOver || animating) {
             for (var node : handBox.getChildren()) {
                 if (node instanceof Button btn) {
                     btn.setDisable(true);
                 }
             }
+            endTurnBtn.setDisable(true);
+            return;
         }
+        for (var node : handBox.getChildren()) {
+            if (node instanceof Button btn) {
+                Card c = (Card) btn.getUserData();
+                if (c != null) btn.setDisable(!CardPlay.canPlay(c, this));
+            }
+        }
+        endTurnBtn.setDisable(false);
     }
 
     private Button buildCardButton(Card c) {
         // 多层贴图卡面（固定尺寸容器，手牌高度稳定，防止打牌/换回合时画面跳动）
-        javafx.scene.layout.StackPane face = CardFaceView.buildAt(c, 128);
+        javafx.scene.layout.StackPane face = CardFaceView.buildAt(c, HAND_FACE_W);
 
         Button btn = new Button();
         btn.setGraphic(face);
+        btn.setUserData(c); // 飞行演出靠它把按钮和牌对上
         btn.setStyle("-fx-background-color: transparent; -fx-padding: 0; -fx-cursor: hand;");
-        btn.setDisable(c.cost < 0 || c.cost > energy || !playerTurn || battleOver);
-        btn.setDisable(!CardPlay.canPlay(c, this));
+        btn.setDisable(!CardPlay.canPlay(c, this) || animating);
         btn.setOnAction(e -> {
             play(c);
             refreshHandEnabled();
