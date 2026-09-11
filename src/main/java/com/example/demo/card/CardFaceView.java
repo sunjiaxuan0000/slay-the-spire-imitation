@@ -12,17 +12,25 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 
+import java.util.Collections;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * 多层贴图卡面（由旧版 CardFaceView 重构而来，适配新分包 com.example.demo.card）。
  *
  * 层次（自底向上）：
- *   1) 基础卡面：ability.png(能力) / attack.png(攻击) / skill.png(技能)
- *   2) 稀有度飘带：normal.png(weight=4 白) / rare.png(3 蓝) / gold.png(2 金)，类型文字写在飘带中间
- *   3) 卡名：卡上方
- *   4) 描述：卡下方
- *   5) 能量徽章 power.png：左上角，上面写能量
+ *   1) 卡面美术：art/&lt;Kind 名&gt;.png —— 垫在最底下，靠基础图的透明区域"漏"出来（没图就跳过这层）
+ *   2) 基础卡面：ability.png(能力) / attack.png(攻击) / skill.png(技能)
+ *   3) 稀有度飘带：normal.png(weight=4 白) / rare.png(3 蓝) / gold.png(2 金)，类型文字写在飘带中间
+ *   4) 卡名：卡上方
+ *   5) 描述：卡下方
+ *   6) 能量徽章 power.png：左上角，上面写能量
  *
- * ★ 想调某层贴图位置：改“布局参数”区常量即可（坐标系 = 卡面 150×210）。
+ * ★ 想调某层贴图位置：改"布局参数"区常量即可（坐标系 = 卡面 150×210）。
+ * ★ 想调卡面美术的位置：改"卡面美术"区的 ART_BOX_* / ART_DX / ART_DY 常量，
+ *   或者直接跑 {@link ArtCalibrator} 拖滑块，拖好了把打印出来的常量粘回来。
  */
 public class CardFaceView {
 
@@ -91,11 +99,175 @@ public class CardFaceView {
     private static final String ON_ART_TEXT_CSS = "#ffffff"; // 飘带/徽章上的字，压在深色图案上
     // ======================================================
 
+    // ================= 卡面美术（填进基础图中间的"透明框"）=================
+    // 想换位置/大小：改下面这组常量，或直接跑 card/ArtCalibrator 拖滑块调。
+
+    /**
+     * 美术图目录（classpath 绝对路径）。
+     * <p>文件名 = {@link Card.Kind} 的枚举名 + {@code .png}，例如
+     * {@code STRIKE.png} / {@code DEFEND.png} / {@code HAMMER.png}。
+     * <p>放这里：{@code demo/src/main/resources/com/example/demo/art/}
+     * <p>缺图的卡会自动跳过美术层，卡面回到原来的样子，不会报错。
+     */
+    private static final String ART_DIR = "/com/example/demo/art/";
+
+    /** 总开关：false 就完全不画美术层（回到纯基础卡面） */
+    private static final boolean ART_ENABLED = true;
+
+    /**
+     * 每种基础图里"透明框"的位置与尺寸（卡面 150×210 坐标，{@code {x, y, w, h}}）。
+     *
+     * <p>这四个数是<b>实测</b>出来的，直接对应三张基础图中间的镂空区域：
+     * <ul>
+     *   <li>attack 框 126×80、skill 框 130×83（都是圆角矩形）</li>
+     *   <li>ability 框 96×83（<b>是正圆</b>）</li>
+     * </ul>
+     * 注意：美术层垫在基础图<b>下面</b>，所以形状不用自己裁 ——
+     * 基础图哪里透明，美术就从哪里露出来，上面那三种形状（含那个正圆）天然就对了。
+     *
+     * ★ 要整体微调请用 {@link #ART_DX} / {@link #ART_DY} / {@link #ART_SCALE}，
+     *   不要改这里的基准值 —— 这样三种类型能保持一致的相对关系。
+     */
+    private static final double[] ART_BOX_ATTACK = { 13, 15, 126, 80 };
+    private static final double[] ART_BOX_SKILL  = { 13, 15, 130, 83 };
+    private static final double[] ART_BOX_POWER  = { 27, 15,  96, 83 };
+
+    /** 全局微调：整体平移（右/下为正）与整体缩放（以框中心为基准） */
+    private static final double ART_DX = 0;
+    private static final double ART_DY = 0;
+    private static final double ART_SCALE = 1.0;
+
+    /**
+     * 美术怎么塞进框：
+     * <ul>
+     *   <li>{@code COVER}：等比放大到盖满整个框（推荐）。多出来的部分压在基础图底下，看不见。</li>
+     *   <li>{@code CONTAIN}：等比缩小到完整装进框，四边可能留空（留空处会透出游戏背景）。</li>
+     *   <li>{@code STRETCH}：直接拉伸到框的尺寸，图与框比例不一致时会变形。</li>
+     * </ul>
+     */
+    private static final ArtFit ART_FIT = ArtFit.COVER;
+
+    /** 美术在框内的填充方式 */
+    public enum ArtFit { CONTAIN, COVER, STRETCH }
+
+    /** 已加载成功的美术图 */
+    private static final Map<Card.Kind, Image> ART_CACHE = new ConcurrentHashMap<>();
+    /** 确认过没有文件、不用反复找的卡种 */
+    private static final Set<Card.Kind> ART_MISSING = Collections.newSetFromMap(new ConcurrentHashMap<>());
+
+    /**
+     * 校准工具专用：置 true 时正式美术层不画，
+     * 好让 {@link ArtCalibrator} 用它自己那套滑块参数来预览。
+     * 游戏里永远是 false，别动它。
+     */
+    static boolean artLayerSuppressed = false;
+    // =======================================================================
+
     private static Image img(String name) {
         // 用“/com/example/demo/icons/…”绝对路径：本类已移到 card 子包，
         // 相对路径会错误地找 card/icons/…
-        var in = CardFaceView.class.getResourceAsStream("/com/example/demo/icons/" + name);
-        return in == null ? null : new Image(in);
+        return imgAt("/com/example/demo/icons/" + name);
+    }
+
+    /** 按 classpath 绝对路径加载图片；找不到返回 null（不抛异常） */
+    private static Image imgAt(String absPath) {
+        var in = CardFaceView.class.getResourceAsStream(absPath);
+        if (in == null) return null;
+        Image im = new Image(in);
+        return im.isError() ? null : im;
+    }
+
+    /**
+     * 取某张卡的美术图：{@code art/<Kind 名>.png}。
+     * <p>没放图就返回 {@code null}（结果会被缓存，不会每次去翻 classpath）。
+     * <p>校准工具 {@link ArtCalibrator} 也走这个方法。
+     */
+    public static Image artOf(Card.Kind kind) {
+        if (kind == null || ART_MISSING.contains(kind)) return null;
+        Image cached = ART_CACHE.get(kind);
+        if (cached != null) return cached;
+        Image loaded = imgAt(ART_DIR + kind.name() + ".png");
+        if (loaded == null) {
+            ART_MISSING.add(kind);
+            return null;
+        }
+        ART_CACHE.put(kind, loaded);
+        return loaded;
+    }
+
+    /** 该卡种的美术图"应该"放在哪（给校准工具和排错用，只是个字符串） */
+    public static String artPathFor(Card.Kind kind) {
+        return "src/main/resources" + ART_DIR + (kind == null ? "<Kind>" : kind.name()) + ".png";
+    }
+
+    /** 某类型的默认框 {@code {x, y, w, h}}（副本，改了不影响常量） */
+    public static double[] defaultArtBox(Card.Type type) {
+        return artBox(type);
+    }
+
+    private static double[] artBox(Card.Type type) {
+        double[] base = switch (type) {
+            case ATTACK -> ART_BOX_ATTACK;
+            case SKILL  -> ART_BOX_SKILL;
+            case POWER  -> ART_BOX_POWER;
+            case STATUS -> ART_BOX_SKILL; // 状态牌借技能面
+        };
+        return base.clone();
+    }
+
+    /**
+     * 卡面美术层：把 {@code art/<Kind 名>.png} 按框摆好。
+     *
+     * <p><b>这一层垫在基础图下面</b>（是 {@code root} 的第一个子节点），
+     * 所以基础图中间那块透明区域就成了天然遮罩 ——
+     * 攻击/技能的圆角矩形、能力牌那个正圆，全都是基础图自己的形状，
+     * 这里不需要做任何裁剪。
+     *
+     * <p>没图 / 关掉了就返回 {@code null}，调用方跳过这一层。
+     */
+    private static ImageView artLayer(Card c) {
+        if (!ART_ENABLED || artLayerSuppressed) return null;
+        Image art = artOf(c.kind);
+        if (art == null) return null;
+
+        double[] box = artBox(c.kind.type);
+
+        // 以框中心为基准做整体缩放 + 平移
+        double bw = box[2] * ART_SCALE;
+        double bh = box[3] * ART_SCALE;
+        if (bw <= 0 || bh <= 0) return null;
+        double cx = box[0] + box[2] / 2 + ART_DX;
+        double cy = box[1] + box[3] / 2 + ART_DY;
+
+        double iw = art.getWidth(), ih = art.getHeight();
+        if (iw <= 0 || ih <= 0) return null;
+
+        double dw, dh;
+        switch (ART_FIT) {
+            case STRETCH -> {
+                dw = bw;
+                dh = bh;
+            }
+            case CONTAIN -> {
+                double s = Math.min(bw / iw, bh / ih);
+                dw = iw * s;
+                dh = ih * s;
+            }
+            default -> { // COVER：等比放大到盖满整框，多出来的部分压在基础图底下看不见
+                double s = Math.max(bw / iw, bh / ih);
+                dw = iw * s;
+                dh = ih * s;
+            }
+        }
+
+        ImageView view = new ImageView(art);
+        view.setFitWidth(dw);
+        view.setFitHeight(dh);
+        view.setPreserveRatio(false);       // 宽高已经算好了，别让它再改
+        view.setLayoutX(cx - dw / 2);       // 以框中心居中（COVER 时多余部分均分到两边）
+        view.setLayoutY(cy - dh / 2);
+        view.setMouseTransparent(true);     // 美术只是好看，别抢卡片的点击
+        return view;
     }
 
     private static final Image FACE_ATTACK = img("attack.png");
@@ -154,6 +326,10 @@ public class CardFaceView {
         // 基础卡面纵向放大后底部会溢出卡面，用矩形裁剪把可视区限定在 150×210 内
         root.setClip(new Rectangle(0, 0, CARD_W, CARD_H));
 
+        // ---------- 0) 卡面美术：垫在最底下，靠基础图的透明区域"漏"出来（没放图就跳过）----------
+        ImageView art = artLayer(c);
+        if (art != null) root.getChildren().add(art);
+
         // ---------- 1) 基础卡面（横向铺满 150，纵向放大到 BASE_FACE_H）----------
         Image base = switch (c.kind.type) {
             case ATTACK -> FACE_ATTACK;
@@ -180,7 +356,7 @@ public class CardFaceView {
         ribbonView.setFitWidth(EMBLEM_W);
         ribbonView.setFitHeight(EMBLEM_H);
         ribbonView.setLayoutX(EMBLEM_CX - EMBLEM_W / 2);
-        ribbonView.setLayoutY(EMBLEM_CY - EMBLEM_H / 2);
+        ribbonView.setLayoutY(EMBLEM_CY - EMBLEM_H / 2.5);
         root.getChildren().add(ribbonView);
 
         String typeText = switch (c.kind.type) {
