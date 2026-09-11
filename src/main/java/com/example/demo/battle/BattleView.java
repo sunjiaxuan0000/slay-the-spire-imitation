@@ -55,7 +55,7 @@ import java.util.function.Consumer;
 /**
  * 回合制战斗界面（纯战斗逻辑 + 面板拼装）。
  *
- * 卡牌渲染委托 {@link CardView}，静态 UI 构件委托 {@link BattleUiFactory}，
+ * 卡牌渲染委托 {@link CardFaceView}，静态 UI 构件委托 {@link BattleUiFactory}，
  * 弹层（牌堆浏览/奖励/死亡）委托 view 包中各自的 Overlay 类。
  */
 public class BattleView extends javafx.scene.layout.StackPane implements BattleState {
@@ -596,6 +596,10 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         // 残暴：按层数每回合开始失去等量生命，随后多抽等量张（可叠加）
         int brutality = powerStacks.getOrDefault(Card.Kind.BRUTALITY, 0);
         if (brutality > 0 && loseHp(brutality, true)) return;
+        
+        // 恶魔形态：每回合增加两点力量
+        int demonForm = powerStacks.getOrDefault(Card.Kind.DEMON_FORM, 0);
+        if (demonForm > 0) gainStrength(demonForm*2);
 
         drawHand(5 + (RelicFun.hasRelic(player, "请假条") ? 1 : 0) + brutality);
 
@@ -1005,6 +1009,10 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         return switch (kind) {
             case BRUTALITY -> new PowerBadge("残", "#701a75",
                     "残暴 ×" + stacks + "：每回合开始失去 " + stacks + " 点生命，随后多抽 " + stacks + " 张");
+            case DEMON_FORM -> new PowerBadge("恶魔", "#701a75",
+                    "恶魔形态 ×" + stacks + "：每回合增加 " + stacks*2 + " 点力量");
+            case FEEL_NO_PAIN -> new PowerBadge("无惧", "#701a75",
+                    "无惧疼痛 ×" + stacks + "：每有一张牌被消耗，获得 " + stacks*3 + " 点格挡");
             default -> null;
         };
     }
@@ -1071,10 +1079,43 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         hand.remove(c);
         if (c.isExhaustOnPlay()) {
             playExhaustFx(c, from);   // 消耗（含能力牌）：原地燃尽，不进弃牌堆
+            // 无惧疼痛：只有带“消耗”词条的牌才算“被消耗”，能力牌使用离场不计
+            if (c.exhaust) gainBlockFromExhaust();
         } else {
             discard.add(c);
             flyToDiscard(c, from);    // 普通牌：飞进弃牌堆
         }
+    }
+
+    /** 无惧疼痛：每当一张牌被消耗，按层数获得 3×层数 点格挡 */
+    private void gainBlockFromExhaust() {
+        int stacks = powerStacks.getOrDefault(Card.Kind.FEEL_NO_PAIN, 0);
+        if (stacks > 0) addBlock(3 * stacks);
+    }
+
+    @Override
+    public void exhaustNonAttackCardsInHand() {
+        // 先快照：遍历中会从 hand 移除，且消耗会触发格挡等副作用
+        List<Card> targets = new ArrayList<>();
+        for (Card c : hand) {
+            if (c.kind.type != Card.Type.ATTACK) targets.add(c);
+        }
+        for (Card c : targets) {
+            Point2D from = centerOfCardNode(c);
+            hand.remove(c);
+            playExhaustFx(c, from);
+            gainBlockFromExhaust();   // 这些牌确实被消耗，触发无惧疼痛
+        }
+    }
+
+    @Override
+       public void exhaustRandomHandCard() {
+        if (hand.isEmpty()) return;   // 手牌为空：无目标，不做处理
+        Card c = hand.get(rnd.nextInt(hand.size()));
+        Point2D from = centerOfCardNode(c);
+        hand.remove(c);
+        playExhaustFx(c, from);
+        gainBlockFromExhaust();       // 这张牌确实被消耗，触发无惧疼痛
     }
 
     @Override
@@ -1381,7 +1422,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
                 Card.fortify(), Card.focus(), Card.shockwave(),
                 Card.heavyBlade(), Card.adamantArm(), Card.brutality(), Card.flex(),
                 Card.powerThrough(), Card.soulSever(), Card.uppercut(), Card.bodySlam(),
-                Card.hemokinesis(), Card.limitBreak());
+                Card.hemokinesis(), Card.limitBreak(), Card.feelNoPain(), Card.trueGrit());
         // 权重取自卡牌基础权重（4=白/普通，3=蓝/罕见，1=金/稀有），
         // 避免与卡池硬编码的双份数据源不同步；精英战使用专属权重。
         List<Integer> weights = pool.stream()
