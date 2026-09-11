@@ -172,8 +172,9 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     // 牌堆图标 + 计数下标
     private final Label drawBadge = new Label();
     private final Label discardBadge = new Label();
-    private final javafx.scene.layout.StackPane drawIcon = BattleUiFactory.pileIcon("抽", "#78350f");
-    private final javafx.scene.layout.StackPane discardIcon = BattleUiFactory.pileIcon("弃", "#1e293b");
+    // 牌堆图标字形色：和卡面卡名 / 牌组图标「牌」统一用暖深咖 #4a3624
+    private final javafx.scene.layout.StackPane drawIcon = BattleUiFactory.pileIcon("抽", "#4a3624");
+    private final javafx.scene.layout.StackPane discardIcon = BattleUiFactory.pileIcon("弃", "#4a3624");
     // 弹层（委托给 view 包）
     private final PileOverlay pileOverlay = new PileOverlay();
     private RewardOverlay rewardOverlay;
@@ -464,7 +465,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         box.setAlignment(Pos.CENTER);
         box.setPadding(new Insets(6, 0, 4, 0));
 
-        pilesInfo.setTextFill(Color.rgb(148, 163, 184));
+        pilesInfo.setTextFill(Color.rgb(252, 240, 215));
         pilesInfo.setFont(Font.font(13));
 
         handBox.setAlignment(Pos.CENTER);

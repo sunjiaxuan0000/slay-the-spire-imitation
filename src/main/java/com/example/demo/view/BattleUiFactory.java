@@ -132,7 +132,10 @@ public final class BattleUiFactory {
         return p;
     }
 
-    /** 牌堆小图标（左下抽牌堆 / 右下弃牌堆），右下角带数量下标 */
+    /** 牌堆小图标（左下抽牌堆 / 右下弃牌堆），右下角带数量下标。
+     *  @param glyph 图标上的字（「抽」/「弃」）
+     *  @param color 字形颜色（十六进制，如 "#4a3624"）
+     */
     public static StackPane pileIcon(String glyph, String color) {
         StackPane icon = new StackPane();
         icon.setPrefSize(76, 100);
@@ -141,7 +144,7 @@ public final class BattleUiFactory {
         icon.setStyle("-fx-background-color: linear-gradient(to bottom right, #e5e7eb, #9ca3af); "
                 + "-fx-background-radius: 10;");
         Label g = new Label(glyph);
-        g.setTextFill(Color.rgb(55, 65, 81));
+        g.setTextFill(Color.web(color)); // 之前这里写死了深灰，参数一直没生效
         g.setFont(Font.font(26));
         g.setStyle("-fx-font-weight: bold;");
         StackPane.setAlignment(g, Pos.CENTER);
