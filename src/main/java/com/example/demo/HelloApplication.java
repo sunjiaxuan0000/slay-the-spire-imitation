@@ -62,8 +62,8 @@ import java.util.Optional;
 public class HelloApplication extends Application {
 
     /** 默认窗口分辨率（1280×720 = 16:9，和主菜单背景图同比例，铺满零裁切） */
-    private static final double W = 1280;
-    private static final double H = 720;
+    private static final double W = 1600;
+    private static final double H = 900;
 
     /** 地图两侧黑边宽度（像素）——想调黑边宽窄就改这个数 */
     private static final double MAP_SIDE_MARGIN = 190;
@@ -197,7 +197,7 @@ public class HelloApplication extends Application {
     /** 地图场景（战斗后回同一张地图也用这个） */
     private void showMapScene(Stage stage, GameMap map, Player player) {
         SoundFx.play("map"); // 进入地图页音效
-        MusicFx.playLoop("bgm_map"); // 地图 BGM（没放 bgm_map.wav 就保持安静）
+        MusicFx.playLoop("Level1", "bgm_map"); // 地图 BGM：Level1（没有就退回 bgm_map）
         // 地图页本身不显示右上角“地图”按钮
         RunHud hud = buildHud(player, map, () -> showWindow(page(mapPage(map))), false);
         // 开发者模式：HUD 上多挂一个「开」按钮（地图场景没有战斗 → battle 传 null）
@@ -301,7 +301,12 @@ public class HelloApplication extends Application {
     /** 战斗场景：顶�?HUD + 战斗主体，外面再包整页窗口层 */
     private void startBattle(Stage stage, GameMap map, Player player,
                              GameMap.NodeType type, Enemy enemy) {
-        MusicFx.playLoop("bgm_battle"); // 战斗 BGM
+        // 战斗 BGM：小怪/精英用 Level1；BOSS 优先用专属曲，没有就沿用 Level1
+        if (type == GameMap.NodeType.BOSS) {
+            MusicFx.playLoop("bgm_boss", "Level1", "bgm_battle");
+        } else {
+            MusicFx.playLoop("Level1", "bgm_battle");
+        }
         RunHud hud = buildHud(player, map, () -> openBattleMapReadOnly(stage, map), true);
 
         BattleView battle = new BattleView(player, hud, enemy,
@@ -724,9 +729,18 @@ public class HelloApplication extends Application {
     private void showRoomScene(Stage stage, GameMap map, Player player) {
         List<Relic> starters = RelicFun.starterRelics();
 
-        RoomView room = new RoomView(
-                player, starters, "猪神",
+        // 猪神的随机台词池（每次进房间随机一句；点对话框还能再换一句）
+        List<String> npcLines = List.of(
                 "猪，你未到校，也未请假。若10点前未及时到场，将不再是迟到，而记为旷课。收到速回",
+                "又迟到了？猪塔的台阶可不会等你。挑一件东西带上，往上爬吧。",
+                "塔里住着鱼龙公爵，它最讨厌迟到的猪。我不拦你，但别空着手上去。",
+                "这三件玩意儿是我从学生处顺来的，挑一个，剩下的我还得还回去。",
+                "上塔之前想清楚：格挡、抽牌、回血——你缺哪一样，就挑哪一样。",
+                "猪，记住：在猪塔里，犹豫的猪会先掉血。"
+        );
+
+        RoomView room = new RoomView(
+                player, starters, "猪神", npcLines,
                 () -> showMapScene(stage, map, player)
         );
 
