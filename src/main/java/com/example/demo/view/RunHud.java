@@ -93,7 +93,7 @@ public class RunHud extends VBox {
         deckIcon.setPrefSize(46, 58);
         deckIcon.setMaxSize(46, 58);
         Label glyph = new Label("牌");
-        glyph.setTextFill(Color.rgb(55, 65, 81));
+        glyph.setTextFill(Color.rgb(74, 54, 36));
         glyph.setFont(Font.font(17));
         glyph.setStyle("-fx-font-weight: bold;");
         deckIcon.getChildren().add(glyph);
