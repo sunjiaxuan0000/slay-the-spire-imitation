@@ -316,16 +316,26 @@ public class HelloApplication extends Application {
             battleMapOpen = false;
             if (won) {
                 if (type == GameMap.NodeType.BOSS) {
-                    returnToMenu(stage); // 通关
+                    // Boss 战胜利：先回到地图，再返回主菜单（通关）
+                    showMapScene(stage, map, player);
+                    // 延迟返回主菜单，让玩家看到通关画面
+                    PauseTransition delay = new PauseTransition(Duration.millis(2000));
+                    delay.setOnFinished(e -> returnToMenu(stage));
+                    delay.play();
                 } else {
                     if (type == GameMap.NodeType.ELITE) {
                         Relic relic = RelicFun.randomEliteRelic(player);
                         if (relic != null) {
                             hud.refresh();
-                            RelicObtainToast.show(stage.getScene(), relic, null);
+                            RelicObtainToast.show(stage.getScene(), relic, () -> {
+                                showMapScene(stage, map, player);
+                            });
+                        } else {
+                            showMapScene(stage, map, player);
                         }
+                    } else {
+                        showMapScene(stage, map, player);
                     }
-                    showMapScene(stage, map, player);
                 }
             } else {
                 returnToMenu(stage);     // 阵亡

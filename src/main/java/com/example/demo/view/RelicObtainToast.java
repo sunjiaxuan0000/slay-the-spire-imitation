@@ -136,6 +136,18 @@ public final class RelicObtainToast {
         // 按顺序播放：出现 → 停留 → 飞走
         SequentialTransition seq = new SequentialTransition(appear, hold, flyAway);
         seq.play();
+
+        // 点击卡片可跳过等待，直接飞走
+        card.setMouseTransparent(false);
+        card.setCursor(javafx.scene.Cursor.HAND);
+        final boolean[] skipped = {false};
+        card.setOnMouseClicked(e -> {
+            if (skipped[0]) return;
+            skipped[0] = true;
+            hold.stop();
+            // 直接播放飞走动画
+            flyAway.play();
+        });
     }
 
     /** 构建遗物展示卡片 */
