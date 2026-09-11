@@ -247,16 +247,15 @@ public class DevPanel extends VBox {
     }
 
     private StackPane relicChip(Relic r, boolean has) {
-        Label glyph = new Label(r.name.substring(0, 1));
-        glyph.setTextFill(Color.WHITE);
-        glyph.setFont(Font.font(18));
-        glyph.setStyle("-fx-font-weight: bold;");
+        // 走 Relic 自己的图标构件：有图就用图，没图才退回"名字首字"
+        // （以前这里是自己画的首字 Label，所以明明有图也不显示）
+        StackPane icon = r.buildIconGraphic(26);
 
         Label name = new Label(r.name + (has ? " · 已持有" : " · 未持有"));
         name.setTextFill(has ? Color.rgb(134, 239, 172) : Color.rgb(203, 213, 225));
         name.setFont(Font.font(13));
 
-        HBox inner = new HBox(8, glyph, name);
+        HBox inner = new HBox(8, icon, name);
         inner.setAlignment(Pos.CENTER_LEFT);
 
         StackPane chip = new StackPane(inner);
@@ -270,7 +269,10 @@ public class DevPanel extends VBox {
             if (has) {
                 player.relics.removeIf(h -> h.name.equals(r.name));
             } else {
-                player.addRelic(new Relic(r.name, r.desc));
+                // ★ 必须把原对象整个传进去。
+                //   以前是 new Relic(r.name, r.desc) —— 那个两参构造会把 imagePath 置成 null，
+                //   于是这样加出来的遗物在 HUD / 详情页 / 获得提示里全都退化成文字图标。
+                player.addRelic(r);
             }
             afterChange();
         });

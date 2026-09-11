@@ -44,7 +44,7 @@ public  class Relic {
     // ================= 遗物池数据 =================
 
     private static final List<Relic> STARTER_RELICS = List.of(
-            new Relic("青铜怀表", "战斗开始时获得 2 点格挡", "relic/huaibiao.jpg"),
+            new Relic("青铜怀表", "战斗开始时获得 2 点格挡", "relic/huaibiao.png"),
             new Relic("请假条", "接下来的三场战斗怪物血量变为 1", "relic/qingjia.png"),
             new Relic("保温杯", "最大生命值增加 8 点", "relic/cup.png"),
             new Relic("破镜", "删除当前卡组里的一张牌", "relic/jingzi.png")
@@ -55,7 +55,7 @@ public  class Relic {
             new Relic("红头骨", "当生命值 ≤ 50% 时，获得额外 3 点力量", "relic/RedSkull.png"),
             new Relic("猫", "每场战斗开始时获得 10 点格挡", "relic/mao.png"),
             new Relic("孙子兵法", "若一回合未出牌，下回合获得 1 点额外能量", "relic/ArtofWar.png"),
-            new Relic("发条靴", "造成 ≤ 5 的未被格挡伤害时，提升为 8", "relic/bootr.png"),
+            new Relic("发条靴", "造成 ≤ 5 的未被格挡伤害时，提升为 8", "relic/TheBoot.png"),
             new Relic("赤牛", "每场战斗第一次攻击造成 8 点额外伤害"),
             new Relic("金刚杵", "每场战斗开始时获得 1 点力量", "relic/Vajra.png"),
             new Relic("小血瓶", "每场战斗开始时恢复 2 点生命", "relic/Blood_vial.png"),
@@ -135,28 +135,41 @@ public  class Relic {
         return img.isError() ? null : img;
     }
 
-    public VBox buildPage(Runnable onClose) {
+    /**
+     * 只画遗物图标本身：有图就用图，没图退回"名字首字"的紫色方块。
+     *
+     * <p>不含点击事件、不含 Tooltip，方便各处按自己的尺寸复用：
+     * HUD 遗物条 30px、详情页 96px、开发者面板 26px …
+     */
+    public StackPane buildIconGraphic(double size) {
         StackPane icon = new StackPane();
-        icon.setPrefSize(96, 96);
-        icon.setMaxSize(96, 96);
+        icon.setPrefSize(size, size);
+        icon.setMaxSize(size, size);
+        double radius = size * 0.22;   // 圆角跟着尺寸走，大小图标看起来才一致
 
         Image img = loadImage();
         if (img != null) {
-            icon.setStyle("-fx-background-color: rgba(15, 23, 42, 0.6); -fx-background-radius: 18;");
+            icon.setStyle("-fx-background-color: rgba(15, 23, 42, 0.6); "
+                    + "-fx-background-radius: " + radius + ";");
             ImageView iv = new ImageView(img);
-            iv.setFitWidth(96);
-            iv.setFitHeight(96);
+            iv.setFitWidth(size);
+            iv.setFitHeight(size);
             iv.setPreserveRatio(true);
             iv.setSmooth(true);
             icon.getChildren().add(iv);
         } else {
-            icon.setStyle("-fx-background-color: #7c3aed; -fx-background-radius: 18;");
+            icon.setStyle("-fx-background-color: #7c3aed; -fx-background-radius: " + radius + ";");
             Label g = new Label(name.substring(0, 1));
             g.setTextFill(Color.WHITE);
-            g.setFont(Font.font(44));
+            g.setFont(Font.font(size * 0.46));
             g.setStyle("-fx-font-weight: bold;");
             icon.getChildren().add(g);
         }
+        return icon;
+    }
+
+    public VBox buildPage(Runnable onClose) {
+        StackPane icon = buildIconGraphic(96);
 
         Label nameLabel = new Label(name);
         nameLabel.setTextFill(Color.WHITE);
@@ -185,29 +198,8 @@ public  class Relic {
     }
 
     public StackPane buildIcon(Consumer<Relic> onClick) {
-        StackPane icon = new StackPane();
-        icon.setPrefSize(30, 30);
-        icon.setMaxSize(30, 30);
+        StackPane icon = buildIconGraphic(30);
         icon.setCursor(javafx.scene.Cursor.HAND);
-
-        Image img = loadImage();
-        if (img != null) {
-            icon.setStyle("-fx-background-color: rgba(15, 23, 42, 0.6); -fx-background-radius: 8;");
-            ImageView iv = new ImageView(img);
-            iv.setFitWidth(30);
-            iv.setFitHeight(30);
-            iv.setPreserveRatio(true);
-            iv.setSmooth(true);
-            icon.getChildren().add(iv);
-        } else {
-            icon.setStyle("-fx-background-color: #7c3aed; -fx-background-radius: 8;");
-            Label g = new Label(name.substring(0, 1));
-            g.setTextFill(Color.WHITE);
-            g.setFont(Font.font(14));
-            g.setStyle("-fx-font-weight: bold;");
-            icon.getChildren().add(g);
-        }
-
         Tooltip.install(icon, new Tooltip(name + "\n" + desc));
         icon.setOnMouseClicked(e -> onClick.accept(this));
         return icon;
