@@ -50,12 +50,12 @@ public final class DevEntry {
         hud.addDevButton(() -> {
             DevPanel panel = new DevPanel(player, battle, refresh, closePanel);
 
-            if (battle != null) {
-                // 面板挂进窗口 = 战斗暂停；面板被移出窗口（点关闭 / 按 Esc 都会走清空窗口）
-                // = 自动恢复战斗。用 parent 变化来判断，两条关闭路径都不用额外记账。
-                panel.parentProperty().addListener(
-                        (o, oldParent, newParent) -> battle.setPaused(newParent != null));
-            }
+//            if (battle != null) {
+//                // 面板挂进窗口 = 战斗暂停；面板被移出窗口（点关闭 / 按 Esc 都会走清空窗口）
+//                // = 自动恢复战斗。用 parent 变化来判断，两条关闭路径都不用额外记账。
+//                panel.parentProperty().addListener(
+//                        (o, oldParent, newParent) -> battle.setPaused(newParent != null));
+//            }
             showPanel.accept(panel);
         });
     }
