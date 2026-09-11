@@ -20,6 +20,7 @@ import com.example.demo.view.MapView;
 import com.example.demo.view.RoomView;
 import com.example.demo.view.RunHud;
 import com.example.demo.view.SettingsView;
+import com.example.demo.view.RelicObtainToast;
 import com.example.demo.sound.MusicFx;
 import com.example.demo.sound.SoundFx;
 
@@ -321,11 +322,7 @@ public class HelloApplication extends Application {
                         Relic relic = RelicFun.randomEliteRelic(player);
                         if (relic != null) {
                             hud.refresh();
-                            Alert alert = new Alert(Alert.AlertType.INFORMATION);
-                            alert.setTitle("精英战利品");
-                            alert.setHeaderText(null);
-                            alert.setContentText("击败精英怪，获得遗物：「" + relic.name + "」\n" + relic.desc);
-                            alert.showAndWait();
+                            RelicObtainToast.show(stage.getScene(), relic, null);
                         }
                     }
                     showMapScene(stage, map, player);
@@ -633,13 +630,15 @@ public class HelloApplication extends Application {
             case TREASURE -> {
                 Relic gained =  RelicFun.randomEliteRelic(player);
                 hud.refresh();
-                Alert alert = new Alert(Alert.AlertType.INFORMATION);
-                alert.setTitle("宝箱");
-                alert.setHeaderText(null);
-                alert.setContentText(gained == null
-                        ? "宝箱里的遗物你已经有了……空空如也。"
-                        : "你打开宝箱，获得遗物：「" + gained.name + "」\n" + gained.desc);
-                alert.showAndWait();
+                if (gained != null) {
+                    RelicObtainToast.show(stage.getScene(), gained, null);
+                } else {
+                    Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                    alert.setTitle("宝箱");
+                    alert.setHeaderText(null);
+                    alert.setContentText("宝箱里的遗物你已经有了……空空如也。");
+                    alert.showAndWait();
+                }
             }
         }
     }

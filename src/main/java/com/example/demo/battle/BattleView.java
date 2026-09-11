@@ -54,7 +54,7 @@ import java.util.function.Consumer;
 /**
  * 回合制战斗界面（纯战斗逻辑 + 面板拼装）。
  *
- * 卡牌渲染委托 {@link CardView}，静态 UI 构件委托 {@link BattleUiFactory}，
+ * 卡牌渲染委托 {@link CardFaceView}，静态 UI 构件委托 {@link BattleUiFactory}，
  * 弹层（牌堆浏览/奖励/死亡）委托 view 包中各自的 Overlay 类。
  */
 public class BattleView extends javafx.scene.layout.StackPane implements BattleState {

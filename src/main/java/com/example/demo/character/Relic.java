@@ -44,32 +44,32 @@ public  class Relic {
     // ================= 遗物池数据 =================
 
     private static final List<Relic> STARTER_RELICS = List.of(
-            new Relic("青铜怀表", "战斗开始时获得 2 点格挡"),
-            new Relic("请假条", "接下来的三场战斗怪物血量变为 1"),
-            new Relic("保温杯", "最大生命值增加 8 点"),
-            new Relic("破镜", "删除当前卡组里的一张牌")
+            new Relic("青铜怀表", "战斗开始时获得 2 点格挡", "relic/huaibiao.jpg"),
+            new Relic("请假条", "接下来的三场战斗怪物血量变为 1", "relic/qingjia.png"),
+            new Relic("保温杯", "最大生命值增加 8 点", "relic/cup.png"),
+            new Relic("破镜", "删除当前卡组里的一张牌", "relic/jingzi.png")
     );
 
     private static final List<Relic> ELITE_RELICS = List.of(
             // —— 普通遗物（各 7%）——
-            new Relic("红头骨", "当生命值 ≤ 50% 时，获得额外 3 点力量"),
-            new Relic("猫", "每场战斗开始时获得 10 点格挡"),
-            new Relic("孙子兵法", "若一回合未出牌，下回合获得 1 点额外能量"),
+            new Relic("红头骨", "当生命值 ≤ 50% 时，获得额外 3 点力量", "relic/RedSkull.png"),
+            new Relic("猫", "每场战斗开始时获得 10 点格挡", "relic/mao.png"),
+            new Relic("孙子兵法", "若一回合未出牌，下回合获得 1 点额外能量", "relic/ArtofWar.png"),
             new Relic("发条靴", "造成 ≤ 5 的未被格挡伤害时，提升为 8"),
             new Relic("赤牛", "每场战斗第一次攻击造成 8 点额外伤害"),
-            new Relic("金刚杵", "每场战斗开始时获得 1 点力量"),
-            new Relic("小血瓶", "每场战斗开始时恢复 2 点生命"),
-            new Relic("草莓", "最大生命值提升 7 点"),
-            new Relic("百年积木", "每场战斗第一次失去生命值时抽 3 张牌"),
-            new Relic("奥利哈钢", "回合结束时若无格挡，获得 6 点格挡"),
-            new Relic("古茶具套装", "篝火休息后下一场战斗开始时获得 2 点额外能量"),
+            new Relic("金刚杵", "每场战斗开始时获得 1 点力量", "relic/Vajra.png"),
+            new Relic("小血瓶", "每场战斗开始时恢复 2 点生命", "relic/Blood_vial.png"),
+            new Relic("草莓", "最大生命值提升 7 点", "relic/Strawberry.png"),
+            new Relic("百年积木", "每场战斗第一次失去生命值时抽 3 张牌", "relic/CentennialPuzzle.png"),
+            new Relic("奥利哈钢", "回合结束时若无格挡，获得 6 点格挡", "relic/Orichalcum.png"),
+            new Relic("古茶具套装", "篝火休息后下一场战斗开始时获得 2 点额外能量", "relic/Tea_set.png"),
             // —— 罕见遗物（各 5%）——
-            new Relic("荔枝", "最大生命值提升 13 点"),
-            new Relic("精致折扇", "一回合打出 3 张攻击牌时获得 4 点格挡"),
-            new Relic("开信刀", "一回合打出 3 张技能牌时对敌人造成 5 点伤害"),
-            new Relic("带骨肉", "战斗结束时若生命值 < 50%，恢复 12 点生命"),
+            new Relic("荔枝", "最大生命值提升 13 点", "relic/Pear.png"),
+            new Relic("精致折扇", "一回合打出 3 张攻击牌时获得 4 点格挡", "relic/OrnamentalFan.png"),
+            new Relic("开信刀", "一回合打出 3 张技能牌时对敌人造成 5 点伤害", "relic/LetterOpener.png"),
+            new Relic("带骨肉", "战斗结束时若生命值 < 50%，恢复 12 点生命", "relic/Meat.png"),
             // —— 稀有遗物（3%）——
-            new Relic("鸟面翁", "每打出一张技能牌恢复 2 点生命")
+            new Relic("鸟面翁", "每打出一张技能牌恢复 2 点生命", "relic/Bird_urn.png")
     );
 
     /** 与 ELITE_RELICS 一一对应的权重（百分比） */
@@ -80,19 +80,19 @@ public  class Relic {
     );
 
     private static final List<Relic> EVENT_RELICS = List.of(
-            new Relic("英雄宝典", "每场战斗开始时增加一张不消耗能量的能力牌"),
-            new Relic("老牧师", "每场战斗结束后最大生命值增加 1"),
-            new Relic("忘情牛肉面", "每场战斗开始时获得 3 点力量，仅第一回合有效"),
-            new Relic("taffy", "每回合结束时生命值高于 50% 额外获得 5 点格挡"),
-            new Relic("牛来", "每场战斗开始时对敌人造成 3 点伤害"),
-            new Relic("奶龙", "第二回合开始时获得 12 点格挡")
+            new Relic("英雄宝典", "每场战斗开始时增加一张不消耗能量的能力牌", "relic/Enchiridion.png"),
+            new Relic("老牧师", "每场战斗结束后最大生命值增加 1", "relic/mushi.jpg"),
+            new Relic("忘情牛肉面", "每场战斗开始时获得 3 点力量，仅第一回合有效", "relic/mian.png"),
+            new Relic("taffy", "每回合结束时生命值高于 50% 额外获得 5 点格挡", "relic/taffy.jpg"),
+            new Relic("牛来", "每场战斗开始时对敌人造成 3 点伤害", "relic/niulai.png"),
+            new Relic("奶龙", "第二回合开始时获得 12 点格挡", "relic/nailong.png")
     );
 
     /** Boss 遗物池：击败 Boss 后获得 */
     private static final List<Relic> BOSS_RELICS = List.of(
-            new Relic("奴隶贩子颈环", "在 Boss 战和精英战中，每回合开始时获得 1 点额外能量"),
-            new Relic("空鸟笼", "获取时可以移除牌组里的两张牌"),
-            new Relic("召唤铃铛", "可以从精英怪遗物池中选择三个遗物")
+            new Relic("奴隶贩子颈环", "在 Boss 战和精英战中，每回合开始时获得 1 点额外能量", "relic/Collar.png"),
+            new Relic("空鸟笼", "获取时可以移除牌组里的两张牌", "relic/Cage.png"),
+            new Relic("召唤铃铛", "可以从精英怪遗物池中选择三个遗物", "relic/Bell.png")
     );
 
     public static List<Relic> starterRelics() {
@@ -127,7 +127,7 @@ public  class Relic {
 
 
     /** 加载遗物图标图片；未配置路径或加载失败时返回 null（调用方退回文字图标） */
-    private Image loadImage() {
+    public Image loadImage() {
         if (imagePath == null) return null;
         var in = Relic.class.getResourceAsStream("/com/example/demo/" + imagePath);
         if (in == null) return null;
