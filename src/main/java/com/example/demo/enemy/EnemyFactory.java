@@ -9,7 +9,7 @@ import com.example.demo.view.GameMap;
  *
  * 第 6 层起（row >= 5）分为两个池子：
  *   基础池：史莱姆 / 邪教猪（池内 6:4），合计生成概率随层数从 40% 线性递减到 20%；
- *   高级池：大史莱姆 / 老兵邪教猪 / 自爆猪（池内 4:3:3），
+ *   高级池：大史莱姆 / 老兵邪教猪 / 神风猪（池内 4:3:3），
  *           合计生成概率随层数从 60% 线性增大到 80%。
  */
 public final class EnemyFactory {
@@ -24,10 +24,10 @@ public final class EnemyFactory {
     /** 基础池内部：史莱姆 60% / 邪教猪 40% */
     private static final double BASE_SLIME_RATIO = 0.6;
 
-    // ===== 高级池内部权重：大史莱姆 4 : 老兵邪教猪 3 : 自爆猪 3 =====
+    // ===== 高级池内部权重：大史莱姆 4 : 老兵邪教猪 3 : 神风猪 3 =====
     private static final double BIG_SLIME_WEIGHT = 0.4;
     private static final double VETERAN_CULTIST_WEIGHT = 0.3;
-    // 剩余 0.3 为自爆猪
+    // 剩余 0.3 为神风猪
 
     private EnemyFactory() {
     }
@@ -53,7 +53,7 @@ public final class EnemyFactory {
             return inPool < BASE_SLIME_RATIO ? Slime.base() : CultistPig.base();
         }
 
-        // 落入高级池：大史莱姆 4 / 老兵邪教猪 3 / 自爆猪 3
+        // 落入高级池：大史莱姆 4 / 老兵邪教猪 3 / 神风猪 3
         double inPool = Math.random();
         if (inPool < BIG_SLIME_WEIGHT) {
             return Slime.big();

@@ -41,6 +41,7 @@ import javafx.scene.shape.Ellipse;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.util.Duration;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -429,15 +430,27 @@ public class BattleView extends StackPane implements BattleState {
 
         enemyPortraitSize = enemy.getPortraitSize();
         StackPane portrait;
-        if (enemy.hasPortrait) {
-            enemyPortraitImg = new ImageView();
-            Image img = new Image(getClass().getResourceAsStream("/com/example/demo/portrait/" + enemy.getPortraitName() + ".png"));
-            enemyPortraitImg.setImage(img);
+        // ⚠ 立绘文件缺失时 getResourceAsStream 返回 null，而 new Image(null) 会直接抛
+        //   NullPointerException("Input stream must not be null") —— 那会让「进战斗」这一步
+        //   直接崩掉（曾经因为 portraitName 和 portrait/ 下的文件名不一致踩过一次）。
+        //   所以先判空，缺图就退回「名字首字」占位。
+        InputStream rawPortrait = enemy.hasPortrait
+                ? getClass().getResourceAsStream(
+                        "/com/example/demo/portrait/" + enemy.getPortraitName() + ".png")
+                : null;
+        Image img = rawPortrait == null ? null : new Image(rawPortrait);
+        if (img != null && !img.isError()) {
+            enemyPortraitImg = new ImageView(img);
             enemyPortraitImg.setFitWidth(enemyPortraitSize);
             enemyPortraitImg.setFitHeight(enemyPortraitSize);
             enemyPortraitImg.setPreserveRatio(true);
             portrait = new StackPane(enemyPortraitImg);
         } else {
+            enemyPortraitImg = new ImageView(); // 字段保持非空：BOSS 二阶段的淡出动画会用到它
+            if (enemy.hasPortrait) {
+                System.out.println("[BattleView] 缺少立绘 portrait/" + enemy.getPortraitName()
+                        + ".png，改用名字首字占位");
+            }
             portrait = BattleUiFactory.portrait(enemy.name.substring(0, 1),
                     "radial-gradient(center 35% 30%, radius 100%, #6b7280, #1f2937);");
         }
@@ -1131,7 +1144,7 @@ public class BattleView extends StackPane implements BattleState {
      * <p>直接把敌人血量清零，然后走<b>正常的胜利流程</b>（倒地动画 → 奖励结算），
      * 所以遗物、卡牌奖励这些都照常发。</p>
      *
-     * <p><b>刻意绕过 {@link #resolveEnemyLethal()} 的濒死锁血</b> —— 那个会给自爆猪
+     * <p><b>刻意绕过 {@link #resolveEnemyLethal()} 的濒死锁血</b> —— 那个会给神风猪
      * 锁 1 点血、逼它下次行动自爆，把玩家一起炸死，那就不叫「秒杀」了。</p>
      *
      * <p>已经结束的战斗直接忽略；{@code victory()} 自身也有 {@code battleOver} 守卫，
@@ -1161,7 +1174,7 @@ public class BattleView extends StackPane implements BattleState {
 
     /**
      * 敌人 HP 归 0 的统一处理：
-     * 自爆猪等有濒死机制的敌人锁血 1 点、强制下次行动自爆；其余直接胜利。
+     * 神风猪等有濒死机制的敌人锁血 1 点、强制下次行动自爆；其余直接胜利。
      * 锁血期间再受致命伤害保持 1 血，不再触发胜利。
      */
     private void resolveEnemyLethal() {
@@ -1428,7 +1441,7 @@ public class BattleView extends StackPane implements BattleState {
             case RITUAL -> enemy.setRitualPower(s.value);
             case CHARGE -> enemy.addChargeStacks(s.value); // 叠蓄势，自爆伤害随之增加
             case EXPLODE -> {
-                // 自爆猪锁血后的最终一击：蓄势层数 × 每层伤害，正常扣格挡/血量，自爆后死亡
+                // 神风猪锁血后的最终一击：蓄势层数 × 每层伤害，正常扣格挡/血量，自爆后死亡
                 enemyAnim.triggerAttackDash();
                 int dmg = enemy.explodeDamage();
                 if (playerBlock > 0) {
@@ -1441,7 +1454,7 @@ public class BattleView extends StackPane implements BattleState {
                 if (dmg > 0) SoundFx.play("GetHurt");
                 hud.refresh();
                 if (player.hp() == 0) { playerDied(); return; }
-                victory(); // 自爆结算完，自爆猪死亡 → 胜利奖励
+                victory(); // 自爆结算完，神风猪死亡 → 胜利奖励
                 return;    // 不再推进轮盘 / 开启玩家回合
             }
         }
@@ -1800,7 +1813,7 @@ public class BattleView extends StackPane implements BattleState {
             eChips.getChildren().add(BattleUiFactory.statusChip("弱", enemyWeak, "#7c3aed",
                     "虚弱 " + enemyWeak + " 回合：敌人造成的伤害 ×0.75"));
         }
-        // 自爆猪蓄势：血条左下角红底白字菱形「蓄」标
+        // 神风猪蓄势：血条左下角红底白字菱形「蓄」标
         if (enemy.getChargeStacks() > 0) {
             eChips.getChildren().add(BattleUiFactory.diamondChip("蓄", enemy.getChargeStacks(), "#dc2626",
                     "蓄势：每层蓄势造成 " + enemy.getChargeDamagePerStack()

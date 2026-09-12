@@ -65,10 +65,10 @@ public abstract class Enemy {
     /** 立绘贴图尺寸（正方形边长），默认 210。 */
     protected int portraitSize = 210;
 
-    /** 蓄势层数（自爆猪）：每层使自爆伤害增加，CHARGE 意图叠加。 */
+    /** 蓄势层数（神风猪）：每层使自爆伤害增加，CHARGE 意图叠加。 */
     protected int chargeStacks = 0;
 
-    /** 每层蓄势对应的自爆伤害，0 表示无自爆机制（自爆猪设为 16）。 */
+    /** 每层蓄势对应的自爆伤害，0 表示无自爆机制（神风猪设为 16）。 */
     protected int chargeDamagePerStack = 0;
 
     /** 濒死锁血标记：HP 归 0 后不立即死亡，强制行动一次自爆后才死。 */
@@ -172,7 +172,7 @@ public abstract class Enemy {
         return false;
     }
 
-    // ===== 蓄势 / 自爆（自爆猪机制，默认不启用） =====
+    // ===== 蓄势 / 自爆（神风猪机制，默认不启用） =====
 
     /** 当前蓄势层数 */
     public int getChargeStacks() {
@@ -202,7 +202,7 @@ public abstract class Enemy {
     /**
      * HP 归 0 时由战斗层调用：若敌人有濒死机制则锁血拦截死亡。
      * 返回 true 表示拦截成功（HP 锁 1，战斗继续，下一次行动强制自爆）；
-     * 返回 false 表示正常死亡。默认无机制，子类（自爆猪）覆写。
+     * 返回 false 表示正常死亡。默认无机制，子类（神风猪）覆写。
      */
     public boolean triggerDeathLock() {
         return false;

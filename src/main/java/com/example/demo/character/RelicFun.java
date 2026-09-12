@@ -76,7 +76,7 @@ public class RelicFun {
 
     /** 请假条：战斗开始时是否将怪物血量设为 1 */
     public static boolean isLeaveNoteActive(Player player) {
-        return player.leaveNoteBattles > 0;
+        return player.leaveNoteBattles >0;
     }
 
     /* ================= 回合开始 ================= */
@@ -210,9 +210,9 @@ public class RelicFun {
         if (relic.name.equals("保温杯")) {
             player.increaseMaxHp(8);
         }
-        // 请假条：获得时设置 3 场战斗生效
+        // 请假条：获得时设置 3 场战斗生效（人工注释：此处为4才是三次，没写错）
         if (relic.name.equals("请假条")) {
-            player.leaveNoteBattles = 3;
+            player.leaveNoteBattles = 4;
         }
         // 召唤铃铛：代价 —— 往牌组里永久塞一张「伤口」（三份遗物不是白拿的）
         // ⚠ 这张伤口必须留到下一场战斗。它在 Boss 战胜利之后才加进来，

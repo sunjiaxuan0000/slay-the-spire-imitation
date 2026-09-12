@@ -121,7 +121,7 @@ public final class BattleUiFactory {
         return chip;
     }
 
-    /** 菱形状态标（自爆猪蓄势专用）：方块旋转 45° 成菱形，内文反向旋转保持正立 */
+    /** 菱形状态标（神风猪蓄势专用）：方块旋转 45° 成菱形，内文反向旋转保持正立 */
     public static HBox diamondChip(String glyph, int count, String color, String tip) {
         StackPane icon = new StackPane();
         icon.setPrefSize(24, 24);

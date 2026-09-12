@@ -3,12 +3,17 @@ package com.example.demo.enemy;
 import java.util.List;
 
 /**
- * 普通怪：自爆猪
+ * 普通怪：神风猪
  * 行动轮盘：攻击 10 / 防御 5 / 蓄势 1 层 循环。
  * 特殊机制：
  *   1. 每层蓄势使自爆伤害 +16；
  *   2. HP 归 0 时不立即死亡，锁血 1 点并强制增加一次自爆意图，
  *      自爆造成「蓄势层数 × 16」伤害，自爆后自身死亡。
+ *
+ * <p>⚠ 立绘走 {@code portraitName}（{@link Enemy#getPortraitName()}），
+ * 所以资源文件名必须和这里的「神风猪」严格一致：
+ * {@code resources/com/example/demo/portrait/神风猪.png}。
+ * 名字对不上时 {@code BattleView} 会拿 null 流去 new Image，直接抛 NPE 崩在进战斗那一步。</p>
  */
 public class BoomPig extends Enemy {
 
@@ -16,13 +21,13 @@ public class BoomPig extends Enemy {
     public static final int DAMAGE_PER_STACK = 16;
 
     public BoomPig() {
-        super("自爆猪", 42, true, false, List.of(
+        super("神风猪", 42, true, false, List.of(
                 new Step(Intent.ATTACK, 10),
                 new Step(Intent.DEFEND, 5),
                 new Step(Intent.CHARGE, 1)
         ));
         chargeDamagePerStack = DAMAGE_PER_STACK;
-        portraitName = "自爆猪";
+        portraitName = "神风猪"; // 必须和 portrait/ 下的文件名一致
     }
 
     /** 锁血后：当前意图强制变为自爆（伤害随蓄势层数实时计算） */
