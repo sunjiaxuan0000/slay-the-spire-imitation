@@ -21,6 +21,7 @@ import com.example.demo.view.RoomView;
 import com.example.demo.view.RunHud;
 import com.example.demo.view.SettingsView;
 import com.example.demo.view.RelicObtainToast;
+import com.example.demo.view.RestView;
 import com.example.demo.sound.MusicFx;
 import com.example.demo.sound.SoundFx;
 
@@ -625,17 +626,7 @@ public class HelloApplication extends Application {
                 EventDef ev = events.get(new java.util.Random().nextInt(events.size()));
                 startEventScene(stage, map, player, ev);
             }
-            case REST    -> {
-                int before = player.hp();
-                player.heal(player.maxHp);
-                player.restedAtCampfire = true; // 标记篝火休息，用于古茶具套装遗物
-                hud.refresh();
-                Alert alert = new Alert(Alert.AlertType.INFORMATION);
-                alert.setTitle("节点事件");
-                alert.setHeaderText(null);
-                alert.setContentText("你点燃篝火休息，生命 " + before + " → " + player.hp());
-                alert.showAndWait();
-            }
+            case REST    -> showRestScene(stage, map, player);
             case TREASURE -> {
                 Relic gained =  RelicFun.randomEliteRelic(player);
                 hud.refresh();
@@ -721,6 +712,19 @@ public class HelloApplication extends Application {
             }
             case NOTHING -> opt.effectDesc + "（无事发生）";
         };
+    }
+
+    /** 篝火（休息）节点：休息恢复 30% 最大生命，或强化一张牌（二选一） */
+    private void showRestScene(Stage stage, GameMap map, Player player) {
+        RestView rest = new RestView(player, () -> showMapScene(stage, map, player));
+
+        Scene scene = sizedScene(stage, rest);
+        scene.setOnKeyPressed(e -> {
+            if (e.getCode() == KeyCode.ESCAPE) {
+                returnToMenu(stage);
+            }
+        });
+        stage.setScene(scene);
     }
 
     /** 起点房间：NPC + 三选一初始遗物 */

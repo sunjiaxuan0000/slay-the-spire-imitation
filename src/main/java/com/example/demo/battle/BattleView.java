@@ -15,7 +15,7 @@ import com.example.demo.view.BattleUiFactory;
 import com.example.demo.view.DeathOverlay;
 import com.example.demo.view.CardFlyFx;
 import com.example.demo.view.PileOverlay;
-import com.example.demo.view.RemoveCardOverlay;
+import com.example.demo.view.DeckPickOverlay;
 import com.example.demo.view.RewardOverlay;
 import com.example.demo.view.SpriteAnimator;
 import com.example.demo.view.RunHud;
@@ -1578,7 +1578,7 @@ public class BattleView extends StackPane implements BattleState {
      * 也就是跑在<b>动画回调</b>里，而 JavaFX 明确禁止在动画/布局处理中 {@code showAndWait}，
      * 会抛 {@code IllegalStateException: showAndWait is not allowed during animation or layout processing}
      * —— 玩家点完 Boss 就卡死在战斗界面，既没有删牌框也拿不到卡牌奖励。
-     * {@link RemoveCardOverlay} 是普通节点，天然没这个限制。
+     * {@link DeckPickOverlay} 是普通节点，天然没这个限制。
      */
     private void showRemovePicker(int remaining, Runnable onDone) {
         if (remaining <= 0 || player.deck.isEmpty()) {
@@ -1586,7 +1586,7 @@ public class BattleView extends StackPane implements BattleState {
             return;
         }
 
-        RemoveCardOverlay picker = new RemoveCardOverlay(
+        DeckPickOverlay picker = new DeckPickOverlay(
                 player,
                 "空鸟笼 · 选择一张牌移除（还剩 " + remaining + " 张）",
                 c -> {

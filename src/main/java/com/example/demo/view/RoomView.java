@@ -228,13 +228,13 @@ public class RoomView extends StackPane {
     /**
      * 破镜效果：让玩家选择一张卡牌删除。
      *
-     * <p>版面走 {@link RemoveCardOverlay}，与牌组页（{@code HelloApplication.deckPage}）同款 ——
+     * <p>版面走 {@link DeckPickOverlay}，与牌组页（{@code HelloApplication.deckPage}）同款 ——
      * 深色面板 + 24px 标题 + 卡面滚动区，区别只是这里的卡面可以点。
      */
     private void removeCardFromDeck() {
         if (player.deck.isEmpty()) return;
 
-        RemoveCardOverlay picker = new RemoveCardOverlay(
+        DeckPickOverlay picker = new DeckPickOverlay(
                 player,
                 "破镜 · 选择一张牌移除",
                 c -> {

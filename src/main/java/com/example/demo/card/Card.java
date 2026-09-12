@@ -83,6 +83,26 @@ public class Card {
     }
 
     /**
+     * 能否升级：已经升过的不再升；状态牌（伤口 / 黏液）也不能升。
+     * <p>篝火「强化卡牌」用这个筛选可选的牌。
+     */
+    public boolean canUpgrade() {
+        return !upgraded && kind.type != Type.STATUS;
+    }
+
+    /**
+     * 升级：返回一张同种类、<b>同 id</b> 的升级版（费用 / 数值 / 文案换成升级版）。
+     *
+     * <p>保留 id 是为了让牌组页（按 id 排序）里的位置不变 —— 直接
+     * {@code Card.of(kind, true)} 会拿到一个新 id，强化完的牌会跳到列表末尾。
+     * 已经是升级版则原样返回。
+     */
+    public Card upgrade() {
+        if (upgraded) return this;
+        return new Card(of(kind, true), id, true);
+    }
+
+    /**
      * 打出后是否离场（消耗）：显式消耗牌，或能力牌默认消耗。
      * <p>与字段 {@link #exhaust} 区分：能力牌默认消耗但卡面不显示“消耗”文字。
      */
@@ -157,6 +177,20 @@ public class Card {
         this.exhaust = exhaust;
         this.innate = innate;
         this.hits = hits;
+        this.upgraded = upgraded;
+    }
+
+    /** 私有：照抄 {@code src} 的数值，但用指定 id（{@link #upgrade()} 用来保留原 id）。 */
+    private Card(Card src, int id, boolean upgraded) {
+        this.id = id;
+        this.kind = src.kind;
+        this.cost = src.cost;
+        this.damage = src.damage;
+        this.block = src.block;
+        this.draw = src.draw;
+        this.exhaust = src.exhaust;
+        this.innate = src.innate;
+        this.hits = src.hits;
         this.upgraded = upgraded;
     }
 
