@@ -68,6 +68,16 @@ public class GameMap {
     public static final int TREASURE_ROW = 8; // 第 9 层 = 固定宝箱层（row 编号从 0 起）
     public static final int REST_ROW = ROWS - 2; // BOSS(17层) 前一层，第 16 层 = 固定篝火层
 
+    /**
+     * 这一层是不是「固定层」—— 起点(0) / 宝箱(8) / 篝火(15) / BOSS(16)。
+     *
+     * <p>固定层的节点类型写死、不受地图变异影响。遗物「混沌」只把
+     * <b>非</b>固定层的节点改成事件图标并随机改判房间，这四个固定层保持原样。</p>
+     */
+    public static boolean isFixedRow(int row) {
+        return row == 0 || row == TREASURE_ROW || row == REST_ROW || row == ROWS - 1;
+    }
+
     public final List<List<MapNode>> floors = new ArrayList<>(); // floors.get(row)
     public MapNode current = null;        // 玩家现在在哪（null = 还没出发）
 

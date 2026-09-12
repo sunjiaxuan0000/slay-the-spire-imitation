@@ -115,6 +115,9 @@ public class BattleView extends StackPane implements BattleState {
     private boolean battleOver = false;
     private boolean paused = false;
     private boolean pendingTurnStart = false;
+    // ---- 本回合出牌统计（每个玩家回合开始时在 startPlayerTurn() 里清零）----
+    // ⚠ 这几个字段以前只被清零、没有任何地方写过，于是「本回合出过牌吗」恒为 false，
+    //   孙子兵法因此每回合都白送 1 点能量。现在统一在 play() 里记录真实出牌。
     private boolean playedCardThisTurn = false;
     private boolean firstAttackUsed = false;
     private boolean firstDamageTriggered = false;
@@ -631,8 +634,9 @@ public class BattleView extends StackPane implements BattleState {
         if (enemyVulnerable > 0) enemyVulnerable--;
         noDrawThisTurn = false;
         energy = 3;
-        // 遗物额外能量（奴隶贩子颈环、古茶具套装、孙子兵法）
-        energy += RelicFun.extraEnergy(player, enemy, turn, playedCardThisTurn);
+        // 遗物额外能量（奴隶贩子颈环、古茶具套装、孙子兵法）。
+        // 读的是「上一回合」的统计，所以必须在下面两行清零之前调。
+        energy += RelicFun.extraEnergy(player, enemy, turn, attackCardsPlayedThisTurn > 0);
         playedCardThisTurn = false;
         attackCardsPlayedThisTurn = 0;
         fanBonusApplied = false;
@@ -710,6 +714,14 @@ public class BattleView extends StackPane implements BattleState {
     private void play(Card c) {
         if (!playerTurn || battleOver || animating) return;
         if (c.cost < 0 || c.cost > energy) return;
+        // 本回合出牌统计：孙子兵法「上一回合没出攻击牌」的判定就靠 attackCardsPlayedThisTurn。
+        // 放在两个守卫之后 —— 出不起 / 动画中的点击不算「出过牌」。
+        playedCardThisTurn = true;
+        if (c.kind.type == Card.Type.ATTACK) {
+            attackCardsPlayedThisTurn++;
+        } else if (c.kind.type == Card.Type.SKILL) {
+            skillCardsPlayedThisTurn++;
+        }
         // 先移出手牌进入“打出中”状态再结算：为效果生成的牌腾出槽位，
         // 且结算中的抽牌不会把刚打出的牌从弃牌堆洗回。最终去向由 onCardPlayed 决定。
         hand.remove(c);
@@ -1616,19 +1628,11 @@ public class BattleView extends StackPane implements BattleState {
     /** 显示卡牌奖励选择 */
     private void showCardReward() {
 
-        List<Card> pool = List.of(
-                Card.sweep(), Card.bleed(),
-                Card.pommelStrike(), Card.shrug(),
-                Card.hammer(), Card.impregnable(),
-                Card.doubleStrike(), Card.kindle(), Card.lightning(),
-                Card.rage(), Card.offering(), Card.wildStrike(),
-                Card.fortify(), Card.focus(), Card.shockwave(),
-                Card.heavyBlade(), Card.adamantArm(), Card.brutality(), Card.flex(),
-                Card.powerThrough(), Card.soulSever(), Card.uppercut(), Card.bodySlam(),
-                Card.hemokinesis(), Card.limitBreak(), Card.feelNoPain(), Card.trueGrit());
         // 抽取规则（品质概率 + 怜悯偏移）集中在 CardRewardPool；
+        // 卡池本身也挪到了那里（CardRewardPool.rewardPool），遗物「混沌」的
+        // 三连卡牌奖励共用同一份，改卡池只用改一处。
         // 精英战使用精英池（白 50% / 蓝 40% / 金 10%），普通战使用普通池（白 60% / 蓝 37% / 金 3%）。
-        List<Card> offers = CardRewardPool.draw(pool, 3, enemy.isElite);
+        List<Card> offers = CardRewardPool.draw(CardRewardPool.rewardPool(), 3, enemy.isElite);
 
         rewardOverlay.show(offers, (c, node) -> {
             player.deck.add(c);        // 数据照常即时结算（牌组数量随之更新）

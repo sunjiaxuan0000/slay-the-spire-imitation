@@ -76,8 +76,14 @@ public class RelicFun {
 
     /* ================= 回合开始 ================= */
 
-    /** 回合开始时计算额外能量：奴隶贩子颈环、古茶具套装、孙子兵法 */
-    public static int extraEnergy(Player player, Enemy enemy, int turn, boolean playedCardLastTurn) {
+    /**
+     * 回合开始时计算额外能量：奴隶贩子颈环、古茶具套装、孙子兵法。
+     *
+     * @param playedAttackLastTurn 上一回合是否打出过<b>攻击牌</b>（由调用方维护）。
+     *                             孙子兵法只关心攻击牌 —— 上一回合一张攻击牌都没出，
+     *                             这一回合才开始时 +1 能量。
+     */
+    public static int extraEnergy(Player player, Enemy enemy, int turn, boolean playedAttackLastTurn) {
         int e = 0;
         // 奴隶贩子颈环：Boss 战和精英战每回合 +1 能量
         if ((enemy.isBoss || enemy.isElite) && hasRelic(player, "奴隶贩子颈环")) {
@@ -88,20 +94,18 @@ public class RelicFun {
             player.restedAtCampfire = false; // 消耗标记
             e += 2;
         }
-        // 孙子兵法：上回合未出牌则获得 1 点额外能量
-        if (!playedCardLastTurn && turn > 1 && hasRelic(player, "孙子兵法")) {
+        // 孙子兵法：上一回合没出过攻击牌，则本回合开始 +1 能量
+        // （turn > 1：第一回合没有「上一回合」，不给）
+        if (!playedAttackLastTurn && turn > 1 && hasRelic(player, "孙子兵法")) {
             e += 1;
         }
         return e;
     }
 
-    /** 回合开始时计算额外格挡：青铜怀表、猫、奶龙 */
+    /** 回合开始时计算额外格挡：猫、奶龙 */
     public static int startBlock(Player player, int turn) {
         int block = 0;
         if (turn == 1) {
-            if (hasRelic(player, "青铜怀表")) {
-                block += 2;
-            }
             if (hasRelic(player, "猫")) {
                 block += 10;
             }
@@ -193,7 +197,7 @@ public class RelicFun {
     /* ================= 获得遗物时 ================= */
 
     /**
-     * 获得遗物时的即时效果：保温杯、请假条、破镜、召唤铃铛。
+     * 获得遗物时的即时效果：保温杯、请假条、破镜、召唤铃铛、混沌。
      * @param removeCards 卡牌移除回调（破镜需要 UI 交互，由调用方提供）
      */
     public static void onRelicObtained(Player player, Relic relic, Runnable removeCards) {
@@ -215,6 +219,13 @@ public class RelicFun {
         // 破镜：删除一张卡牌
         if (relic.name.equals("破镜") && removeCards != null) {
             removeCards.run();
+        }
+        // 混沌：本局地图变异 —— 置上标记即可，剩下的全靠它生效：
+        //   · 图标：MapView 看到 player.chaos 就把非固定层节点画成「事件」
+        //   · 进入：HelloApplication.handleArrive 看到 player.chaos 就等概率改判房间
+        //   · 三次卡牌奖励是 UI，放在起点房间（RoomView.giveChaosCardRewards）
+        if (relic.name.equals("混沌")) {
+            player.chaos = true;
         }
     }
 

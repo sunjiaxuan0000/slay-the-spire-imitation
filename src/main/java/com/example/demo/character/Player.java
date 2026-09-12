@@ -20,6 +20,16 @@ public class Player {
     public boolean restedAtCampfire = false; // 篝火休息后标记
     public int leaveNoteBattles = 0; // 请假条：剩余生效战斗场次
 
+    /**
+     * 混沌：本局地图变异标记（起点遗物「混沌」拾取后置 true）。
+     *
+     * <p>置位后，非固定层节点在 {@link com.example.demo.view.MapView} 里统一画成
+     * 「事件」图标，进入时由
+     * {@code HelloApplication.handleArrive} 等概率改判成
+     * 怪物 / 精英 / 事件 / 火堆 / 宝箱。整局有效，中途不会自己复位。</p>
+     */
+    public boolean chaos = false;
+
     public Player() {
         deck.addAll(starterDeck()); // 起始牌组
         relics.add(Relic.BURNING_BLOOD); // 战士固有初始遗物：燃烧之血（战斗结束回 6 血的被动，见 RelicFun.onBattleEnd）

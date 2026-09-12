@@ -19,13 +19,25 @@ import java.util.List;
 import java.util.function.BiConsumer;
 
 /**
- * 胜利奖励弹层：怪物被击败后屏幕中央出现三张随机牌，点一张加入牌组，
+ * 卡牌奖励弹层：屏幕中央出现三张随机牌，点一张加入牌组，
  * 或点击“跳过（不加牌）”放弃奖励。选择后通过回调通知外部。
+ *
+ * <p>原本是战斗胜利专用，现在两处共用：
+ * <ul>
+ *   <li>战斗胜利（{@code BattleView.showCardReward}）—— 默认标题「战斗胜利！」</li>
+ *   <li>起点遗物「混沌」的三连卡牌奖励（{@code RoomView.giveChaosCardRewards}）
+ *       —— 用 {@link #setHeader} 换成自己的标题，不写「战斗胜利」</li>
+ * </ul>
+ * 抽什么牌由调用方决定（两边都走 {@code CardRewardPool.draw}）。</p>
  */
 public class RewardOverlay extends StackPane {
     private final HBox rewardBox = new HBox(16);
     private boolean rewardChosen = false;
     private final Runnable onSkip;
+
+    /** 标题 / 副标题（混沌的卡牌奖励会用 setHeader 改写） */
+    private final Label titleLabel = new Label("战斗胜利！");
+    private final Label subLabel = new Label("选择一张牌加入牌组");
 
     /**
      * @param onSkip 跳过按钮回调（点击跳过时触发，外部负责隐藏弹层与结束战斗）
@@ -36,6 +48,15 @@ public class RewardOverlay extends StackPane {
         setVisible(false);
     }
 
+    /**
+     * 改写标题与副标题。默认是战斗胜利的那一套文案，其它场景
+     * （如遗物「混沌」的卡牌奖励）复用时用它换掉，免得张冠李戴。
+     */
+    public void setHeader(String title, String sub) {
+        titleLabel.setText(title);
+        subLabel.setText(sub);
+    }
+
     private void buildRewardOverlay() {
         Pane dim = new Pane();
         dim.setStyle("-fx-background-color: rgba(2, 6, 23, 0.78);");
@@ -44,14 +65,12 @@ public class RewardOverlay extends StackPane {
         box.setAlignment(Pos.CENTER);
         box.setStyle("-fx-background-color: #111827; -fx-background-radius: 18; -fx-padding: 22 30 18 30;");
 
-        Label title = new Label("战斗胜利！");
-        title.setTextFill(Color.rgb(251, 191, 36));
-        title.setFont(Font.font(26));
-        title.setStyle("-fx-font-weight: bold;");
+        titleLabel.setTextFill(Color.rgb(251, 191, 36));
+        titleLabel.setFont(Font.font(26));
+        titleLabel.setStyle("-fx-font-weight: bold;");
 
-        Label sub = new Label("选择一张牌加入牌组");
-        sub.setTextFill(Color.rgb(203, 213, 225));
-        sub.setFont(Font.font(15));
+        subLabel.setTextFill(Color.rgb(203, 213, 225));
+        subLabel.setFont(Font.font(15));
 
         rewardBox.setAlignment(Pos.CENTER);
 
@@ -64,7 +83,7 @@ public class RewardOverlay extends StackPane {
             onSkip.run();
         });
 
-        box.getChildren().addAll(title, sub, rewardBox, skip);
+        box.getChildren().addAll(titleLabel, subLabel, rewardBox, skip);
         box.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
         StackPane.setAlignment(box, Pos.CENTER);
         getChildren().addAll(dim, box);

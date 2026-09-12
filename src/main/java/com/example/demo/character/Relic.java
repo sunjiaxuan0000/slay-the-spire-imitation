@@ -44,17 +44,22 @@ public  class Relic {
     // ================= 遗物池数据 =================
 
     private static final List<Relic> STARTER_RELICS = List.of(
-            new Relic("青铜怀表", "战斗开始时获得 2 点格挡", "relic/huaibiao.png"),
+            new Relic("青铜怀表", "获得时升级牌组里的一张牌", "relic/huaibiao.png"),
             new Relic("请假条", "接下来的三场战斗怪物血量变为 1", "relic/qingjia.png"),
             new Relic("保温杯", "最大生命值增加 8 点", "relic/cup.png"),
-            new Relic("破镜", "删除当前卡组里的一张牌", "relic/jingzi.png")
+            new Relic("破镜", "删除当前卡组里的一张牌", "relic/jingzi.png"),
+            // 混沌：本局地图变异 —— 效果见 RelicFun.onRelicObtained（置 player.chaos）
+            //       和三连卡牌奖励（RoomView.giveChaosCardRewards）
+            new Relic("混沌",
+                    "拾取时获得三次卡牌奖励，非固定节点全变事件图标，进入随机遭遇怪物/精英/事件/火堆/宝箱",
+                    "relic/chaos.jpg")
     );
 
     private static final List<Relic> ELITE_RELICS = List.of(
             // —— 普通遗物（各 7%）——
             new Relic("红头骨", "当生命值 ≤ 50% 时，获得额外 3 点力量", "relic/RedSkull.png"),
             new Relic("猫", "每场战斗开始时获得 10 点格挡", "relic/mao.png"),
-            new Relic("孙子兵法", "若一回合未出牌，下回合获得 1 点额外能量", "relic/ArtofWar.png"),
+            new Relic("孙子兵法", "若一回合内未打出攻击牌，下回合开始时获得 1 点额外能量", "relic/ArtofWar.png"),
             new Relic("发条靴", "造成 ≤ 5 的未被格挡伤害时，提升为 8", "relic/TheBoot.png"),
             new Relic("赤牛", "每场战斗第一次攻击造成 8 点额外伤害", "relic/chiniu.png"),
             new Relic("金刚杵", "每场战斗开始时获得 1 点力量", "relic/Vajra.png"),

@@ -73,6 +73,21 @@ public class HelloApplication extends Application {
     /** 起点 NPC 给的候选遗物个数（从起点遗物池里随机抽这么多） */
     private static final int STARTER_RELIC_OPTIONS = 3;
 
+    /**
+     * 混沌（起点遗物）：非固定层节点进入时等可能地变成这五种房间之一。
+     * 5 选 1 各 20%，顺序不影响概率，只是按「怪物 / 精英 / 事件 / 火堆 / 宝箱」排。
+     */
+    private static final GameMap.NodeType[] CHAOS_ROOMS = {
+            GameMap.NodeType.MONSTER,
+            GameMap.NodeType.ELITE,
+            GameMap.NodeType.EVENT,
+            GameMap.NodeType.REST,
+            GameMap.NodeType.TREASURE,
+    };
+
+    /** 混沌掷房间用的随机源 */
+    private static final java.util.Random CHAOS_RND = new java.util.Random();
+
     /** 主菜单的固定尺寸：离开菜单时记录，返回菜单时强制恢复，防止被游戏场景带�?*/
     private double menuW = W;
     private double menuH = H;
@@ -211,7 +226,7 @@ public class HelloApplication extends Application {
         SoundFx.play("map"); // 进入地图页音效
         MusicFx.playLoop("Level1", "bgm_map"); // 地图 BGM：Level1（没有就退回 bgm_map）
         // 地图页本身不显示右上角“地图”按钮
-        RunHud hud = buildHud(player, map, () -> showWindow(page(mapPage(map))), false);
+        RunHud hud = buildHud(player, map, () -> showWindow(page(mapPage(map, player))), false);
         // 开发者模式：HUD 上多挂一个「开」按钮（地图场景没有战斗 → battle 传 null）
         DevEntry.attachDevButton(hud, player, null, hud::refresh,
                 node -> showWindow(page(node)), this::closeWindow);
@@ -226,6 +241,7 @@ public class HelloApplication extends Application {
 
         MapView view = new MapView(map,
                 type -> handleArrive(stage, map, player, hud, type), scroll, true);
+        view.setChaos(player.chaos); // 混沌（起点遗物）：非固定层节点全画成「事件」图标
         DevEntry.enableDevMap(view); // 开发者模式：任意节点都能点
         scroll.setContent(view);
 
@@ -320,7 +336,7 @@ public class HelloApplication extends Application {
         } else {
             MusicFx.playLoop("Level1", "bgm_battle");
         }
-        RunHud hud = buildHud(player, map, () -> openBattleMapReadOnly(stage, map), true);
+        RunHud hud = buildHud(player, map, () -> openBattleMapReadOnly(stage, map, player), true);
 
         BattleView battle = new BattleView(player, hud, enemy,
                 won -> {
@@ -379,7 +395,7 @@ public class HelloApplication extends Application {
     // ================= 战斗中的只读地图 =================
 
     /** 点“查看地图”：暂停战斗，铺满整屏的只读地图；点“返回战斗”恢�?*/
-    private void openBattleMapReadOnly(Stage stage, GameMap map) {
+    private void openBattleMapReadOnly(Stage stage, GameMap map, Player player) {
         BattleView b = activeBattle;
         if (b == null) return;
         b.setPaused(true);
@@ -394,6 +410,7 @@ public class HelloApplication extends Application {
         scroll.setStyle("-fx-background: #0b1020; -fx-background-color: #0b1020;");
 
         MapView preview = new MapView(map, t -> { }, scroll, false); // 只读地图界面
+        preview.setChaos(player.chaos); // 混沌：只读地图也要显示同样的「事件」图标
         scroll.setContent(preview);
 
         // 同样的两侧黑边：地图限宽居中
@@ -540,7 +557,7 @@ public class HelloApplication extends Application {
     }
 
     /** 地图页：战斗中也能查看的整页大地图（只读�?*/
-    private VBox mapPage(GameMap map) {
+    private VBox mapPage(GameMap map, Player player) {
         ScrollPane scroll = new ScrollPane();
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
@@ -550,6 +567,7 @@ public class HelloApplication extends Application {
         scroll.setPrefSize(1060, 430);
 
         MapView preview = new MapView(map, t -> { }, scroll, false); // 只读
+        preview.setChaos(player.chaos); // 混沌：只读地图也要显示同样的「事件」图标
         scroll.setContent(preview);
         Platform.runLater(() -> scroll.setVvalue(1.0));
 
@@ -647,6 +665,11 @@ public class HelloApplication extends Application {
 
     private void handleArrive(Stage stage, GameMap map, Player player, RunHud hud,
                               GameMap.NodeType type) {
+        // 混沌：非固定层节点在地图上都画成「事件」，但真正进哪个房间是等概率掷出来的。
+        // 只覆盖非固定层 —— 起点 / 固定宝箱层 / 固定篝火层 / BOSS 层照旧按自身类型走。
+        if (player.chaos && map.current != null && !GameMap.isFixedRow(map.current.row)) {
+            type = CHAOS_ROOMS[CHAOS_RND.nextInt(CHAOS_ROOMS.length)];
+        }
         switch (type) {
             case MONSTER -> startBattle(stage, map, player, GameMap.NodeType.MONSTER,
                     monsterForRow(map));
