@@ -70,6 +70,19 @@ public class HelloApplication extends Application {
     /** 地图两侧黑边宽度（像素）——想调黑边宽窄就改这个数 */
     private static final double MAP_SIDE_MARGIN = 190;
 
+    /** 普通图例（example.png，485×483 近似正方）的显示边长 —— 想调大小改这个数 */
+    private static final double LEGEND_W = 300;
+
+    /**
+     * 混沌图例（Chaosexample.png）的显示高度 —— 想调大小改这个数。
+     *
+     * <p><b>为什么混沌图例不按宽度缩：</b>那张图是 374×882 的竖图（一个举着图例牌的立绘）。
+     * 如果沿用普通图例的 300×300 框去 fit，preserveRatio 只会把它压成 127×300 的一条细缝，
+     * 牌子上「怪物 / 精英 / 事件 / 火堆 / 宝箱」全糊掉。所以混沌图例改成「按高度缩放」，
+     * 宽度交给 preserveRatio 推（620 高 → 宽约 263px）。</p>
+     */
+    private static final double CHAOS_LEGEND_H = 620;
+
     /** 起点 NPC 给的候选遗物个数（从起点遗物池里随机抽这么多） */
     private static final int STARTER_RELIC_OPTIONS = 3;
 
@@ -251,8 +264,8 @@ public class HelloApplication extends Application {
         scroll.maxWidthProperty().bind(
                 mapArea.widthProperty().subtract(MAP_SIDE_MARGIN * 2));
 
-        // 右侧黑边处贴图例 example.png（宽度随黑边宽度自适应）
-        Node legend = legendNode();
+        // 右侧黑边处贴图例（混沌模式下换成 Chaosexample.png；宽度随黑边宽度自适应）
+        Node legend = legendNode(player.chaos);
         if (legend != null) {
             mapArea.getChildren().add(legend);
             StackPane.setAlignment(legend, Pos.CENTER_RIGHT);
@@ -419,8 +432,8 @@ public class HelloApplication extends Application {
         scroll.maxWidthProperty().bind(
                 mapArea.widthProperty().subtract(MAP_SIDE_MARGIN * 2));
 
-        // 右侧黑边处同样贴图例
-        Node legend2 = legendNode();
+        // 右侧黑边处同样贴图例（混沌模式下换成 Chaosexample.png）
+        Node legend2 = legendNode(player.chaos);
         if (legend2 != null) {
             mapArea.getChildren().add(legend2);
             StackPane.setAlignment(legend2, Pos.TOP_RIGHT);
@@ -467,16 +480,34 @@ public class HelloApplication extends Application {
         return sizedScene(stage, root);
     }
 
-    /** 右侧黑边上的图例（example.png），宽度自动跟随 MAP_SIDE_MARGIN */
-    private Node legendNode() {
-        var in = getClass().getResourceAsStream("/com/example/demo/icons/example.png");
-        if (in == null) return null;
+    /**
+     * 右侧黑边上的图例。
+     *
+     * <p>普通模式贴 {@code example.png}；混沌模式（起点遗物「混沌」）换成
+     * {@code Chaosexample.png} —— 一张画着「图例牌被划掉 + CHAOS!」的竖图。</p>
+     *
+     * <p>两张图比例差别很大（485×483 正方 vs 374×882 竖图），所以缩放策略也不同：
+     * 普通图例按 300×300 的框缩，混沌图例按高度缩（见 {@link #CHAOS_LEGEND_H}）。</p>
+     *
+     * @param chaos true = 混沌模式，用 Chaosexample.png
+     */
+    private Node legendNode(boolean chaos) {
+        var in = getClass().getResourceAsStream(chaos
+                ? "/com/example/demo/icons/Chaosexample.png"
+                : "/com/example/demo/icons/example.png");
+        if (in == null) {
+            // 混沌图缺失时退回普通图例（有总比没有强）；普通图也缺就干脆不显示
+            return chaos ? legendNode(false) : null;
+        }
         ImageView iv = new ImageView(new Image(in));
         iv.setPreserveRatio(true);
         iv.setMouseTransparent(true);
-        double w = 300;
-        iv.setFitWidth(w);
-        iv.setFitHeight(w);
+        if (chaos) {
+            iv.setFitHeight(CHAOS_LEGEND_H); // 竖图：只定高，宽由比例推出来
+        } else {
+            iv.setFitWidth(LEGEND_W);
+            iv.setFitHeight(LEGEND_W);
+        }
         return iv;
     }
 
