@@ -67,6 +67,13 @@ public class HelloApplication extends Application {
     private static final double W = 1600;
     private static final double H = 900;
 
+    /**
+     * 游戏图标（任务栏 / 标题栏 / Alt-Tab 都用它）。
+     * 路径相对 resources/com/example/demo/，即
+     * {@code demo/src/main/resources/com/example/demo/icon.png}。
+     */
+    private static final String APP_ICON = "/com/example/demo/icon.png";
+
     /** 地图两侧黑边宽度（像素）——想调黑边宽窄就改这个数 */
     private static final double MAP_SIDE_MARGIN = 190;
 
@@ -140,6 +147,7 @@ public class HelloApplication extends Application {
     @Override
     public void start(Stage stage) {
         stage.setTitle("杀戮猪塔");
+        applyAppIcon(stage); // 贴上 icon.png，任务栏/标题栏显示游戏图标
         returnToMenu(stage);
         stage.show();
 
@@ -157,6 +165,24 @@ public class HelloApplication extends Application {
     }
 
     // ================= 场景构建 =================
+
+    /**
+     * 给窗口贴上游戏图标（{@link #APP_ICON}）。
+     *
+     * <p>JavaFX 只负责把图交给系统，缩放由 Windows 自己做，所以这里不预处理尺寸。
+     * 图缺失时静默跳过 —— 窗口退回 Java 默认图标，不影响启动。</p>
+     *
+     * <p>本项目只有 {@code start(Stage)} 这一个 Stage，后面换场景都是换 Scene，
+     * 图标挂在 Stage 上不会丢，所以贴这一次就够了。</p>
+     */
+    private void applyAppIcon(Stage stage) {
+        var in = getClass().getResourceAsStream(APP_ICON);
+        if (in == null) {
+            System.out.println("[icon] 找不到 " + APP_ICON + "，使用默认窗口图标");
+            return;
+        }
+        stage.getIcons().add(new Image(in));
+    }
 
     /** 主菜单场景：始终按“离开菜单时记录的尺寸”构�?*/
     private Scene buildMenuScene(Stage stage) {

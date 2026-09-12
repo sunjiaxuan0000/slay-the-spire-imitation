@@ -337,12 +337,7 @@ public class BattleView extends StackPane implements BattleState {
         initAnimators();
         gameTimer.start();
         SoundFx.playAny(enemyOink());
-        // 牛来：回合开始前对敌人造成伤害（先消耗护盾）
-        int bsd = RelicFun.battleStartDamage(player);
-        if (bsd > 0) {
-            damageEnemy(bsd);
-            refreshAll();
-        }
+        // 牛来的伤害不在这里结算 —— 它改成「每回合开始时」了，见 startPlayerTurn()
         if (!battleOver) {
             startPlayerTurn();
         }
@@ -652,6 +647,16 @@ public class BattleView extends StackPane implements BattleState {
         // 恶魔形态：每回合增加效果总量点力量
         int demonForm = powerAmount.getOrDefault(Card.Kind.DEMON_FORM, 0);
         if (demonForm > 0) gainStrength(demonForm);
+
+        // 牛来：每回合开始时对敌人造成 3 点伤害（先消耗敌人的护盾）。
+        // 放在残暴/恶魔形态之后 —— 残暴把自己扣死了就该直接结束回合，别再打这一下。
+        // 这一下可能打死怪物（victory）也可能被反伤打死（playerDied），两种都置 battleOver，
+        // 所以打完必须 return，否则会在战斗已经结束的情况下继续抽牌。
+        int niulai = RelicFun.turnStartDamage(player);
+        if (niulai > 0) {
+            damageEnemy(niulai);
+            if (battleOver) return;
+        }
 
         // 抽牌：第一回合优先抽入“固有”牌（占用抽牌数）
         drawTurnStart(5 + brutality);

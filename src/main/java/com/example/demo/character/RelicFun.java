@@ -64,8 +64,13 @@ public class RelicFun {
         return strength;
     }
 
-    /** 牛来：战斗开始时对敌人造成的伤害（3），无此遗物返回 0 */
-    public static int battleStartDamage(Player player) {
+    /**
+     * 牛来：<b>每回合</b>开始时对敌人造成的伤害（3），无此遗物返回 0。
+     *
+     * <p>由 {@code BattleView.startPlayerTurn()} 在每次玩家回合开始时调用 ——
+     * 不是战斗开始那一次。</p>
+     */
+    public static int turnStartDamage(Player player) {
         return hasRelic(player, "牛来") ? 3 : 0;
     }
 
@@ -165,9 +170,9 @@ public class RelicFun {
 
     /* ================= 战斗结束 ================= */
 
-    /** 战斗结束后触发：燃烧之血（战士被动）、带骨肉、老牧师 */
+    /** 战斗结束后触发：燃烧之血（铁甲战猪被动）、带骨肉、老牧师 */
     public static void onBattleEnd(Player player) {
-        // 战士被动：燃烧之血 —— 每次战斗结束后恢复 6 点生命
+        // 铁甲战猪被动：燃烧之血 —— 每次战斗结束后恢复 6 点生命
         player.heal(6);
         // 带骨肉：战斗结束时若生命值 < 50%，恢复 12 点生命
         if (hasRelic(player, "带骨肉") && player.hp() * 2 < player.maxHp) {

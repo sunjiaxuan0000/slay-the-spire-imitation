@@ -11,8 +11,32 @@ import java.util.List;
  */
 public class Player {
 
-    public static final String CHARACTER_NAME = "战士";
-    public int maxHp = 80;
+    /** 角色名 —— 选人页卡片、战斗 HUD、地图 HUD 都读这一个，别再各写一份 */
+    public static final String CHARACTER_NAME = "铁甲战猪";
+
+    /**
+     * 角色的起始最大生命。
+     *
+     * <p>选人页左侧介绍面板要显示「生命 80/80」，这里必须是那个唯一的 80 ——
+     * 否则以后调数值时，面板会静静地写着旧数字。</p>
+     */
+    public static final int BASE_MAX_HP = 80;
+
+    /** 选人页左侧介绍面板里的角色简介 */
+    public static final String CHARACTER_DESC =
+            "铁甲战猪是一个红色面具半遮面的猪形战士。他是个热心肠，"
+                    + "常常会向处在饥渴之中的恶魔捐献猪血，由此获得了恶魔的剑。";
+
+    /**
+     * 角色的初始遗物。
+     *
+     * <p>选人页左侧介绍面板会把它（图标 + 名字 + 描述）显示在简介下面，
+     * 开局时也是靠这一条加进牌组的 —— 只此一份，别在两处各写一个遗物，
+     * 否则面板会显示着和实际开局不一样的遗物。</p>
+     */
+    public static final Relic STARTER_RELIC = Relic.BURNING_BLOOD;
+
+    public int maxHp = BASE_MAX_HP;
 
     public int hp = maxHp;
     public final List<Card> deck = new ArrayList<>();
@@ -32,7 +56,7 @@ public class Player {
 
     public Player() {
         deck.addAll(starterDeck()); // 起始牌组
-        relics.add(Relic.BURNING_BLOOD); // 战士固有初始遗物：燃烧之血（战斗结束回 6 血的被动，见 RelicFun.onBattleEnd）
+        relics.add(STARTER_RELIC); // 铁甲战猪固有初始遗物：燃烧之血（战斗结束回 6 血的被动，见 RelicFun.onBattleEnd）
     }
 
     /** 获得遗物（同名不重复拿，避免效果叠加） */

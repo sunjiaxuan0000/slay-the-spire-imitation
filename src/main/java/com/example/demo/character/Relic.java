@@ -37,7 +37,7 @@ public  class Relic {
         this.imagePath = imagePath;
     }
 
-    /** 战士固有初始遗物：燃烧之血（开局即拥有，不进入任何抽取池） */
+    /** 铁甲战猪固有初始遗物：燃烧之血（开局即拥有，不进入任何抽取池） */
     public static final Relic BURNING_BLOOD =
             new Relic("燃烧之血", "每场战斗结束后恢复 6 点生命", "relic/BurningBlood.png");
 
@@ -89,7 +89,7 @@ public  class Relic {
             new Relic("老牧师", "每场战斗结束后最大生命值增加 1", "relic/mushi.jpg"),
             new Relic("忘情牛肉面", "每场战斗开始时获得 3 点力量，仅第一回合有效", "relic/mian.png"),
             new Relic("taffy", "每回合结束时生命值高于 50% 额外获得 5 点格挡", "relic/taffy.jpg"),
-            new Relic("牛来", "每场战斗开始时对敌人造成 3 点伤害", "relic/niulai.png"),
+            new Relic("牛来", "每回合开始时对敌人造成 3 点伤害", "relic/niulai.png"),
             new Relic("奶龙", "第二回合开始时获得 12 点格挡", "relic/nailong.png")
     );
 
