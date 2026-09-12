@@ -20,9 +20,9 @@ public final class CardPlay {
     public static int dealAttackDamage(BattleState s, Card c){
         int strength = s.getStrength();
         int dmg=0;
-        if (c.kind == Card.Kind.HEAVY_BLADE) strength *= 3; // 重刃：力量按 3 倍计入
-        if(c.kind == Card.Kind.BODY_SLAM) {
-            dmg = s.getBlock()+strength;
+        if (c.kind == Card.Kind.HEAVY_BLADE) strength *= c.upgraded ? 5 : 3; // 重刃：力量按 3/5 倍计入
+        if (c.kind == Card.Kind.BODY_SLAM) {
+            dmg = s.getBlock()+strength;                          // 全身撞击：以当前格挡为基础
         } else {
             dmg = c.damage + strength;
         }
@@ -47,10 +47,14 @@ public final class CardPlay {
         s.spendEnergy(c.cost);
 
         // 断魂斩：先消耗手牌中所有非攻击牌（会触发“无惧疼痛”的格挡结算），再造成伤害
-        if (c.kind == Card.Kind.SOUL_SEVER) s.exhaustNonAttackCardsInHand();
+        if (c.kind == Card.Kind.SOUL_SEVER) {
+            s.exhaustNonAttackCardsInHand();
+        }
 
         // 御血术：先失去 2 点生命作为代价（致死则终止结算，不造成伤害）
-        if (c.kind == Card.Kind.HEMOKINESIS && s.loseHp(2, false)) return;
+        if (c.kind == Card.Kind.HEMOKINESIS && s.loseHp(2, false)) {
+            return;
+        }
 
         // 攻击：按段数结算，段间若战斗已结束（击杀）则停止
         if (c.damage > 0) {
@@ -65,12 +69,12 @@ public final class CardPlay {
 
         // 各牌种的附加效果
         switch (c.kind) {
-            case BASH -> s.addEnemyVulnerable(2);
+            case BASH -> s.addEnemyVulnerable(c.upgraded ? 3 : 2);
             case LIGHTNING -> s.addEnemyVulnerable(1);
-            case KINDLE -> s.gainStrength(2);
+            case KINDLE -> s.gainStrength(c.upgraded ? 3 : 2);
             case WILD_STRIKE -> s.addToDrawPile(Card.wound());
             case BLEED -> {
-                s.gainEnergy(2);
+                s.gainEnergy(c.upgraded ? 3 : 2);
                 if (s.loseHp(3, false)) return; // 自伤致死：终止结算
             }
             case RAGE -> s.gainEnergy(2);
@@ -78,35 +82,35 @@ public final class CardPlay {
                 if (s.loseHp(6, true)) return;  // 自伤致死：终止结算
                 s.gainEnergy(2);
             }
-            case FORTIFY -> s.doubleBlock();            // 巩固：当前格挡翻倍
-            case FOCUS -> {                             // 战斗专注：抽 3 张，本回合禁抽
-                s.drawCards(3);
+            case FORTIFY -> s.doubleBlock(); // 巩固：当前格挡翻倍
+            case FOCUS -> {                             // 战斗专注：抽 3/4 张，本回合禁抽
+                s.drawCards(c.upgraded ? 4 : 3);
                 s.forbidDrawThisTurn();
             }
             case SHOCKWAVE -> {                         // 震荡波：敌人 4 虚弱 / 4 易伤
                 s.addEnemyWeak(4);
                 s.addEnemyVulnerable(4);
             }
-            case ADAMANT_ARM -> s.addEnemyWeak(2);      // 金刚臂：敌人 2 层虚弱
-            case BRUTALITY -> s.activatePower(Card.Kind.BRUTALITY); // 残暴：每回合失去 1 血多抽 1 张
-            case FLEX -> {                              // 活动肌肉：+2 力量，回合结束 -2
-                s.gainStrength(2);
-                s.loseStrengthAtTurnEnd(2);
+            case ADAMANT_ARM -> s.addEnemyWeak(c.upgraded ? 3 : 2); // 金刚臂：敌人 2/3 层虚弱
+            case BRUTALITY -> s.activatePower(c); // 残暴：每回合失去 1 血多抽 1 张
+            case FLEX -> {                              // 活动肌肉：+2/+4 力量，回合结束等量扣回
+                int n = c.upgraded ? 4 : 2;
+                s.gainStrength(n);
+                s.loseStrengthAtTurnEnd(n);
             }
-            case POWER_THROUGH -> {                      // 硬撑：将两张伤口加入手牌
+            case POWER_THROUGH -> {                     // 硬撑：将两张伤口加入手牌
                 s.addToHand(Card.wound());
                 s.addToHand(Card.wound());
             }
-            case UPPERCUT ->{                       // 上勾拳：敌人 1 虚弱 / 1 易伤
-                s.addEnemyWeak(1);
-                s.addEnemyVulnerable(1);
-            } 
-            case BODY_SLAM -> {                  // 全身撞击：对敌人当造成前格挡值伤害
-                s.damageEnemy(dealAttackDamage(s, c));
-            } 
+            case UPPERCUT -> {                          // 上勾拳：敌人 1/2 虚弱 / 1/2 易伤
+                int n = c.upgraded ? 2 : 1;
+                s.addEnemyWeak(n);
+                s.addEnemyVulnerable(n);
+            }
+            case BODY_SLAM -> s.damageEnemy(dealAttackDamage(s, c)); // 全身撞击：造成等同于当前格挡值的伤害
             case LIMIT_BREAK -> s.gainStrength(s.getStrength()); // 突破极限：将你的力量翻倍
-            case DEMON_FORM -> s.activatePower(Card.Kind.DEMON_FORM); // 每回合增加两点力量
-            case FEEL_NO_PAIN -> s.activatePower(Card.Kind.FEEL_NO_PAIN); // 无惧疼痛：每有一张牌被消耗获得格挡
+            case DEMON_FORM -> s.activatePower(c); // 恶魔形态：每回合增加力量
+            case FEEL_NO_PAIN -> s.activatePower(c); // 无惧疼痛：每有一张牌被消耗获得格挡
             case TRUE_GRIT -> s.exhaustRandomHandCard(); // 坚毅：随机消耗手牌一张（会触发无惧疼痛联动）
             default -> {
             }

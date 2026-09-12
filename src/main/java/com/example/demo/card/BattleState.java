@@ -91,7 +91,7 @@ public interface BattleState {
      * 激活一张能力牌（如残暴）：
      * 由战斗流程记录其持续效果，并在状态栏常驻显示其触发的能力。
      */
-    void activatePower(Card.Kind kind);
+    void activatePower(Card card);
 
     /**
      * 消耗手牌中所有非攻击牌（断魂斩）。

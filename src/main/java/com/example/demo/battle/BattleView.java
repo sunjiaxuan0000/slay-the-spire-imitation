@@ -48,6 +48,7 @@ import javafx.scene.text.Font;
 import javafx.util.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -104,8 +105,12 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     private int pendingStrengthLoss = 0;
     private boolean noDrawThisTurn = false;
 
-    /** 已激活的能力牌层数（能力牌可叠加，效果按层数累加；LinkedHashMap 保持登记顺序） */
-    private final Map<Card.Kind, Integer> powerStacks = new LinkedHashMap<>();
+    /**
+     * 已激活能力牌的效果总量（值即“每层效果之和”，升级版并入基础能力累加）。
+     * <p>如恶魔形态累加的是每回合力量总值（2/3），无惧疼痛累加的是每张消耗牌的格挡值（3/4），
+     * 残暴累加的是层数（每层 1）。LinkedHashMap 保持登记顺序。
+     */
+    private final Map<Card.Kind, Integer> powerAmount = new LinkedHashMap<>();
 
     private record PowerBadge(String glyph, String color, String tip) {
     }
@@ -622,15 +627,16 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         skillCardsPlayedThisTurn = 0;
         letterOpenerUsed = false;
 
-        // 残暴：按层数每回合开始失去等量生命，随后多抽等量张（可叠加）
-        int brutality = powerStacks.getOrDefault(Card.Kind.BRUTALITY, 0);
+        // 残暴：每回合开始失去效果总量点生命，随后多抽等量张（可叠加）
+        int brutality = powerAmount.getOrDefault(Card.Kind.BRUTALITY, 0);
         if (brutality > 0 && loseHp(brutality, true)) return;
         
-        // 恶魔形态：每回合增加两点力量
-        int demonForm = powerStacks.getOrDefault(Card.Kind.DEMON_FORM, 0);
-        if (demonForm > 0) gainStrength(demonForm*2);
+        // 恶魔形态：每回合增加效果总量点力量
+        int demonForm = powerAmount.getOrDefault(Card.Kind.DEMON_FORM, 0);
+        if (demonForm > 0) gainStrength(demonForm);
 
-        drawHand(5 + brutality);
+        // 抽牌：第一回合优先抽入“固有”牌（占用抽牌数）
+        drawTurnStart(5 + brutality);
 
         // 英雄宝典：第一回合添加免费能力牌
         RelicFun.addTurnStartCards(player, hand, turn);
@@ -639,6 +645,30 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
 
         // refreshAll() 末尾的 flushDrawFx() 会消费 pendingDrawFx 并排好飞入演出
         refreshAll();
+    }
+
+    /**
+     * 回合开始的抽牌：第一回合先把抽牌堆中的“固有”牌抽到手牌（占用抽牌数），余下名额再正常抽。
+     */
+    private void drawTurnStart(int n) {
+        if (noDrawThisTurn) return; // 与 drawHand 保持一致：本回合禁抽
+        int innateDrawn = (turn == 1) ? drawInnate(n) : 0;
+        drawHand(n - innateDrawn);
+    }
+
+    /** 抽取抽牌堆中的固有牌，最多 max 张，返回实际抽到的张数 */
+    private int drawInnate(int max) {
+        int drawn = 0;
+        Iterator<Card> it = draw.iterator();
+        while (it.hasNext() && drawn < max && hand.size() < HAND_LIMIT) {
+            Card c = it.next();
+            if (!c.isInnate()) continue;
+            it.remove();
+            hand.add(c);
+            pendingDrawFx.add(c); // 同样补“从抽牌堆飞入”的演出
+            drawn++;
+        }
+        return drawn;
     }
 
     private void drawHand(int n) {
@@ -1026,20 +1056,29 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     }
 
     @Override
-    public void activatePower(Card.Kind kind) {
-        // 能力牌可叠加：层数 +1
-        powerStacks.merge(kind, 1, Integer::sum);
+    public void activatePower(Card card) {
+        // 能力牌可叠加：同一基础款累加“效果总量”（升级版数值更大，但仍归并到同一 Kind）
+        powerAmount.merge(card.kind, powerMagnitude(card), Integer::sum);
     }
 
-    /** 能力牌 → 状态栏角标（新增常驻能力牌时在此登记即可自动显示；stacks 为当前层数） */
-    private PowerBadge powerBadgeOf(Card.Kind kind, int stacks) {
+    /** 该能力牌的每回合效果数值（恶魔形态＝力量；无惧疼痛＝消耗一张牌的格挡；其余＝1） */
+    private static int powerMagnitude(Card card) {
+        return switch (card.kind) {
+            case DEMON_FORM -> card.upgraded ? 3 : 2;
+            case FEEL_NO_PAIN -> card.upgraded ? 4 : 3;
+            default -> 1;
+        };
+    }
+
+    /** 能力牌 → 状态栏角标（新增常驻能力牌时在此登记即可自动显示；amount 为当前效果总量） */
+    private PowerBadge powerBadgeOf(Card.Kind kind, int amount) {
         return switch (kind) {
             case BRUTALITY -> new PowerBadge("残", "#701a75",
-                    "残暴 ×" + stacks + "：每回合开始失去 " + stacks + " 点生命，随后多抽 " + stacks + " 张");
+                    "残暴 ×" + amount + "：每回合开始失去 " + amount + " 点生命，随后多抽 " + amount + " 张");
             case DEMON_FORM -> new PowerBadge("恶魔", "#701a75",
-                    "恶魔形态 ×" + stacks + "：每回合增加 " + stacks*2 + " 点力量");
+                    "恶魔形态：每回合增加 " + amount + " 点力量");
             case FEEL_NO_PAIN -> new PowerBadge("无惧", "#701a75",
-                    "无惧疼痛 ×" + stacks + "：每有一张牌被消耗，获得 " + stacks*3 + " 点格挡");
+                    "无惧疼痛：每有一张牌被消耗，获得 " + amount + " 点格挡");
             default -> null;
         };
     }
@@ -1114,10 +1153,10 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         }
     }
 
-    /** 无惧疼痛：每当一张牌被消耗，按层数获得 3×层数 点格挡 */
+    /** 无惧疼痛：每当一张牌被消耗，获得效果总量点格挡 */
     private void gainBlockFromExhaust() {
-        int stacks = powerStacks.getOrDefault(Card.Kind.FEEL_NO_PAIN, 0);
-        if (stacks > 0) addBlock(3 * stacks);
+        int amount = powerAmount.getOrDefault(Card.Kind.FEEL_NO_PAIN, 0);
+        if (amount > 0) addBlock(amount);
     }
 
     @Override
@@ -1543,7 +1582,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             pChips.getChildren().add(BattleUiFactory.statusChip("力", playerStrength, "#f59e0b",
                     "力量 +" + playerStrength + "：每段攻击伤害增加"));
         }
-        for (Map.Entry<Card.Kind, Integer> e : powerStacks.entrySet()) {
+        for (Map.Entry<Card.Kind, Integer> e : powerAmount.entrySet()) {
             PowerBadge badge = powerBadgeOf(e.getKey(), e.getValue());
             if (badge != null) {
                 pChips.getChildren().add(BattleUiFactory.statusChip(
@@ -1679,12 +1718,13 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
      * </ul>
      */
     private String battleDesc(Card c) {
-        if (c.damage <= 0 && c.kind != Card.Kind.BODY_SLAM) return c.kind.desc;
+        boolean bodySlam = c.kind == Card.Kind.BODY_SLAM;
+        if (c.damage <= 0 && !bodySlam) return c.desc();
         int actualDmg = CardPlay.dealAttackDamage(this, c);
-        if (c.kind == Card.Kind.BODY_SLAM) {
-            return c.kind.desc + "（造成 " + actualDmg + " 点伤害）";
+        if (bodySlam) {
+            return c.desc() + "（造成 " + actualDmg + " 点伤害）";
         }
-        return c.kind.desc.replaceFirst("\\b" + c.damage + "\\b", String.valueOf(actualDmg));
+        return c.desc().replaceFirst("\\b" + c.damage + "\\b", String.valueOf(actualDmg));
     }
 
     private Button buildCardButton(Card c) {

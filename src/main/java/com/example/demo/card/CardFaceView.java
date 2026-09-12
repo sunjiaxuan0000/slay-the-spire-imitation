@@ -179,6 +179,7 @@ public class CardFaceView {
 
     /**
      * 取某张卡的美术图：{@code art/<Kind 名>.png}。
+     * <p>升级版与基础卡共用同一 Kind（只有数值 / 文案不同），因此也天然共用同一张图。
      * <p>没放图就返回 {@code null}（结果会被缓存，不会每次去翻 classpath）。
      * <p>校准工具 {@link ArtCalibrator} 也走这个方法。
      */
@@ -285,7 +286,7 @@ public class CardFaceView {
 
     /** 按目标宽度等比生成卡面并外套固定尺寸容器（堆/组/列表浏览用），高度 = 宽 × 1.4 */
     public static StackPane buildAt(Card c, double width) {
-        return buildAt(c, width, c.kind.desc);
+        return buildAt(c, width, c.desc());
     }
 
     /**
@@ -316,7 +317,7 @@ public class CardFaceView {
     }
 
     private static Pane buildRaw(Card c) {
-        return buildRaw(c, c.kind.desc);
+        return buildRaw(c, c.desc());
     }
 
     private static Pane buildRaw(Card c, String descOverride) {
@@ -379,7 +380,7 @@ public class CardFaceView {
         // ---------- 3) 卡名（上方）：浅色底板 + 深咖粗体 ----------
         root.getChildren().add(plate(NAME_PLATE_X, NAME_PLATE_Y, NAME_PLATE_W, NAME_PLATE_H));
 
-        Label name = new Label(c.kind.label);
+        Label name = new Label(c.name());
         name.setTextFill(NAME_TEXT);
         name.setFont(Font.font(NAME_FONT));
         name.setStyle("-fx-font-weight: bold; -fx-text-fill: " + NAME_TEXT_CSS + ";");

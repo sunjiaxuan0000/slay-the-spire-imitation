@@ -53,6 +53,7 @@ public class DevPanel extends VBox {
     private final VBox handBox = new VBox(10);   // 仅战斗
     private final VBox relicBox = new VBox(10);
     private final TabPane tabs = new TabPane();
+    private boolean showUpgraded = false; // “加入卡牌”列表是否显示升级版
 
     public DevPanel(Player player, BattleView battle, Runnable onRefresh, Runnable onClose) {
         this.player = player;
@@ -79,7 +80,16 @@ public class DevPanel extends VBox {
         sub.setTextFill(Color.rgb(148, 163, 184));
         sub.setFont(Font.font(12));
 
-        VBox head = new VBox(2, title, sub);
+        Button upgradeToggle = new Button("升级卡：关");
+        upgradeToggle.setStyle(toggleStyle(false));
+        upgradeToggle.setOnAction(e -> {
+            showUpgraded = !showUpgraded;
+            upgradeToggle.setText(showUpgraded ? "升级卡：开" : "升级卡：关");
+            upgradeToggle.setStyle(toggleStyle(showUpgraded));
+            refresh();
+        });
+
+        VBox head = new VBox(6, title, sub, upgradeToggle);
         head.setAlignment(Pos.CENTER);
 
         // ---- 页签：一次只显示一块，免得面板比窗口还高 ----
@@ -220,7 +230,7 @@ public class DevPanel extends VBox {
         del.setStyle("-fx-background-color: #dc2626; -fx-text-fill: white; "
                 + "-fx-background-radius: 10; -fx-font-size: 13; -fx-font-weight: bold; "
                 + "-fx-padding: 1 7 1 7; -fx-cursor: hand;");
-        del.setTooltip(new Tooltip("从" + where + "移除：" + c.kind.label));
+        del.setTooltip(new Tooltip("从" + where + "移除：" + c.name()));
 
         wrap.getChildren().add(del);
         StackPane.setAlignment(del, Pos.TOP_RIGHT);
@@ -232,7 +242,7 @@ public class DevPanel extends VBox {
     private static StackPane addableCard(Card c, Runnable onAdd) {
         StackPane face = CardFaceView.buildAt(c, FACE_W);
         face.setCursor(javafx.scene.Cursor.HAND);
-        Tooltip.install(face, new Tooltip("点击加入：" + c.kind.label + "\n" + c.kind.desc));
+        Tooltip.install(face, new Tooltip("点击加入：" + c.name() + "\n" + c.desc()));
         face.setOnMouseClicked(e -> onAdd.run());
         return face;
     }
@@ -241,9 +251,16 @@ public class DevPanel extends VBox {
     private FlowPane allCards(Consumer<Card> onAdd) {
         FlowPane row = new FlowPane(6, 6);
         for (Card.Kind kind : Card.Kind.values()) {
-            row.getChildren().add(addableCard(Card.of(kind), () -> onAdd.accept(Card.of(kind))));
+            Card sample = Card.of(kind, showUpgraded);
+            row.getChildren().add(addableCard(sample, () -> onAdd.accept(Card.of(kind, showUpgraded))));
         }
         return row;
+    }
+
+    /** “升级卡”开关按钮的样式（开 / 关两种配色） */
+    private static String toggleStyle(boolean on) {
+        return "-fx-background-color: " + (on ? "#b45309" : "#334155")
+                + "; -fx-text-fill: #e2e8f0; -fx-background-radius: 8; -fx-cursor: hand; -fx-font-size: 12;";
     }
 
     private StackPane relicChip(Relic r, boolean has) {

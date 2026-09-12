@@ -239,7 +239,7 @@ public class RoomView extends StackPane {
                 "破镜 · 选择一张牌移除",
                 c -> {
                     player.deck.remove(c);
-                    hint.setText("已移除：" + c.kind.label + " —— 可以离开了");
+                    hint.setText("已移除：" + c.name() + " —— 可以离开了");
                 });
         getChildren().add(picker); // RoomView 是 StackPane：铺在最上层盖住整个房间
         picker.show();
