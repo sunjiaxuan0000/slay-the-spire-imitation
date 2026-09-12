@@ -591,7 +591,7 @@ public class HelloApplication extends Application {
         id.setTextFill(Color.rgb(255, 255, 255, 0.75));
         id.setFont(Font.font(11));
 
-        Label name = new Label(c.kind.label);
+        Label name = new Label(c.name());
         name.setTextFill(Color.WHITE);
         name.setFont(Font.font(16));
         name.setStyle("-fx-font-weight: bold;");
@@ -711,7 +711,7 @@ public class HelloApplication extends Application {
             case ADD_CARD -> {
                 Card c = randomRewardCard();
                 player.deck.add(c);
-                yield "获得卡牌：「" + c.kind.label + "」加入牌组（#" + c.id + "）";
+                yield "获得卡牌：「" + c.name() + "」加入牌组（#" + c.id + "）";
             }
             case ADD_RELIC -> {
                 Relic r = RelicFun.randomEventRelic(player);
