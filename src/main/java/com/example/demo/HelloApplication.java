@@ -18,6 +18,7 @@ import com.example.demo.view.MainMenu;
 import com.example.demo.view.MapView;
 import com.example.demo.view.RoomView;
 import com.example.demo.view.RunHud;
+import com.example.demo.view.ShopView;
 
 import javafx.animation.Interpolator;
 import javafx.animation.KeyFrame;
@@ -50,10 +51,7 @@ import javafx.scene.text.Font;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 public class HelloApplication extends Application {
 
@@ -270,6 +268,7 @@ public class HelloApplication extends Application {
             activeBattle = null;
             battleMapOpen = false;
             if (won) {
+                player.gold += calculateGoldReward(type); // 战斗胜利发放金币
                 if (type == GameMap.NodeType.BOSS) {
                     returnToMenu(stage); // 通关
                 } else {
@@ -296,6 +295,21 @@ public class HelloApplication extends Application {
             }
         });
         stage.setScene(scene);
+    }
+    private int calculateGoldReward(GameMap.NodeType type){
+        if (type == GameMap.NodeType.MONSTER) {
+            return 10 + new Random().nextInt(16);
+        }
+
+        if (type == GameMap.NodeType.ELITE) {
+            return 25 + new Random().nextInt(26);
+        }
+
+        if (type == GameMap.NodeType.BOSS) {
+            return 100;
+        }
+
+        return 0;
     }
 
     // ================= 战斗中的只读地图 =================
@@ -602,7 +616,66 @@ public class HelloApplication extends Application {
                         : "你打开宝箱，获得遗物：「" + gained.name + "」\n" + gained.desc);
                 alert.showAndWait();
             }
+            case SHOP -> startShopScene(stage, map, player);
         }
+    }
+
+    // ================= 商店 =================
+
+    /** 商店场景：展示卡牌/遗物商品，购买和离开的逻辑都在这里结算 */
+    private void startShopScene(Stage stage, GameMap map, Player player) {
+        // 本店商品（先固定一批，以后可换成随机）
+        List<Card> cardGoods = List.of(
+                Card.heavyBlade(), Card.impregnable(), Card.kindle(), Card.offering());
+        List<Relic> relicGoods = List.of(
+                new Relic("青铜怀表", "战斗开始时获得 2 点格挡"),
+                new Relic("请假条", "每回合多抽 1 张牌"));
+
+        // 购买回调里要刷新商店 UI，但 shop 此时还没构造完 → 先用数组占位，构造完再填
+        final ShopView[] shopRef = new ShopView[1];
+
+        ShopView shop = new ShopView(player, cardGoods, relicGoods,
+                c -> { // 购买卡牌
+                    int price = ShopView.cardPrice(c);
+                    if (player.gold < price) {
+                        shopAlert("金币不足！", "这件商品要 " + price + " 金币，你只有 " + player.gold + "。");
+                        return;
+                    }
+                    player.gold -= price;
+                    player.deck.add(c);
+                    shopRef[0].refreshGold();
+                    shopRef[0].markSold(c);
+                },
+                r -> { // 购买遗物
+                    int price = ShopView.relicPrice();
+                    if (player.gold < price) {
+                        shopAlert("金币不足！", "这件商品要 " + price + " 金币，你只有 " + player.gold + "。");
+                        return;
+                    }
+                    player.gold -= price;
+                    player.addRelic(r);
+                    shopRef[0].refreshGold();
+                    shopRef[0].markSold(r);
+                },
+                () -> showMapScene(stage, map, player)); // 离开商店 → 回地图
+        shopRef[0] = shop;
+
+        Scene scene = sizedScene(stage, shop);
+        scene.setOnKeyPressed(e -> {
+            if (e.getCode() == KeyCode.ESCAPE) {
+                showMapScene(stage, map, player); // ESC = 离开商店
+            }
+        });
+        stage.setScene(scene);
+    }
+
+    /** 商店提示弹窗（金币不足等） */
+    private void shopAlert(String title, String text) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(text);
+        alert.showAndWait();
     }
 
     /** 宝箱：从遗物池随机给一个还没拿过的遗物 */
