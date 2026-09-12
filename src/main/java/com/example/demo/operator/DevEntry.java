@@ -18,6 +18,7 @@ import java.util.function.Consumer;
  *   地图场景： DevEntry.enableDevMap(view);
  *   地图 HUD： DevEntry.attachDevButton(hud, player, null,   hud::refresh, this::showOverlay, this::closeWindow);
  *   战斗 HUD： DevEntry.attachDevButton(hud, player, battle, hud::refresh, this::showOverlay, this::closeWindow);
+ *             DevEntry.attachKillButton(hud, battle);   // 红色的「杀」= 一键秒杀敌人
  *
  * 开关本身存在 {@link GameSettings#isDevMode()}（设置页里的那个开关），
  * 这里所有方法在开关关闭时都是空操作。
@@ -58,5 +59,17 @@ public final class DevEntry {
 //            }
             showPanel.accept(panel);
         });
+    }
+
+    /**
+     * 开发者模式开着时：在战斗 HUD 上再挂一个红色的「杀」按钮，一键秒杀当前敌人。
+     *
+     * <p>只挂在<b>战斗</b>的 HUD 上 —— 地图场景传 null，那就什么都不挂。</p>
+     *
+     * @param battle 当前战斗；地图场景传 null
+     */
+    public static void attachKillButton(RunHud hud, BattleView battle) {
+        if (hud == null || battle == null || !GameSettings.isDevMode()) return;
+        hud.addDevKillButton(battle::devKillEnemy);
     }
 }

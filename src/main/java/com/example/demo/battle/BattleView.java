@@ -17,6 +17,7 @@ import com.example.demo.view.CardFlyFx;
 import com.example.demo.view.PileOverlay;
 import com.example.demo.view.DeckPickOverlay;
 import com.example.demo.view.RewardOverlay;
+import com.example.demo.view.RelicObtainToast;
 import com.example.demo.view.SpriteAnimator;
 import com.example.demo.view.RunHud;
 
@@ -131,6 +132,9 @@ public class BattleView extends StackPane implements BattleState {
     private static final double DISCARD_FLY_MS = 300;  // 飞入弃牌堆时长
     private static final double DUMP_STAGGER_MS = 55;  // 回合结束整手弃牌的错峰
     private static final double EXHAUST_FX_MS = 420;   // 消耗演出时长
+
+    /** 召唤铃铛一次给几个遗物机会（每个都是一张可拾取 / 可丢弃的获取界面） */
+    private static final int BELL_RELIC_OFFERS = 3;
 
     /** 本轮新抽到、还没播“飞入”演出的牌（refreshAll 末尾统一消费） */
     private final List<Card> pendingDrawFx = new ArrayList<>();
@@ -1102,6 +1106,26 @@ public class BattleView extends StackPane implements BattleState {
         playerBlock += amount;
     }
 
+    /**
+     * 开发者模式专用：一键秒杀当前敌人（战斗 HUD 上那个红色「杀」按钮调的）。
+     *
+     * <p>直接把敌人血量清零，然后走<b>正常的胜利流程</b>（倒地动画 → 奖励结算），
+     * 所以遗物、卡牌奖励这些都照常发。</p>
+     *
+     * <p><b>刻意绕过 {@link #resolveEnemyLethal()} 的濒死锁血</b> —— 那个会给自爆猪
+     * 锁 1 点血、逼它下次行动自爆，把玩家一起炸死，那就不叫「秒杀」了。</p>
+     *
+     * <p>已经结束的战斗直接忽略；{@code victory()} 自身也有 {@code battleOver} 守卫，
+     * 连点不会二次结算。</p>
+     */
+    public void devKillEnemy() {
+        if (battleOver) return;
+        enemy.hp = 0;
+        enemy.block = 0;
+        refreshAll(); // 立刻把血条刷成 0、手牌置灰
+        victory();
+    }
+
     @Override
     public void damageEnemy(int dmg) {
         if (dmg > 0) SoundFx.play("ironclad_attack"); // 玩家攻击牌命中怪物音效
@@ -1464,9 +1488,10 @@ public class BattleView extends StackPane implements BattleState {
         battleOver = true;
         playerAnim.stop();
         RelicFun.onBattleEnd(player);
-        // Boss 战胜利：获得 Boss 遗物（池为空时跳过）
+        // Boss 战胜利：挑一个 Boss 遗物（池为空时跳过）。只挑不拿，见下面那行注释
         if (enemy.isBoss) {
-            bossRelicObtained = RelicFun.randomBossRelic(player);
+            // 只「挑」不立刻入账 —— 真正入账要等玩家在获取界面上点「拾取」（见 showReward()）
+            bossRelicObtained = RelicFun.pickBossRelic(player);
         }
         hud.refresh();
         playerAnim.stop();   // 冻结双方待机呼吸，交给倒地动画接管
@@ -1519,18 +1544,73 @@ public class BattleView extends StackPane implements BattleState {
         both.play();
     }
 
-    /** 屏幕中央出现三张随机牌，点一张加入牌组（或跳过），然后离开战斗 */
+    /**
+     * Boss 遗物获取界面 → 遗物后续效果 → 屏幕中央出现三张随机牌，
+     * 点一张加入牌组（或跳过），然后离开战斗。
+     *
+     * <p>Boss 遗物「可拿可不拿」：先弹获取界面，点「拾取」才入账，并且<b>只有拿了</b>
+     * 才触发它的后续效果（空鸟笼 = 删 2 张牌 / 召唤铃铛 = 连弹三个遗物获取界面）。
+     * 点「丢弃」就直接进卡牌奖励。</p>
+     */
     private void showReward() {
         pileOverlay.hide();
 
-        String action = RelicFun.bossVictoryAction(bossRelicObtained);
-        if ("REMOVE_CARDS".equals(action)) {
-            removeCardsFromDeck(2, this::showCardReward);
-        } else if ("CHOOSE_ELITE".equals(action)) {
-            RelicFun.showEliteRelicChoice(player, this::showCardReward);
+        if (bossRelicObtained != null) {
+            Relic boss = bossRelicObtained;
+            RelicObtainToast.showChoice(getScene(), boss, taken -> {
+                if (!taken) {
+                    bossRelicObtained = null;   // 丢弃：它的后续效果一并作废
+                    showCardReward();
+                    return;
+                }
+                RelicFun.grantRelic(player, boss);
+                hud.refresh();                  // 右上角遗物栏 / 生命值同步
+                String action = RelicFun.bossVictoryAction(boss);
+                if ("REMOVE_CARDS".equals(action)) {
+                    removeCardsFromDeck(2, this::showCardReward);
+                } else if ("BELL_OFFERS".equals(action)) {
+                    showBellRelicOffers();
+                } else {
+                    showCardReward();
+                }
+            });
         } else {
             showCardReward();
         }
+    }
+
+    /**
+     * 召唤铃铛的后续效果：连弹 {@value #BELL_RELIC_OFFERS} 个遗物获取界面。
+     *
+     * <p>用的是和宝箱 / 精英战利品<b>完全同一个</b> {@link RelicObtainToast} 界面 ——
+     * 每个都能「拾取」或「丢弃」，丢弃就不入账。</p>
+     *
+     * <p>候选在开头一次性抽好（互不重复、仍按精英池权重），再一个一个弹。
+     * 这样即使玩家把前面几个都丢了，也还是稳稳的三次机会 —— 不会因为
+     * 「丢掉的没进 relics」而被重复抽到同一个。</p>
+     *
+     * <p>代价（往牌组塞一张伤口）在 {@link RelicFun#onRelicObtained} 里结算，
+     * 也就是玩家点「拾取」召唤铃铛的那一刻，不在这里。</p>
+     */
+    private void showBellRelicOffers() {
+        List<Relic> offers = RelicFun.pickEliteOptions(player, BELL_RELIC_OFFERS);
+        showRelicOffers(offers, 0, this::showCardReward);
+    }
+
+    /** 把 {@code offers} 从 {@code index} 起一个一个弹出来，全弹完再调 {@code onDone} */
+    private void showRelicOffers(List<Relic> offers, int index, Runnable onDone) {
+        if (index >= offers.size()) {
+            onDone.run();
+            return;
+        }
+        Relic offer = offers.get(index);
+        RelicObtainToast.showChoice(getScene(), offer, taken -> {
+            if (taken) {
+                RelicFun.grantRelic(player, offer);
+                hud.refresh();                  // 右上角遗物栏 / 生命值同步
+            }
+            showRelicOffers(offers, index + 1, onDone);
+        });
     }
 
     /** 显示卡牌奖励选择 */

@@ -131,6 +131,21 @@ public class RunHud extends VBox {
         topRow.getChildren().add(Math.max(0, idx), dev);
     }
 
+    /**
+     * 开发者模式：在 HUD 上再挂一个红色的「杀」按钮（紧挨着「开」按钮），
+     * 点一下直接秒杀当前敌人。
+     * 只有<b>战斗中</b>且设置里开了开发者模式时，外层才会调用这个方法。
+     */
+    public void addDevKillButton(Runnable onClick) {
+        StackPane kill = iconCard("杀",
+                "linear-gradient(to bottom right, #fca5a5, #dc2626);", "#450a0a");
+        Tooltip.install(kill, new Tooltip("开发者模式：一键秒杀当前敌人（直接结算胜利）"));
+        kill.setOnMouseClicked(e -> onClick.run());
+
+        int idx = topRow.getChildren().indexOf(deckIcon);
+        topRow.getChildren().add(Math.max(0, idx), kill);
+    }
+
     /** 通用小图标（地图用） */
     private static StackPane iconCard(String glyph, String grad, String color) {
         StackPane icon = new StackPane();

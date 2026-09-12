@@ -92,7 +92,7 @@ public  class Relic {
     private static final List<Relic> BOSS_RELICS = List.of(
             new Relic("奴隶贩子颈环", "在 Boss 战和精英战中，每回合开始时获得 1 点额外能量", "relic/Collar.png"),
             new Relic("空鸟笼", "获取时可以移除牌组里的两张牌", "relic/Cage.png"),
-            new Relic("召唤铃铛", "可以从精英怪遗物池中选择三个遗物", "relic/Bell.png")
+            new Relic("召唤铃铛", "连续三次精英遗物机会（每个都可拾取或丢弃），但牌组里会多一张「伤口」", "relic/Bell.png")
     );
 
     public static List<Relic> starterRelics() {

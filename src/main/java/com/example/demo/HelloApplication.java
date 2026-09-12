@@ -70,6 +70,9 @@ public class HelloApplication extends Application {
     /** 地图两侧黑边宽度（像素）——想调黑边宽窄就改这个数 */
     private static final double MAP_SIDE_MARGIN = 190;
 
+    /** 起点 NPC 给的候选遗物个数（从起点遗物池里随机抽这么多） */
+    private static final int STARTER_RELIC_OPTIONS = 3;
+
     /** 主菜单的固定尺寸：离开菜单时记录，返回菜单时强制恢复，防止被游戏场景带�?*/
     private double menuW = W;
     private double menuH = H;
@@ -197,8 +200,14 @@ public class HelloApplication extends Application {
         showMapScene(stage, map, player);
     }
 
-    /** 地图场景（战斗后回同一张地图也用这个） */
-    private void showMapScene(Stage stage, GameMap map, Player player) {
+    /**
+     * 地图场景（战斗后回同一张地图也用这个）。
+     *
+     * @return 本次新建的 HUD —— 调用方如果想在「切场景之后」再改玩家状态
+     *         （比如遗物获取界面点完「拾取」），必须拿这个新 HUD 去 refresh()，
+     *         刷旧的只会刷到已经被丢弃的节点。
+     */
+    private RunHud showMapScene(Stage stage, GameMap map, Player player) {
         SoundFx.play("map"); // 进入地图页音效
         MusicFx.playLoop("Level1", "bgm_map"); // 地图 BGM：Level1（没有就退回 bgm_map）
         // 地图页本身不显示右上角“地图”按钮
@@ -258,6 +267,7 @@ public class HelloApplication extends Application {
             }
         });
         stage.setScene(scene);
+        return hud;
     }
 
     /** 开场演出：先显示“第一阶段 / 猪塔底”，再从地图顶部(BOSS)一路滑到底�?起点)展示全图 */
@@ -317,16 +327,16 @@ public class HelloApplication extends Application {
             activeBattle = null;
             battleMapOpen = false;
             if (won) {
-                // ★ 精英战利品必须在切回地图【之前】发。
-                //   showMapScene 会新建一个 RunHud 并 setScene，之后再去 hud.refresh()
-                //   刷的只是战斗场景那个已经被丢弃的 HUD —— 地图上的遗物栏不会更新。
-                //   （宝箱那条路是对的：它先 randomEliteRelic 再 hud.refresh 当前场景的 HUD。）
+                // 精英战利品：只「挑」不「拿」。真正入账要等玩家在获取界面上点「拾取」，
+                // 所以这里拿到的只是一个候选 —— 丢弃就什么都不发生。
                 Relic eliteRelic = (type == GameMap.NodeType.ELITE)
-                        ? RelicFun.randomEliteRelic(player)
+                        ? RelicFun.pickEliteRelic(player)
                         : null;
 
-                // 所有战斗胜利后都回到地图（新 HUD 是拿加过遗物的 player 建的，所以会带上它）
-                showMapScene(stage, map, player);
+                // 所有战斗胜利后都回到地图。新 HUD 是在遗物入账【之前】建的，
+                // 所以点完「拾取」必须拿这里返回的 HUD 再 refresh() 一次，
+                // 否则地图上的遗物栏不会更新（刷战斗场景那个 HUD 更是白刷）。
+                RunHud mapHud = showMapScene(stage, map, player);
 
                 if (type == GameMap.NodeType.BOSS) {
                     // Boss 战胜利：延迟返回主菜单，让玩家看到通关画面
@@ -334,7 +344,7 @@ public class HelloApplication extends Application {
                     delay.setOnFinished(e -> returnToMenu(stage));
                     delay.play();
                 } else if (eliteRelic != null) {
-                    RelicObtainToast.show(stage.getScene(), eliteRelic, null);
+                    offerRelic(stage, player, mapHud, eliteRelic);
                 }
                 // 普通怪物：直接回到地图，无额外操作
             } else {
@@ -346,6 +356,8 @@ public class HelloApplication extends Application {
         // 开发者模式：战斗里也能改牌组/手牌/遗物（手牌改完立刻重画）
         DevEntry.attachDevButton(hud, player, battle, hud::refresh,
                 node -> showWindow(page(node)), this::closeWindow);
+        // 开发者模式：战斗 HUD 上再挂一个红色的「杀」，一键秒杀当前敌人
+        DevEntry.attachKillButton(hud, battle);
 
         BorderPane content = new BorderPane();
         content.setTop(hud);
@@ -608,6 +620,26 @@ public class HelloApplication extends Application {
     // ================= 地图节点事件 =================
 
     /** 普通怪生成：具体规则见 {@link EnemyFactory#normal(int)} */
+    // ================= 遗物获取（可拿可不拿） =================
+
+    /**
+     * 弹遗物获取界面：点「拾取」才真正入账并刷新 HUD，点「丢弃」什么都不做。
+     *
+     * <p>调用方必须先「只挑不拿」（{@link RelicFun#pickEliteRelic} /
+     * {@link RelicFun#pickEventRelic}），把结果交给本方法，不要自己先 addRelic
+     * —— 那样「丢弃」就成了先加后减，遗物栏和最大生命值都减不干净。</p>
+     *
+     * @param hud 遗物入账后要刷新的 HUD；传 null 表示不用刷
+     */
+    private void offerRelic(Stage stage, Player player, RunHud hud, Relic relic) {
+        if (relic == null) return;
+        RelicObtainToast.showChoice(stage.getScene(), relic, taken -> {
+            if (!taken) return;                  // 丢弃：不入账，也不用刷新
+            RelicFun.grantRelic(player, relic);  // 含草莓 +7 / 荔枝 +13 最大生命
+            if (hud != null) hud.refresh();      // 右上角遗物栏 / 生命值同步
+        });
+    }
+
     private Enemy monsterForRow(GameMap map) {
         int row = map.current == null ? 0 : map.current.row;
         return EnemyFactory.normal(row);
@@ -628,10 +660,10 @@ public class HelloApplication extends Application {
             }
             case REST    -> showRestScene(stage, map, player);
             case TREASURE -> {
-                Relic gained =  RelicFun.randomEliteRelic(player);
-                hud.refresh();
+                // 只挑不拿：等玩家在获取界面上点「拾取」才入账并刷新 HUD
+                Relic gained = RelicFun.pickEliteRelic(player);
                 if (gained != null) {
-                    RelicObtainToast.show(stage.getScene(), gained, null);
+                    offerRelic(stage, player, hud, gained);
                 } else {
                     Alert alert = new Alert(Alert.AlertType.INFORMATION);
                     alert.setTitle("宝箱");
@@ -659,20 +691,25 @@ public class HelloApplication extends Application {
     /** 事件场景：专属背景图 + 右侧名称/描述 + 选项，选完结算回地�?*/
     private void startEventScene(Stage stage, GameMap map, Player player, EventDef ev) {
         EventView view = new EventView(ev, opt -> {
-            String msg = applyEventOption(player, opt);
+            EventOutcome out = applyEventOption(player, opt);
             if (player.hp() == 0) {
                 Alert over = new Alert(Alert.AlertType.INFORMATION);
                 over.setTitle("事件结果");
                 over.setHeaderText(null);
-                over.setContentText(msg + "\n\n你的生命归零……本局结束。");
+                over.setContentText(out.message() + "\n\n你的生命归零……本局结束。");
                 over.setOnHidden(e -> returnToMenu(stage));
                 over.showAndWait();
             } else {
                 Alert result = new Alert(Alert.AlertType.INFORMATION);
                 result.setTitle("事件结果");
                 result.setHeaderText(null);
-                result.setContentText(msg);
-                result.setOnHidden(e -> showMapScene(stage, map, player));
+                result.setContentText(out.message());
+                // 结果框关掉后才回地图。事件给的遗物同样「可拿可不拿」，
+                // 所以在切完场景之后再弹获取界面，并用新 HUD 刷遗物栏。
+                result.setOnHidden(e -> {
+                    RunHud mapHud = showMapScene(stage, map, player);
+                    offerRelic(stage, player, mapHud, out.relic());
+                });
                 result.showAndWait();
             }
         });
@@ -686,31 +723,42 @@ public class HelloApplication extends Application {
         stage.setScene(scene);
     }
 
-    /** 结算事件选项的真实效果，返回结果描述文字 */
-    private String applyEventOption(Player player, EventDef.Option opt) {
+    /**
+     * 事件选项的结算结果：提示文字 + 一件「待玩家决定去留」的遗物（没有就为 null）。
+     *
+     * <p>遗物不在这里入账 —— 要等玩家在获取界面上点「拾取」。
+     * 所以 ADD_RELIC 分支只「挑」不「拿」，把遗物交给调用方去弹界面。</p>
+     */
+    private record EventOutcome(String message, Relic relic) {}
+
+    /** 结算事件选项的真实效果，返回提示文字（遗物只挑不拿，见 {@link EventOutcome}） */
+    private EventOutcome applyEventOption(Player player, EventDef.Option opt) {
         return switch (opt.action) {
             case HEAL -> {
                 int before = player.hp();
                 player.heal(opt.amount);
-                yield "回复 " + opt.amount + " 点生命：" + before + " → " + player.hp();
+                yield new EventOutcome(
+                        "回复 " + opt.amount + " 点生命：" + before + " → " + player.hp(), null);
             }
             case DAMAGE -> {
                 int before = player.hp();
                 player.damage(opt.amount);
-                yield "失去 " + opt.amount + " 点生命：" + before + " → " + player.hp();
+                yield new EventOutcome(
+                        "失去 " + opt.amount + " 点生命：" + before + " → " + player.hp(), null);
             }
             case ADD_CARD -> {
                 Card c = randomRewardCard();
                 player.deck.add(c);
-                yield "获得卡牌：「" + c.name() + "」加入牌组（#" + c.id + "）";
+                yield new EventOutcome("获得卡牌：「" + c.name() + "」加入牌组（#" + c.id + "）", null);
             }
             case ADD_RELIC -> {
-                Relic r = RelicFun.randomEventRelic(player);
+                // 只挑不拿：等玩家在获取界面上点「拾取」才入账
+                Relic r = RelicFun.pickEventRelic(player);
                 yield r == null
-                        ? "遗物池里已经没有新遗物了……"
-                        : "获得遗物：「" + r.name + "」\n" + r.desc;
+                        ? new EventOutcome("遗物池里已经没有新遗物了……", null)
+                        : new EventOutcome("发现遗物：「" + r.name + "」\n" + r.desc, r);
             }
-            case NOTHING -> opt.effectDesc + "（无事发生）";
+            case NOTHING -> new EventOutcome(opt.effectDesc + "（无事发生）", null);
         };
     }
 
@@ -729,7 +777,8 @@ public class HelloApplication extends Application {
 
     /** 起点房间：NPC + 三选一初始遗物 */
     private void showRoomScene(Stage stage, GameMap map, Player player) {
-        List<Relic> starters = RelicFun.starterRelics();
+        // 从「起点遗物池」里随机抽 3 个当候选（不再把整个池子全列出来）
+        List<Relic> starters = RelicFun.pickStarterOptions(player, STARTER_RELIC_OPTIONS);
 
         // 猪神的随机台词池（每次进房间随机一句；点对话框还能再换一句）
         List<String> npcLines = List.of(

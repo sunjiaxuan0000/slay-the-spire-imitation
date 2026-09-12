@@ -5,67 +5,100 @@ import com.example.demo.character.Relic;
 import javafx.animation.FadeTransition;
 import javafx.animation.Interpolator;
 import javafx.animation.ParallelTransition;
-import javafx.animation.PauseTransition;
 import javafx.animation.ScaleTransition;
-import javafx.animation.SequentialTransition;
 import javafx.animation.TranslateTransition;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.control.Label;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.util.Duration;
 
+import java.util.function.Consumer;
+
 /**
- * 遗物获取提示卡片：屏幕中央浮出一张卡片显示遗物信息，
- * 约 3 秒后缩小并飞向屏幕左上角，然后消失。
+ * 遗物获取界面：屏幕中央浮出一张卡片显示遗物信息，卡片下方是「拾取 / 丢弃」两个按钮。
+ * 玩家做出选择后卡片缩小并飞向屏幕左上角，然后消失。
  *
- * <p>设计思路：与 {@link CardFlyFx} 类似，ghost 卡片挂在场景根上，
- * 不影响任何数据，只做视觉演出。演出结束（或跳过）后通过 onDone 回调
- * 通知调用方继续后续流程。</p>
+ * <p><b>⚠ 遗物只在点了「拾取」之后才真正生效。</b> 所以调用方必须先「只挑不拿」
+ * （{@link com.example.demo.character.RelicFun#pickEliteRelic} 等），
+ * 再在本类的回调里用 {@link com.example.demo.character.RelicFun#grantRelic} 入账
+ * —— 回调参数为 true 才入账。否则「丢弃」就成了先加后减：遗物栏、最大生命值、
+ * 甚至请假条的计次都会被污染，减不干净。</p>
+ *
+ * <p>卡片是普通节点，不是 {@code Alert} —— 从动画回调里调起来也不会抛
+ * {@code showAndWait is not allowed during animation or layout processing}。</p>
  */
 public final class RelicObtainToast {
     private RelicObtainToast() {}
 
     /** 卡片宽度 */
-    private static final double CARD_W = 280;
+    private static final double CARD_W = 320;
     /** 卡片高度 */
-    private static final double CARD_H = 340;
+    private static final double CARD_H = 400;
     /** 遗物图标尺寸 */
     private static final double ICON_SIZE = 96;
-    /** 展示停留时间（毫秒） */
-    private static final double SHOW_MS = 2000;
+    /** 按钮尺寸 */
+    private static final double BTN_W = 118;
+    private static final double BTN_H = 40;
     /** 飞行动画时间（毫秒） */
     private static final double FLY_MS = 600;
 
+    // 样式一律走 inline —— 主题 CSS 里的 .button 会盖掉 setStyle 之外的设置
+    private static final String TAKE_STYLE =
+            "-fx-background-color: #16a34a; -fx-text-fill: white; -fx-font-size: 15px; "
+                    + "-fx-font-weight: bold; -fx-background-radius: 10; -fx-cursor: hand;";
+    private static final String TAKE_HOVER =
+            "-fx-background-color: #22c55e; -fx-text-fill: white; -fx-font-size: 15px; "
+                    + "-fx-font-weight: bold; -fx-background-radius: 10; -fx-cursor: hand;";
+    private static final String DROP_STYLE =
+            "-fx-background-color: #475569; -fx-text-fill: #e2e8f0; -fx-font-size: 15px; "
+                    + "-fx-background-radius: 10; -fx-cursor: hand;";
+    private static final String DROP_HOVER =
+            "-fx-background-color: #64748b; -fx-text-fill: #f1f5f9; -fx-font-size: 15px; "
+                    + "-fx-background-radius: 10; -fx-cursor: hand;";
+
     /**
-     * 显示遗物获取提示卡片。
+     * 显示遗物获取界面，让玩家选「拾取 / 丢弃」。
      *
-     * @param scene  当前场景（ghost 会挂到 scene.getRoot() 顶层）
-     * @param relic  要展示的遗物
-     * @param onDone 演出结束后的回调，可传 null
+     * @param scene     当前场景；卡片挂到 {@code scene.getRoot()} 顶层，
+     *                  并压一层半透明遮罩挡住底下的点击
+     * @param relic     要展示的遗物
+     * @param onDecided 回调，参数 true = 拾取，false = 丢弃；可传 null
      */
-    public static void show(Scene scene, Relic relic, Runnable onDone) {
-        if (scene == null || scene.getRoot() == null) {
-            safeRun(onDone);
-            return;
-        }
-        if (!(scene.getRoot() instanceof Pane root)) {
-            safeRun(onDone);
+    public static void showChoice(Scene scene, Relic relic, Consumer<Boolean> onDecided) {
+        if (scene == null || relic == null || !(scene.getRoot() instanceof Pane root)) {
+            // 兜底：没有能挂载的场景就直接当成「拾取」，免得玩家白丢一件遗物
+            safeRun(onDecided, true);
             return;
         }
 
-        // 构建卡片
-        StackPane card = buildCard(relic);
-        card.setMouseTransparent(true);
+        // 遮罩：铺满整页挡住底下的点击。
+        // 没有它的话，玩家能在做选择之前点地图节点跑掉，这件遗物就永远悬着了。
+        // （Pane 作为 StackPane 的子节点会被拉到满尺寸，正好当全屏遮罩用。）
+        Pane scrim = new Pane();
+        scrim.setStyle("-fx-background-color: rgba(2, 6, 23, 0.55);");
+        scrim.setOnMousePressed(e -> e.consume());
+        scrim.setOnMouseClicked(e -> e.consume());
+        scrim.setOpacity(0); // 透明不影响拦截点击，所以第一帧起就挡住了
+
+        // 按钮先建出来，动作等 decide 定义好再接上
+        Button takeBtn = optionButton("拾取", TAKE_STYLE, TAKE_HOVER);
+        Button dropBtn = optionButton("丢弃", DROP_STYLE, DROP_HOVER);
+
+        // 构建卡片（卡片必须能接鼠标，所以这里不能 setMouseTransparent）
+        StackPane card = buildCard(relic, takeBtn, dropBtn);
         card.setManaged(false);
 
         // 初始状态：透明 + 缩小
@@ -73,17 +106,16 @@ public final class RelicObtainToast {
         card.setScaleX(0.3);
         card.setScaleY(0.3);
 
-        // 计算卡片在场景中心的位置
+        // 居中定位：卡片是 unmanaged 的，位置全靠 relocate
         double sceneW = scene.getWidth();
         double sceneH = scene.getHeight();
-        Point2D center = new Point2D(sceneW / 2, sceneH / 2);
-        Point2D local = root.sceneToLocal(center);
+        Point2D local = root.sceneToLocal(new Point2D(sceneW / 2, sceneH / 2));
         card.resize(CARD_W, CARD_H);
         card.relocate(local.getX() - CARD_W / 2, local.getY() - CARD_H / 2);
 
-        root.getChildren().add(card);
+        root.getChildren().addAll(scrim, card);
 
-        // 1) 淡入 + 放大到正常尺寸
+        // 1) 淡入 + 放大到正常尺寸（遮罩一起淡入）
         FadeTransition fadeIn = new FadeTransition(Duration.millis(400), card);
         fadeIn.setFromValue(0);
         fadeIn.setToValue(1);
@@ -95,12 +127,13 @@ public final class RelicObtainToast {
         scaleIn.setToY(1);
         scaleIn.setInterpolator(Interpolator.EASE_OUT);
 
-        ParallelTransition appear = new ParallelTransition(fadeIn, scaleIn);
+        FadeTransition scrimIn = new FadeTransition(Duration.millis(400), scrim);
+        scrimIn.setFromValue(0);
+        scrimIn.setToValue(1);
 
-        // 2) 停留展示
-        PauseTransition hold = new PauseTransition(Duration.millis(SHOW_MS));
+        new ParallelTransition(fadeIn, scaleIn, scrimIn).play();
 
-        // 3) 缩小 + 飞向左上角 + 淡出
+        // 2) 做出选择后：缩小 + 飞向左上角 + 淡出（遮罩同时淡出）
         ScaleTransition shrink = new ScaleTransition(Duration.millis(FLY_MS), card);
         shrink.setFromX(1);
         shrink.setFromY(1);
@@ -109,8 +142,7 @@ public final class RelicObtainToast {
         shrink.setInterpolator(Interpolator.EASE_IN);
 
         // 飞向场景左上角
-        Point2D target = new Point2D(60, 60);
-        Point2D targetLocal = root.sceneToLocal(target);
+        Point2D targetLocal = root.sceneToLocal(new Point2D(60, 60));
         double currentX = local.getX() - CARD_W / 2;
         double currentY = local.getY() - CARD_H / 2;
         double deltaX = targetLocal.getX() - CARD_W * 0.15 / 2 - currentX;
@@ -127,21 +159,31 @@ public final class RelicObtainToast {
         fadeOut.setFromValue(1);
         fadeOut.setToValue(0);
 
-        ParallelTransition flyAway = new ParallelTransition(shrink, fly, fadeOut);
-        final Runnable cleanup = () -> {
-            root.getChildren().remove(card);
-            safeRun(onDone);
-        };
-        flyAway.setOnFinished(e -> cleanup.run());
+        FadeTransition scrimOut = new FadeTransition(Duration.millis(FLY_MS), scrim);
+        scrimOut.setFromValue(1);
+        scrimOut.setToValue(0);
 
-        // 按顺序播放：出现 → 停留 → 飞走
-        SequentialTransition seq = new SequentialTransition(appear, hold, flyAway);
-        seq.setOnFinished(e -> cleanup.run());
-        seq.play();
+        ParallelTransition flyAway = new ParallelTransition(shrink, fly, fadeOut, scrimOut);
+
+        // 防连点：只认第一次选择，且演出播完才回调（此时才真正入账）
+        final boolean[] decided = {false};
+        Consumer<Boolean> decide = taken -> {
+            if (decided[0]) return;
+            decided[0] = true;
+            takeBtn.setDisable(true);
+            dropBtn.setDisable(true);
+            flyAway.setOnFinished(e -> {
+                root.getChildren().removeAll(scrim, card);
+                safeRun(onDecided, taken);
+            });
+            flyAway.play();
+        };
+        takeBtn.setOnAction(e -> decide.accept(true));
+        dropBtn.setOnAction(e -> decide.accept(false));
     }
 
-    /** 构建遗物展示卡片 */
-    private static StackPane buildCard(Relic relic) {
+    /** 构建遗物展示卡片（含「拾取 / 丢弃」按钮） */
+    private static StackPane buildCard(Relic relic, Button takeBtn, Button dropBtn) {
         // 遗物图标
         StackPane iconBox = new StackPane();
         iconBox.setPrefSize(ICON_SIZE, ICON_SIZE);
@@ -176,18 +218,25 @@ public final class RelicObtainToast {
         descLabel.setTextFill(Color.rgb(203, 213, 225));
         descLabel.setFont(Font.font(14));
         descLabel.setWrapText(true);
-        descLabel.setMaxWidth(CARD_W - 40);
+        descLabel.setMaxWidth(CARD_W - 56);
         descLabel.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
 
-        // 提示文字
-        Label hint = new Label("获得遗物");
+        // 提示文字：说清这一步要做选择，而且丢掉就没了
+        Label hint = new Label("发现遗物 · 拾取后才会生效");
         hint.setTextFill(Color.rgb(148, 163, 184));
         hint.setFont(Font.font(12));
+
+        HBox buttons = new HBox(14, takeBtn, dropBtn);
+        buttons.setAlignment(Pos.CENTER);
+        // ⚠ StackPane 会把可伸缩的子节点拉满卡片，HBox 拉满后自身 CENTER 对齐
+        //   会把按钮摆到卡片正中间。钉死 max 尺寸，按钮才老实待在 VBox 的流里。
+        buttons.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
 
         VBox content = new VBox(12);
         content.setAlignment(Pos.CENTER);
         content.setPadding(new Insets(20));
-        content.getChildren().addAll(hint, iconBox, nameLabel, descLabel);
+        content.getChildren().addAll(hint, iconBox, nameLabel, descLabel, buttons);
+        content.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
 
         StackPane card = new StackPane(content);
         card.setPrefSize(CARD_W, CARD_H);
@@ -199,8 +248,24 @@ public final class RelicObtainToast {
         return card;
     }
 
+    /** 建一个带 hover 高亮的按钮 */
+    private static Button optionButton(String text, String normal, String hover) {
+        Button b = new Button(text);
+        b.setPrefSize(BTN_W, BTN_H);
+        b.setMinSize(BTN_W, BTN_H);
+        b.setMaxSize(BTN_W, BTN_H);
+        b.setStyle(normal);
+        b.setOnMouseEntered(e -> {
+            if (!b.isDisabled()) b.setStyle(hover);
+        });
+        b.setOnMouseExited(e -> {
+            if (!b.isDisabled()) b.setStyle(normal);
+        });
+        return b;
+    }
+
     /** 回调一律丢到下一帧执行，避免跑在动画调用栈里 */
-    private static void safeRun(Runnable r) {
-        if (r != null) Platform.runLater(r);
+    private static void safeRun(Consumer<Boolean> cb, boolean taken) {
+        if (cb != null) Platform.runLater(() -> cb.accept(taken));
     }
 }

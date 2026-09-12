@@ -4,8 +4,11 @@ import com.example.demo.card.Card;
 import com.example.demo.enemy.Enemy;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 
 /**
  * 遗物效果逻辑层：所有遗物的触发逻辑集中在此类。
@@ -176,85 +179,21 @@ public class RelicFun {
 
     /**
      * Boss 战胜利后，根据获得的 Boss 遗物返回后续动作类型：
-     * "REMOVE_CARDS" / "CHOOSE_ELITE" / null
+     * "REMOVE_CARDS" / "BELL_OFFERS" / null
+     *
+     * <p>「拾取」了 Boss 遗物才该调这个 —— 丢弃了就别触发它的后续效果。</p>
      */
     public static String bossVictoryAction(Relic bossRelic) {
         if (bossRelic == null) return null;
         if (bossRelic.name.equals("空鸟笼")) return "REMOVE_CARDS";
-        if (bossRelic.name.equals("召唤铃铛")) return "CHOOSE_ELITE";
+        if (bossRelic.name.equals("召唤铃铛")) return "BELL_OFFERS";
         return null;
-    }
-
-    /** 显示精英遗物选择：随机三个精英遗物，选一个获得 */
-    public static void showEliteRelicChoice(Player player, Runnable onDone) {
-        List<Relic> pool = filterOwned(Relic.eliteRelics(), player);
-        if (pool.isEmpty()) {
-            onDone.run();
-            return;
-        }
-
-        List<Relic> candidates = new ArrayList<>(pool);
-        List<Relic> offers = new ArrayList<>();
-        int count = Math.min(3, candidates.size());
-        for (int i = 0; i < count; i++) {
-            int idx = new Random().nextInt(candidates.size());
-            offers.add(candidates.remove(idx));
-        }
-
-        javafx.scene.control.Alert alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.CONFIRMATION);
-        alert.setTitle("召唤铃铛");
-        alert.setHeaderText("从精英遗物池中选择一个遗物");
-        alert.getDialogPane().setPrefSize(500, 350);
-
-        javafx.scene.layout.VBox relicList = new javafx.scene.layout.VBox(10);
-        relicList.setPadding(new javafx.geometry.Insets(15));
-
-        for (Relic r : offers) {
-            javafx.scene.layout.VBox relicBox = new javafx.scene.layout.VBox(4);
-            javafx.scene.control.Label nameLabel = new javafx.scene.control.Label(r.name);
-            nameLabel.setStyle("-fx-text-fill: #fbbf24; -fx-font-size: 16px; -fx-font-weight: bold;");
-            javafx.scene.control.Label descLabel = new javafx.scene.control.Label(r.desc);
-            descLabel.setStyle("-fx-text-fill: #e2e8f0; -fx-font-size: 14px;");
-            descLabel.setWrapText(true);
-            relicBox.getChildren().addAll(nameLabel, descLabel);
-
-            javafx.scene.control.Button relicBtn = new javafx.scene.control.Button();
-            relicBtn.setGraphic(relicBox);
-            relicBtn.setPrefWidth(450);
-            relicBtn.setStyle("-fx-background-color: #2d3748; -fx-padding: 12; -fx-cursor: hand; "
-                    + "-fx-background-radius: 8;");
-            relicBtn.setOnMouseEntered(e ->
-                relicBtn.setStyle("-fx-background-color: #4a5568; -fx-padding: 12; -fx-cursor: hand; "
-                        + "-fx-background-radius: 8;"));
-            relicBtn.setOnMouseExited(e ->
-                relicBtn.setStyle("-fx-background-color: #2d3748; -fx-padding: 12; -fx-cursor: hand; "
-                        + "-fx-background-radius: 8;"));
-            relicBtn.setOnAction(e -> {
-                player.addRelic(r);
-                alert.close();
-                onDone.run();
-            });
-            relicList.getChildren().add(relicBtn);
-        }
-
-        javafx.scene.control.ScrollPane scrollPane = new javafx.scene.control.ScrollPane(relicList);
-        scrollPane.setFitToWidth(true);
-        alert.getDialogPane().setContent(scrollPane);
-
-        alert.getDialogPane().getButtonTypes().clear();
-        alert.getDialogPane().getButtonTypes().add(javafx.scene.control.ButtonType.CANCEL);
-
-        alert.showAndWait().ifPresent(btnType -> {
-            if (btnType == javafx.scene.control.ButtonType.CANCEL) {
-                onDone.run();
-            }
-        });
     }
 
     /* ================= 获得遗物时 ================= */
 
     /**
-     * 获得遗物时的即时效果：保温杯、请假条、破镜。
+     * 获得遗物时的即时效果：保温杯、请假条、破镜、召唤铃铛。
      * @param removeCards 卡牌移除回调（破镜需要 UI 交互，由调用方提供）
      */
     public static void onRelicObtained(Player player, Relic relic, Runnable removeCards) {
@@ -265,6 +204,13 @@ public class RelicFun {
         // 请假条：获得时设置 3 场战斗生效
         if (relic.name.equals("请假条")) {
             player.leaveNoteBattles = 3;
+        }
+        // 召唤铃铛：代价 —— 往牌组里永久塞一张「伤口」（三份遗物不是白拿的）
+        // ⚠ 这张伤口必须留到下一场战斗。它在 Boss 战胜利之后才加进来，
+        //   而 BattleView.victory() 里的 clearStatusCards() 在更早的胜利瞬间就跑完了，
+        //   所以不会被清掉。以后如果调换这两步的顺序，这里会被悄悄抹掉。
+        if (relic.name.equals("召唤铃铛")) {
+            player.deck.add(Card.wound());
         }
         // 破镜：删除一张卡牌
         if (relic.name.equals("破镜") && removeCards != null) {
@@ -282,18 +228,52 @@ public class RelicFun {
         return Relic.starterRelics();
     }
 
+    /**
+     * 起点 NPC 的候选遗物：从专属的「起点遗物池」里随机抽 {@code count} 个。
+     *
+     * <p>抽之前先滤掉玩家已经有的 —— 否则选中一件已有的遗物时，
+     * {@link Player#addRelic} 会因重名直接忽略，玩家等于白选一次，
+     * 而提示还会说「已获得」。</p>
+     *
+     * <p>池子不够 {@code count} 个时就给多少算多少，不报错。</p>
+     */
+    public static List<Relic> pickStarterOptions(Player player, int count) {
+        List<Relic> pool = filterOwned(Relic.starterRelics(), player);
+        Collections.shuffle(pool);
+        return new ArrayList<>(pool.subList(0, Math.min(count, pool.size())));
+    }
+
     /** 全部遗物（起点 + 精英 + 事件 + Boss），开发者模式面板用它列出所有可加/可删的遗物 */
     public static List<Relic> allRelics() {
         return Relic.allRelics();
     }
 
-    public static Relic randomEliteRelic(Player player) {
+    /* ----------------- 只挑不拿（供「拾取 / 丢弃」界面用） ----------------- */
+
+    /**
+     * 按精英池权重挑一个玩家还没有的精英遗物，<b>不动玩家状态</b>。
+     *
+     * <p>池空时返回 null。要让遗物真正入账，得玩家点「拾取」后再调
+     * {@link #grantRelic} —— 这样才能做到「丢弃」是真的没拿，
+     * 而不是先加进 relics 再想办法减掉（relics 里还有即时效果，减不干净）。</p>
+     */
+    public static Relic pickEliteRelic(Player player) {
+        return pickEliteRelic(player, Set.of());
+    }
+
+    /**
+     * 同上，但额外排除 {@code exclude} 里的名字 —— 连着抽多个时用它避免重复。
+     *
+     * @param exclude 本次连抽里已经出现过的遗物名（可为 {@code Set.of()}）
+     */
+    public static Relic pickEliteRelic(Player player, Set<String> exclude) {
         List<Relic> eliteRelics = Relic.eliteRelics();
         List<Integer> eliteWeights = Relic.eliteWeights();
         List<Relic> pool = new ArrayList<>();
         List<Integer> weights = new ArrayList<>();
         for (int i = 0; i < eliteRelics.size(); i++) {
             Relic r = eliteRelics.get(i);
+            if (exclude.contains(r.name)) continue;
             if (player.relics.stream().noneMatch(h -> h.name.equals(r.name))) {
                 pool.add(r);
                 weights.add(eliteWeights.get(i));
@@ -305,39 +285,93 @@ public class RelicFun {
         for (int w : weights) total += w;
         int roll = new Random().nextInt(total);
         int cumulative = 0;
-        Relic gained = pool.get(pool.size() - 1);
+        Relic picked = pool.get(pool.size() - 1);
         for (int i = 0; i < pool.size(); i++) {
             cumulative += weights.get(i);
             if (roll < cumulative) {
-                gained = pool.get(i);
+                picked = pool.get(i);
                 break;
             }
         }
-
-        player.addRelic(gained);
-        if (gained.name.equals("草莓")) {
-            player.increaseMaxHp(7);
-        }
-        if (gained.name.equals("荔枝")) {
-            player.increaseMaxHp(13);
-        }
-        return gained;
+        return picked;
     }
 
-    public static Relic randomEventRelic(Player player) {
+    /**
+     * 连着抽 {@code count} 个<b>互不重复</b>的精英遗物（只挑不拿）。
+     * 召唤铃铛的「三连遗物获取界面」用它。
+     *
+     * <p>每次抽都按 {@link Relic#eliteWeights()} 加权，所以稀有度分布和单抽一致；
+     * 已抽到的会排除掉，免得同一个遗物连着弹两次（丢弃之后尤其容易撞）。
+     * 池子不够 {@code count} 个就给多少算多少。</p>
+     */
+    public static List<Relic> pickEliteOptions(Player player, int count) {
+        List<Relic> picked = new ArrayList<>();
+        Set<String> taken = new HashSet<>();
+        for (int i = 0; i < count; i++) {
+            Relic r = pickEliteRelic(player, taken);
+            if (r == null) break;
+            picked.add(r);
+            taken.add(r.name);
+        }
+        return picked;
+    }
+
+    /** 从事件遗物池挑一个玩家还没有的（只挑不拿；池空返回 null） */
+    public static Relic pickEventRelic(Player player) {
         List<Relic> pool = filterOwned(Relic.eventRelics(), player);
         if (pool.isEmpty()) return null;
-        Relic gained = pool.get(new Random().nextInt(pool.size()));
-        player.addRelic(gained);
+        return pool.get(new Random().nextInt(pool.size()));
+    }
+
+    /** 从 Boss 遗物池挑一个玩家还没有的（只挑不拿；池空返回 null） */
+    public static Relic pickBossRelic(Player player) {
+        List<Relic> pool = filterOwned(Relic.bossRelics(), player);
+        if (pool.isEmpty()) return null;
+        return pool.get(new Random().nextInt(pool.size()));
+    }
+
+    /* ----------------- 真正入账 ----------------- */
+
+    /**
+     * 把遗物记进玩家状态，并结算「获得时」的即时效果：
+     * 草莓 +7 最大生命、荔枝 +13 最大生命。
+     *
+     * <p>只在玩家点「拾取」时调用。「丢弃」就什么都不做。</p>
+     *
+     * <p>保温杯 / 请假条 / 破镜的即时效果由 {@link Player#addRelic} 内部
+     * 转交 {@link #onRelicObtained}，这里不用重复处理。</p>
+     */
+    public static void grantRelic(Player player, Relic r) {
+        if (r == null) return;
+        player.addRelic(r);
+        if (r.name.equals("草莓")) {
+            player.increaseMaxHp(7);
+        }
+        if (r.name.equals("荔枝")) {
+            player.increaseMaxHp(13);
+        }
+    }
+
+    /* ----------------- 挑 + 拿（给不需要询问去留的调用方） ----------------- */
+
+    /** 随机拿一个精英遗物（直接入账，不询问去留） */
+    public static Relic randomEliteRelic(Player player) {
+        Relic gained = pickEliteRelic(player);
+        grantRelic(player, gained);
         return gained;
     }
 
-    /** 击败 Boss 后随机获得一个 Boss 遗物（池为空时返回 null） */
+    /** 随机拿一个事件遗物（直接入账，不询问去留） */
+    public static Relic randomEventRelic(Player player) {
+        Relic gained = pickEventRelic(player);
+        grantRelic(player, gained);
+        return gained;
+    }
+
+    /** 击败 Boss 后随机拿一个 Boss 遗物（直接入账，不询问去留；池为空时返回 null） */
     public static Relic randomBossRelic(Player player) {
-        List<Relic> pool = filterOwned(Relic.bossRelics(), player);
-        if (pool.isEmpty()) return null;
-        Relic gained = pool.get(new Random().nextInt(pool.size()));
-        player.addRelic(gained);
+        Relic gained = pickBossRelic(player);
+        grantRelic(player, gained);
         return gained;
     }
 }
