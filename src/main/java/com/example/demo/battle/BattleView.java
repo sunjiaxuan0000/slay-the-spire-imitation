@@ -337,12 +337,14 @@ public class BattleView extends StackPane implements BattleState {
         initAnimators();
         gameTimer.start();
         SoundFx.playAny(enemyOink());
-        startPlayerTurn();
-        // 牛来：对敌人造成伤害
+        // 牛来：回合开始前对敌人造成伤害（先消耗护盾）
         int bsd = RelicFun.battleStartDamage(player);
         if (bsd > 0) {
-            enemy.hp = Math.max(0, enemy.hp - bsd);
-            resolveEnemyLethal();
+            damageEnemy(bsd);
+            refreshAll();
+        }
+        if (!battleOver) {
+            startPlayerTurn();
         }
     }
 
