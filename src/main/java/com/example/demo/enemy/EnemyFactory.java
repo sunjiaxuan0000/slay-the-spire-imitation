@@ -69,6 +69,11 @@ public final class EnemyFactory {
         return Math.random() < 0.5 ? new DukePorcodraco() : new GiantBoarKnight();
     }
 
+    /** 精英房：卫士猪 / 闪电猪各 50% */
+    public static Enemy elite() {
+        return Math.random() < 0.5 ? new GuardPig() : new FlashPig();
+    }
+
     /**
      * 按地图定好的种类出 BOSS。
      *
@@ -100,6 +105,7 @@ public final class EnemyFactory {
                 case "老兵邪教猪" -> { return CultistPig.veteran(); }
                 case "神风猪"     -> { return new BoomPig(); }
                 case "卫士猪"     -> { return new GuardPig(); }
+                case "闪电猪"     -> { return new FlashPig(); }
                 case "猪龙鱼公爵" -> { return new DukePorcodraco(); }
                 case "巨猪骑士"   -> { return new GiantBoarKnight(); }
                 default -> { }

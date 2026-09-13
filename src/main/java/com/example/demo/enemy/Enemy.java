@@ -130,6 +130,16 @@ public abstract class Enemy {
         return slimeOnAttack;
     }
 
+    /** 是否拥有闪避能力（决定血条下方是否显示「闪」图标） */
+    public boolean hasDodge() {
+        return false;
+    }
+
+    /** 闪避判定：返回 true 表示本次攻击被完全闪避（子类覆写） */
+    public boolean dodge() {
+        return false;
+    }
+
     /** 立绘文件名（BigSlime 可复用史莱姆的图） */
     public String getPortraitName() {
         return portraitName != null ? portraitName : name;
@@ -207,7 +217,6 @@ public abstract class Enemy {
     public boolean triggerDeathLock() {
         return false;
     }
-
     /** 描述当前意图的文字 */
     public String intentText() {
         Step s = current();

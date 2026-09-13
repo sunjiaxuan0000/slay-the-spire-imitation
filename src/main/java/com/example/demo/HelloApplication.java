@@ -10,7 +10,6 @@ import com.example.demo.character.Relic;
 import com.example.demo.character.RelicFun;
 import com.example.demo.enemy.Enemy;
 import com.example.demo.enemy.EnemyFactory;
-import com.example.demo.enemy.GuardPig;
 import com.example.demo.event.EventDef;
 import com.example.demo.event.EventView;
 import com.example.demo.operator.DevEntry;
@@ -846,7 +845,7 @@ public class HelloApplication extends Application {
         // 先把「这次进去会遇到什么」定下来，才能一起存进档里
         switch (type) {
             case MONSTER -> { if (enemy == null) enemy = monsterForRow(map); }
-            case ELITE   -> { if (enemy == null) enemy = new GuardPig(); }
+            case ELITE   -> { if (enemy == null) enemy = EnemyFactory.elite(); }
             // BOSS 按地图定好的种类出（和地图上画的那只对得上），不再临场随机
             case BOSS    -> { if (enemy == null) enemy = EnemyFactory.boss(map.bossKind); }
             case EVENT   -> {
