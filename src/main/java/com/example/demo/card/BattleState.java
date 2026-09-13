@@ -34,6 +34,17 @@ public interface BattleState {
     /** 增加玩家力量 */
     void gainStrength(int amount);
 
+    /**
+     * 玩家敏捷层数。
+     *
+     * <p>和力量对称，但作用在<b>格挡</b>上：每次获得格挡，实际得到「原数值 + 敏捷」。
+     * （力量的加成写在攻击伤害里，敏捷的加成写在格挡里。）</p>
+     */
+    int getDexterity();
+
+    /** 增加玩家敏捷 */
+    void gainDexterity(int amount);
+
     /** 玩家剩余虚弱回合 */
     int getWeakTurns();
 
@@ -83,6 +94,23 @@ public interface BattleState {
 
     /** 记录回合结束时需扣除的力量（活动肌肉的临时力量） */
     void loseStrengthAtTurnEnd(int amount);
+
+    /**
+     * 取走「本场第一次攻击」的额外伤害（赤牛 +8），取完归零。
+     *
+     * <p>⚠ 只在<b>真的打出攻击牌</b>时调用 —— 悬停预览卡面不能调这个
+     * （那会把一次性加成白白耗掉）。</p>
+     */
+    int consumeFirstAttackBonus();
+
+    /**
+     * <b>只看不拿</b>地询问「本场第一次攻击」的额外伤害（赤牛 +8）。
+     *
+     * <p>给<b>卡面显示 / 悬停预览</b>用 —— 它们要显示含加成的数值，
+     * 但显然不能把一次性加成耗光，所以调这个而不是
+     * {@link #consumeFirstAttackBonus()}（那个是取走即作废）。</p>
+     */
+    int peekFirstAttackBonus();
 
     /** 本回合禁止再抽牌（战斗专注） */
     void forbidDrawThisTurn();

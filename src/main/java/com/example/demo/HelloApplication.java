@@ -850,10 +850,9 @@ public class HelloApplication extends Application {
             // BOSS 按地图定好的种类出（和地图上画的那只对得上），不再临场随机
             case BOSS    -> { if (enemy == null) enemy = EnemyFactory.boss(map.bossKind); }
             case EVENT   -> {
-                if (ev == null) {
-                    List<EventDef> pool = EventDef.pool();
-                    ev = pool.get(new java.util.Random().nextInt(pool.size()));
-                }
+                // ⚠ 走 EventDef.pick(player) 而不是均匀抽 EventDef.pool() ——
+                // 猪雪峰是「一局一次 + 低概率」，pick 里单独掷骰子并置 xuefengSeen。
+                if (ev == null) ev = EventDef.pick(player);
             }
             default -> { }
         }
@@ -1082,6 +1081,14 @@ public class HelloApplication extends Application {
                 Relic r = RelicFun.pickEventRelic(player);
                 yield r == null
                         ? new EventOutcome("遗物池里已经没有新遗物了……", null, null)
+                        : new EventOutcome("发现遗物：「" + r.name + "」\n" + r.desc, r, null);
+            }
+            case ADD_NAMED_RELIC -> {
+                // 猪雪峰：点名发放专属遗物（那三件不在任何抽取池里）。
+                // 同样「只挑不拿」—— 交给 offerRelic 弹获取界面，点了「拾取」才入账。
+                Relic r = Relic.findByName(opt.relicName);
+                yield r == null
+                        ? new EventOutcome("雕像上的力量已经散了……", null, null)
                         : new EventOutcome("发现遗物：「" + r.name + "」\n" + r.desc, r, null);
             }
             case NOTHING -> new EventOutcome(opt.effectDesc + "（无事发生）", null, null);

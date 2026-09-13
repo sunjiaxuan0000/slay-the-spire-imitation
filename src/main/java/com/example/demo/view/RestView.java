@@ -2,6 +2,7 @@ package com.example.demo.view;
 
 import com.example.demo.card.Card;
 import com.example.demo.character.Player;
+import com.example.demo.character.RelicFun;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -81,6 +82,8 @@ public class RestView extends StackPane {
     private final Runnable onLeave;
 
     private boolean chosen = false;
+    /** 持有「猪疾速」：篝火的休息 = 练起来 */
+    private final boolean pigRush;
     private final List<Button> optionButtons = new ArrayList<>();
 
     private final Label hpLabel = new Label();
@@ -123,7 +126,11 @@ public class RestView extends StackPane {
         getChildren().add(header);
 
         // ---- 中间偏下：两个选项（二选一）----
-        restBtn = buildOption("休息", healText(), this::doRest, true);
+        // 猪疾速：把「休息」换成「练起来」—— 不回血，改为永久 +1 点本遗物提供的敏捷
+        pigRush = RelicFun.hasPigRush(player);
+        restBtn = buildOption(pigRush ? "练起来" : "休息",
+                pigRush ? trainText() : healText(),
+                pigRush ? this::doTrain : this::doRest, true);
         upgradeBtn = buildOption("强化卡牌", upgradeText(), this::doUpgrade, hasUpgradable());
 
         HBox options = new HBox(26, restBtn, upgradeBtn);
@@ -223,6 +230,27 @@ public class RestView extends StackPane {
         leaveBtn.setVisible(true);
     }
 
+    /**
+     * 练起来（猪疾速）：不回血，改为让「猪疾速」提供的敏捷 +1。
+     *
+     * <p>累加值记在 {@link Player#pigRushDex} 上 —— <b>不能</b>记在 {@code Relic} 对象里，
+     * 那些是全局单例，改了会带到下一局去。</p>
+     */
+    private void doTrain() {
+        if (chosen) return;
+        chosen = true;
+
+        player.pigRushDex++;
+        // ⚠ 练起来不是休息：古茶具套装的「篝火休息后下一场战斗 +2 能量」不该触发，
+        //    所以这里【不】置 restedAtCampfire。
+
+        refreshHpLabel();
+        lockOptions(restBtn);
+        hint.setText("你在火边练了一会，猪疾速的敏捷提升到 "
+                + (1 + player.pigRushDex) + " 点 —— 可以离开了");
+        leaveBtn.setVisible(true);
+    }
+
     /** 强化卡牌：打开选牌页，选中的那张升级（数值/文案换成升级版，牌组里的位置不变） */
     private void doUpgrade() {
         if (chosen || !hasUpgradable()) return;
@@ -269,6 +297,13 @@ public class RestView extends StackPane {
     private String healText() {
         if (player.hp() >= player.maxHp) return "生命已满，休息不会恢复";
         return "恢复 " + healAmount() + " 点生命（最大生命的 30%）";
+    }
+
+    /** 猪疾速下的「练起来」说明：当前敏捷 → 练完之后的敏捷 */
+    private String trainText() {
+        return "不回血，改为使猪疾速提供的敏捷 +1\n"
+                + "战斗开始时敏捷 " + (1 + player.pigRushDex)
+                + " → " + (2 + player.pigRushDex) + " 点";
     }
 
     private String upgradeText() {

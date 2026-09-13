@@ -27,9 +27,14 @@ public class EventView extends StackPane {
     /** 事件专属背景图：放到 src/main/resources/com/example/demo/event_bg.png 即可生效 */
     private static final String BG_NAME = "event_bg.png";
 
+    /** 选项按钮固定尺寸：三个选项同宽同高 */
+    private static final double OPTION_W = 520;
+    private static final double OPTION_H = 88;
+
     public EventView(EventDef ev, Consumer<EventDef.Option> onChoose) {
         // ---------- 背景 ----------
-        Image bgImage = loadImage(BG_NAME);
+        // 事件自带专属背景（EventDef.bgName）就用它，否则退回通用 event_bg.png
+        Image bgImage = loadImage(ev.bgName != null ? ev.bgName : BG_NAME);
         if (bgImage != null) {
             ImageView bg = new ImageView(bgImage);
             bg.setPreserveRatio(false);
@@ -65,12 +70,16 @@ public class EventView extends StackPane {
         title.setTextFill(Color.WHITE);
         title.setFont(Font.font(28));
         title.setStyle("-fx-font-weight: bold;");
+        title.setMinHeight(Region.USE_PREF_SIZE);
 
         Label desc = new Label(ev.desc);
         desc.setTextFill(Color.rgb(226, 232, 240));
         desc.setFont(Font.font(15));
         desc.setWrapText(true);
         desc.setMaxWidth(520);
+        // ⚠ 描述必须完整显示：VBox 里的 Label 会被按剩余空间压缩高度，
+        //    行一多（猪雪峰是三行）就会被裁掉尾巴。钉住 minHeight = 首选高度即可。
+        desc.setMinHeight(Region.USE_PREF_SIZE);
 
         VBox options = new VBox(10);
         for (EventDef.Option o : ev.options) {
@@ -93,26 +102,30 @@ public class EventView extends StackPane {
         getChildren().add(esc);
     }
 
-    /** 一个事件选项：选项名 + 实际效果说明 */
+    /** 一个事件选项：选项名 + 实际效果说明（三个选项固定同高，不因文字长短参差） */
     private Button buildOption(EventDef.Option o, Consumer<EventDef.Option> onChoose) {
         Label label = new Label(o.label);
         label.setTextFill(Color.WHITE);
         label.setFont(Font.font(17));
         label.setStyle("-fx-font-weight: bold;");
+        label.setMinHeight(Region.USE_PREF_SIZE);
 
         Label effect = new Label(o.effectDesc);
         effect.setTextFill(Color.rgb(203, 213, 225));
         effect.setFont(Font.font(13));
         effect.setWrapText(true);
+        effect.setMaxWidth(OPTION_W - 28);
+        effect.setMinHeight(Region.USE_PREF_SIZE);
 
-        VBox text = new VBox(3);
+        VBox text = new VBox(3, label, effect);
         text.setAlignment(Pos.CENTER_LEFT);
-        text.getChildren().addAll(label, effect);
 
         Button btn = new Button();
         btn.setGraphic(text);
-        btn.setMaxWidth(520);
-        btn.setMinWidth(520);
+        // 固定高度：三个选项一样大（猪雪峰的三条说明长短不一，不钉住会高低不齐）
+        btn.setPrefSize(OPTION_W, OPTION_H);
+        btn.setMinSize(OPTION_W, OPTION_H);
+        btn.setMaxSize(OPTION_W, OPTION_H);
         btn.setStyle("-fx-background-color: rgba(51, 65, 85, 0.9); -fx-background-radius: 10; "
                 + "-fx-cursor: hand; -fx-padding: 8 14 8 14;");
         btn.setOnMouseEntered(e -> btn.setStyle("-fx-background-color: rgba(71, 85, 105, 0.95); "

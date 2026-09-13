@@ -65,6 +65,65 @@ public class RelicFun {
     }
 
     /**
+     * 赤牛：本场战斗<b>第一次攻击</b>的额外伤害（+8），无此遗物返回 0。
+     *
+     * <p>⚠ 这个加成<b>只能用一次</b>，所以不是在这里返回就完事 ——
+     * 由 {@code BattleView} 在战斗开始时读一次存起来，真正打出第一张攻击牌时消费掉。
+     * 别把「取一次作废」的逻辑写进 {@code CardPlay.dealAttackDamage}：
+     * 那个方法也会被<b>悬停预览</b>调用（把卡面描述里的数值换成实际伤害），
+     * 鼠标划过去就把加成耗光了。</p>
+     */
+    public static int firstAttackBonus(Player player) {
+        return hasRelic(player, "赤牛") ? 8 : 0;
+    }
+
+    /** 猪爆气：战斗开始时是否触发（自损 2 + 对怪物 13 点伤害） */
+    public static boolean hasPigBurst(Player player) {
+        return hasRelic(player, "猪爆气");
+    }
+
+    /** 猪爆气：战斗开始时对自身造成的伤害 */
+    public static int pigBurstSelfDamage() {
+        return 2;
+    }
+
+    /**
+     * 猪爆气：战斗开始时对怪物造成的伤害。
+     *
+     * <p>和「牛来」一样走 {@code BattleView.damageEnemy()}，<b>先削格挡</b> ——
+     * 怪物带初始格挡进场时这 13 点会被格挡吃掉，不会直接掉本体血。</p>
+     */
+    public static int pigBurstEnemyDamage() {
+        return 13;
+    }
+
+    /** 猪冰棍：战斗的<b>前两回合</b>开始时额外 +1 能量 */
+    public static int turnStartEnergy(Player player, int turn) {
+        return (hasRelic(player, "猪冰棍") && turn <= 2) ? 1 : 0;
+    }
+
+    /**
+     * 猪疾速：战斗开始时应获得的敏捷（1 + 篝火「练起来」累计的 {@link Player#pigRushDex}）。
+     * 没有这件遗物返回 0。
+     */
+    public static int battleStartDexterity(Player player) {
+        return hasRelic(player, "猪疾速") ? 1 + Math.max(0, player.pigRushDex) : 0;
+    }
+
+    /**
+     * 猪疾速：持有这件遗物时，篝火的「休息」会被换成「练起来」（RestView 用）。
+     */
+    public static boolean hasPigRush(Player player) {
+        return hasRelic(player, "猪疾速");
+    }
+
+    /** 是否已经拿到猪雪峰三件遗物中的任意一件（拿到就说明这个事件已经来过了） */
+    public static boolean hasXuefengRelic(Player player) {
+        return hasRelic(player, "猪爆气") || hasRelic(player, "猪冰棍")
+                || hasRelic(player, "猪疾速");
+    }
+
+    /**
      * 牛来：<b>每回合</b>开始时对敌人造成的伤害（3），无此遗物返回 0。
      *
      * <p>由 {@code BattleView.startPlayerTurn()} 在每次玩家回合开始时调用 ——
@@ -350,7 +409,7 @@ public class RelicFun {
 
     /**
      * 把遗物记进玩家状态，并结算「获得时」的即时效果：
-     * 草莓 +7 最大生命、荔枝 +13 最大生命。
+     * 草莓 +7 最大生命、梨子 +13 最大生命。
      *
      * <p>只在玩家点「拾取」时调用。「丢弃」就什么都不做。</p>
      *
@@ -363,7 +422,7 @@ public class RelicFun {
         if (r.name.equals("草莓")) {
             player.increaseMaxHp(7);
         }
-        if (r.name.equals("荔枝")) {
+        if (r.name.equals("梨子")) {
             player.increaseMaxHp(13);
         }
     }

@@ -69,7 +69,7 @@ public  class Relic {
             new Relic("奥利哈钢", "回合结束时若无格挡，获得 6 点格挡", "relic/Orichalcum.png"),
             new Relic("古茶具套装", "篝火休息后下一场战斗开始时获得 2 点额外能量", "relic/Tea_set.png"),
             // —— 罕见遗物（各 5%）——
-            new Relic("荔枝", "最大生命值提升 13 点", "relic/Pear.png"),
+            new Relic("梨子", "最大生命值提升 13 点", "relic/Pear.png"),
             new Relic("精致折扇", "一回合打出 3 张攻击牌时获得 4 点格挡", "relic/OrnamentalFan.png"),
             new Relic("开信刀", "一回合打出 3 张技能牌时对敌人造成 5 点伤害", "relic/LetterOpener.png"),
             new Relic("带骨肉", "战斗结束时若生命值 < 50%，恢复 12 点生命", "relic/Meat.png"),
@@ -91,6 +91,25 @@ public  class Relic {
             new Relic("taffy", "每回合结束时生命值高于 50% 额外获得 5 点格挡", "relic/taffy.jpg"),
             new Relic("牛来", "每回合开始时对敌人造成 3 点伤害", "relic/niulai.png"),
             new Relic("奶龙", "第二回合开始时获得 12 点格挡", "relic/nailong.png")
+    );
+
+    /**
+     * 猪雪峰事件的三个专属遗物。
+     *
+     * <p>⚠ 它们<b>不进</b> {@link #eventRelics()} 之类的任何抽取池 ——
+     * 唯一的获得途径就是在「猪雪峰」事件里三选一。
+     * 但必须进 {@link #allRelics()}，否则读档时按名字找不回来（会悄悄丢件）。</p>
+     */
+    private static final List<Relic> XUEFENG_RELICS = List.of(
+            new Relic("猪爆气",
+                    "战斗开始时，对自身造成不可格挡的 2 点伤害，对怪物造成 13 点伤害",
+                    "relic/sprite.png"),
+            new Relic("猪冰棍",
+                    "战斗的前两回合开始时额外获得 1 点能量",
+                    "relic/qlz.png"),
+            new Relic("猪疾速",
+                    "战斗开始时获得 1 点敏捷；篝火的「休息」改为「练起来」，不回血，改为使本遗物提供的敏捷 +1",
+                    "relic/runner.png")
     );
 
     /** Boss 遗物池：击败 Boss 后获得 */
@@ -120,14 +139,34 @@ public  class Relic {
         return new ArrayList<>(BOSS_RELICS);
     }
 
-    /** 全部遗物（起点 + 精英 + 事件 + Boss），开发者模式面板用它列出所有可加/可删的遗物 */
+    /** 猪雪峰专属遗物（只在该事件里三选一获得） */
+    public static List<Relic> xuefengRelics() {
+        return new ArrayList<>(XUEFENG_RELICS);
+    }
+
+    /**
+     * 全部遗物（起点 + 精英 + 事件 + Boss + 猪雪峰）。
+     *
+     * <p>开发者模式面板用它列出所有可加/可删的遗物；
+     * 存档也靠它按名字把遗物找回来（见 {@code SaveData.findRelic}）。</p>
+     */
     public static List<Relic> allRelics() {
         List<Relic> all = new ArrayList<>();
         all.addAll(STARTER_RELICS);
         all.addAll(ELITE_RELICS);
         all.addAll(EVENT_RELICS);
         all.addAll(BOSS_RELICS);
+        all.addAll(XUEFENG_RELICS);
         return all;
+    }
+
+    /** 按名字找遗物（猪雪峰事件指定发哪件、存档还原时都用这个）；找不到返回 null。 */
+    public static Relic findByName(String name) {
+        if (name == null) return null;
+        for (Relic r : allRelics()) {
+            if (r.name.equals(name)) return r;
+        }
+        return BURNING_BLOOD.name.equals(name) ? BURNING_BLOOD : null;
     }
 
 

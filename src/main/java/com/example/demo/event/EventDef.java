@@ -1,5 +1,10 @@
 package com.example.demo.event;
 
+import com.example.demo.character.Player;
+import com.example.demo.character.Relic;
+import com.example.demo.character.RelicFun;
+
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -14,6 +19,12 @@ public class EventDef {
         DAMAGE,        // 扣血（amount = 扣多少）
         ADD_CARD,      // 往牌组加一张随机牌
         ADD_RELIC,     // 获得一件未持有的随机遗物
+        /**
+         * 获得<b>指定名字</b>的遗物（{@link Option#relicName}）。
+         * 专门给「猪雪峰」这种「三选一固定三件专属遗物」的事件用 ——
+         * 那三件不在任何抽取池里，只能这样点名发放。
+         */
+        ADD_NAMED_RELIC,
         NOTHING        // 无事发生
     }
 
@@ -23,29 +34,51 @@ public class EventDef {
         public final String effectDesc; // “选项实际效果”文字（显示在选项里）
         public final Action action;     // 真实效果种类
         public final int amount;        // 效果数值（HEAL/DAMAGE 用）
+        /** 只在 {@link Action#ADD_NAMED_RELIC} 时有效：要点名发放的遗物名字 */
+        public final String relicName;
 
         public Option(String label, String effectDesc, Action action, int amount) {
+            this(label, effectDesc, action, amount, null);
+        }
+
+        public Option(String label, String effectDesc, Action action, int amount, String relicName) {
             this.label = label;
             this.effectDesc = effectDesc;
             this.action = action;
             this.amount = amount;
+            this.relicName = relicName;
         }
     }
 
     public final String name;
     public final String desc;
     public final List<Option> options;
+    /**
+     * 事件专属背景图的文件名（相对 {@code /com/example/demo/}）。
+     * 为 null 时 {@link EventView} 退回通用的 {@code event_bg.png}。
+     */
+    public final String bgName;
 
     public EventDef(String name, String desc, List<Option> options) {
+        this(name, desc, options, null);
+    }
+
+    public EventDef(String name, String desc, List<Option> options, String bgName) {
         this.name = name;
         this.desc = desc;
         this.options = options;
+        this.bgName = bgName;
     }
 
     // ================= 事件池（进事件节点时随机挑一个） =================
 
-    public static List<EventDef> pool() {
-        return List.of(
+    /**
+     * 常规事件池 —— {@link #pick(Player)} 默认在里面挑。
+     *
+     * <p>⚠ 猪雪峰<b>不在</b>这里：它一局只出一次、概率还低，
+     * 由 {@link #pick(Player)} 单独掷一次骰子决定出不出。</p>
+     */
+    private static final List<EventDef> NORMAL_POOL = List.of(
                 new EventDef("岔路口的雕像",
                         "一尊古老的石像立在路中间，底座刻着几行模糊的字："
                                 + "“向它献上你的血，它将予你回应。”雕像的眼窝似乎亮了一下。",
@@ -73,5 +106,75 @@ public class EventDef {
                                 new Option("无视摊主", "径直走开", Action.NOTHING, 0)
                         ))
         );
+
+    // ================= 猪雪峰（一局只出一次的低概率专属事件） =================
+
+    /** 猪雪峰的出现概率（每次进事件节点掷一次；已经出过就直接跳过） */
+    private static final double XUEFENG_CHANCE = 0.15;
+
+    /**
+     * 猪雪峰：三选一，拿走「猪爆气 / 猪冰棍 / 猪疾速」中的一件。
+     *
+     * <p>这三件遗物<b>只能通过本事件获得</b>（见 {@code Relic.XUEFENG_RELICS}），
+     * 所以这里用 {@code ADD_NAMED_RELIC} 点名发放，而不是走随机池。</p>
+     */
+    public static final EventDef XUEFENG = new EventDef(
+            "猪雪峰",
+            "你在猪塔中探索，发现了一个奇特的雕像。\n"
+                    + "像是一头天使猪站在雪峰上的雕像。\n"
+                    + "你从中吸取到了一些力量",
+            List.of(
+                    new Option("拿起猪爆气",
+                            "战斗开始时，对自身造成不可格挡的 2 点伤害，对怪物造成 13 点伤害",
+                            Action.ADD_NAMED_RELIC, 0, "猪爆气"),
+                    new Option("拿起猪冰棍",
+                            "战斗的前两回合开始时额外获得 1 点能量",
+                            Action.ADD_NAMED_RELIC, 0, "猪冰棍"),
+                    new Option("拿起猪疾速",
+                            "战斗开始时获得 1 点敏捷；篝火的「休息」改为「练起来」，不回血，"
+                                    + "改为使本遗物提供的敏捷 +1",
+                            Action.ADD_NAMED_RELIC, 0, "猪疾速")
+            ),
+            "encounter/xuefeng.png");   // 专属背景
+
+    /**
+     * 进事件节点时挑一个事件。
+     *
+     * <p>猪雪峰是「一局一次 + 低概率」：先掷一次 {@link #XUEFENG_CHANCE} 的骰子，
+     * 中了就出它并把 {@link Player#xuefengSeen} 置位（本局不再出）；
+     * 没中就在常规池里均匀挑。</p>
+     *
+     * <p>已经出过的判据是「{@code xuefengSeen} 或已经持有三件之一」——
+     * 双保险：万一存档没记下 xuefengSeen（旧档），手上已经有遗物也足以说明来过了。</p>
+     *
+     * @param player 当前玩家（用于判断这局出没出过猪雪峰）；传 null 时只挑常规池
+     */
+    public static EventDef pick(Player player) {
+        if (!xuefengDone(player) && Math.random() < XUEFENG_CHANCE) {
+            player.xuefengSeen = true;
+            return XUEFENG;
+        }
+        return NORMAL_POOL.get((int) (Math.random() * NORMAL_POOL.size()));
+    }
+
+    private static boolean xuefengDone(Player player) {
+        return player != null && (player.xuefengSeen || RelicFun.hasXuefengRelic(player));
+    }
+
+    /**
+     * 全部事件（常规池 + 猪雪峰）。
+     *
+     * <p>存档按名字找回事件时要用它（{@code HelloApplication.findEvent}），
+     * 所以猪雪峰必须在里面；但别拿它去随机抽，那会让它跟常规事件等概率。</p>
+     */
+    public static List<EventDef> pool() {
+        List<EventDef> all = new ArrayList<>(NORMAL_POOL);
+        all.add(XUEFENG);
+        return all;
+    }
+
+    /** 按名字在点名发放的遗物里找（猪雪峰的三件）；找不到返回 null。 */
+    public static Relic relicNamed(String name) {
+        return Relic.findByName(name);
     }
 }

@@ -99,6 +99,15 @@ public class BattleView extends StackPane implements BattleState {
     private int enemyVulnerable = 0;
     private int enemyWeak = 0;
     private int pendingStrengthLoss = 0;
+    /** 玩家敏捷：每次获得格挡时额外 +敏捷（猪疾速等来源） */
+    private int playerDexterity = 0;
+    /**
+     * 赤牛：本场第一次攻击的额外伤害，用掉一次归零。
+     *
+     * <p>⚠ 只有真正打出攻击牌才消费（{@code CardPlay.play}），
+     * 悬停预览走的是 {@code CardPlay.dealAttackDamage}，碰不到这个字段。</p>
+     */
+    private int firstAttackBonus = 0;
     private boolean noDrawThisTurn = false;
 
     /**
@@ -332,6 +341,10 @@ public class BattleView extends StackPane implements BattleState {
 
         // 遗物战斗开始效果（请假条、小血瓶、忘情牛肉面、金刚杵）
         playerStrength += RelicFun.onBattleStart(player);
+        // 猪疾速：战斗开始时获得敏捷（1 + 篝火「练起来」累计的次数）
+        playerDexterity += RelicFun.battleStartDexterity(player);
+        // 赤牛：本场第一次攻击 +8（这里只登记，真正打出攻击牌时才消费）
+        firstAttackBonus = RelicFun.firstAttackBonus(player);
         // 请假条：设置怪物血量为 1
         if (RelicFun.isLeaveNoteActive(player)) {
             enemy.hp = 1;
@@ -341,6 +354,19 @@ public class BattleView extends StackPane implements BattleState {
         gameTimer.start();
         SoundFx.playAny(enemyOink());
         // 牛来的伤害不在这里结算 —— 它改成「每回合开始时」了，见 startPlayerTurn()
+
+        // 猪爆气：战斗开始时自损 2，并对怪物造成 13 点伤害。
+        // 伤害走的是和「牛来」完全一样的路子 —— damageEnemy()，先削怪物的格挡，
+        // 所以怪物带着初始格挡进场时这 13 点会被吃掉，不会直接掉本体血。
+        // 放在 startPlayerTurn() 之前（那是「第一回合开始」，这个效果属于「战斗开始」），
+        // 且必须等 initAnimators() 之后 —— 自损/受击要播动画。
+        if (!battleOver && RelicFun.hasPigBurst(player)) {
+            loseHp(RelicFun.pigBurstSelfDamage(), true);
+            if (!battleOver) {
+                damageEnemy(RelicFun.pigBurstEnemyDamage());
+            }
+        }
+
         if (!battleOver) {
             startPlayerTurn();
         }
@@ -649,6 +675,8 @@ public class BattleView extends StackPane implements BattleState {
         // 遗物额外能量（奴隶贩子颈环、古茶具套装、孙子兵法）。
         // 读的是「上一回合」的统计，所以必须在下面两行清零之前调。
         energy += RelicFun.extraEnergy(player, enemy, turn, attackCardsPlayedThisTurn > 0);
+        // 猪冰棍：战斗的前两回合开始时额外 +1 能量
+        energy += RelicFun.turnStartEnergy(player, turn);
         playedCardThisTurn = false;
         attackCardsPlayedThisTurn = 0;
         fanBonusApplied = false;
@@ -1067,6 +1095,29 @@ public class BattleView extends StackPane implements BattleState {
     }
 
     @Override
+    public int getDexterity() {
+        return playerDexterity;
+    }
+
+    @Override
+    public void gainDexterity(int amount) {
+        playerDexterity += amount;
+    }
+
+    @Override
+    public int consumeFirstAttackBonus() {
+        if (firstAttackBonus <= 0) return 0;
+        int b = firstAttackBonus;
+        firstAttackBonus = 0; // 一次性：取走即作废
+        return b;
+    }
+
+    @Override
+    public int peekFirstAttackBonus() {
+        return Math.max(0, firstAttackBonus);
+    }
+
+    @Override
     public int getWeakTurns() {
         return weakTurns;
     }
@@ -1136,8 +1187,10 @@ public class BattleView extends StackPane implements BattleState {
 
     @Override
     public void addBlock(int amount) {
-        if (amount > 0) SoundFx.play("GainDefense"); // 玩家获得格挡音效
-        playerBlock += amount;
+        if (amount <= 0) return; // 没真的获得格挡 → 也不该吃到敏捷加成
+        SoundFx.play("GainDefense"); // 玩家获得格挡音效
+        // 敏捷：每次获得格挡都额外 +敏捷层数（和力量加在攻击伤害上对称）
+        playerBlock += amount + playerDexterity;
     }
 
     /**
@@ -1744,6 +1797,10 @@ public class BattleView extends StackPane implements BattleState {
             pChips.getChildren().add(BattleUiFactory.statusChip("力", playerStrength, "#f59e0b",
                     "力量 +" + playerStrength + "：每段攻击伤害增加"));
         }
+        if (playerDexterity > 0) {
+            pChips.getChildren().add(BattleUiFactory.statusChip("敏", playerDexterity, "#0891b2",
+                    "敏捷 +" + playerDexterity + "：每次获得格挡时额外增加"));
+        }
         for (Map.Entry<Card.Kind, Integer> e : powerAmount.entrySet()) {
             PowerBadge badge = powerBadgeOf(e.getKey(), e.getValue());
             if (badge != null) {
@@ -1878,21 +1935,42 @@ public class BattleView extends StackPane implements BattleState {
     }
 
     /**
-     * 生成战斗中卡面用的描述文字：把攻击牌的基础伤害替换为实际伤害（含力量/虚弱/易伤）。
+     * 生成战斗中卡面用的描述文字：把卡面上的数值换成<b>这一刻真打出去会得到的值</b>。
      * <ul>
-     *   <li>普通攻击牌：用正则替换描述中基础伤害数值为 {@link CardPlay#dealAttackDamage} 的结果</li>
-     *   <li>全身撞击：追加“（造成 X 点伤害）”，X 为实际格挡+力量后的伤害值</li>
-     *   <li>非攻击牌：原样返回</li>
+     *   <li>攻击牌：描述里的基础伤害 → {@link CardPlay#dealAttackDamage} 的结果
+     *       （含力量 / 虚弱 / 易伤）<b>+ 赤牛的首攻加成</b></li>
+     *   <li>全身撞击：追加“（造成 X 点伤害）”，X 为格挡 + 力量（+ 赤牛）</li>
+     *   <li>带格挡的牌：描述里的「获得 N 点格挡」→ N + 敏捷</li>
      * </ul>
+     *
+     * <p>⚠ 这里<b>只准看、不准拿</b>：赤牛的加成是一次性的，必须用
+     * {@link #peekFirstAttackBonus()} 而不是 {@link #consumeFirstAttackBonus()} ——
+     * 卡面每帧都可能重建，取走的话鼠标划一下加成就没了。</p>
      */
     private String battleDesc(Card c) {
+        String desc = c.desc();
         boolean bodySlam = c.kind == Card.Kind.BODY_SLAM;
-        if (c.damage <= 0 && !bodySlam) return c.desc();
-        int actualDmg = CardPlay.dealAttackDamage(this, c);
-        if (bodySlam) {
-            return c.desc() + "（造成 " + actualDmg + " 点伤害）";
+
+        // ---- 伤害 ----
+        if (c.damage > 0 || bodySlam) {
+            int actualDmg = CardPlay.dealAttackDamage(this, c);
+            // 赤牛：只对攻击牌生效，且这里必须用 peek（不能消耗）
+            if (c.kind.type == Card.Type.ATTACK) {
+                actualDmg += peekFirstAttackBonus();
+            }
+            if (bodySlam) {
+                desc = desc + "（造成 " + actualDmg + " 点伤害）";
+            } else {
+                desc = desc.replaceFirst("\\b" + c.damage + "\\b", String.valueOf(actualDmg));
+            }
         }
-        return c.desc().replaceFirst("\\b" + c.damage + "\\b", String.valueOf(actualDmg));
+
+        // ---- 格挡：敏捷加在「每次获得格挡」上，卡面要跟着变 ----
+        if (c.block > 0 && playerDexterity > 0) {
+            desc = desc.replaceFirst("获得\\s*(\\d+)\\s*点格挡",
+                    "获得 " + (c.block + playerDexterity) + " 点格挡");
+        }
+        return desc;
     }
 
     private Button buildCardButton(Card c) {

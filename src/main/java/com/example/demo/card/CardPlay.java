@@ -56,12 +56,19 @@ public final class CardPlay {
             return;
         }
 
+        // 赤牛：本场第一次攻击 +8。
+        // ⚠ 必须在这里「取走」，不能写进 dealAttackDamage —— 那个方法也被卡面悬停预览
+        //   调用（把描述里的数值换成实际伤害），鼠标划一下就把一次性加成耗光了。
+        //   只对攻击牌生效；多段攻击（双重打击）只加在第一段上。
+        int firstBonus = (c.kind.type == Card.Type.ATTACK) ? s.consumeFirstAttackBonus() : 0;
+
         // 攻击：按段数结算，段间若战斗已结束（击杀）则停止
         if (c.damage > 0) {
             for (int i = 0; i < c.hits; i++) {
-                s.damageEnemy(dealAttackDamage(s, c));
+                s.damageEnemy(dealAttackDamage(s, c) + (i == 0 ? firstBonus : 0));
                 if (s.isBattleOver()) break;
             }
+            firstBonus = 0; // 已经用掉了，别在下面的特殊效果里再加一次
         }
 
         // 格挡：结算格挡值
@@ -107,7 +114,8 @@ public final class CardPlay {
                 s.addEnemyWeak(n);
                 s.addEnemyVulnerable(n);
             }
-            case BODY_SLAM -> s.damageEnemy(dealAttackDamage(s, c)); // 全身撞击：造成等同于当前格挡值的伤害
+            // 全身撞击：伤害 = 当前格挡（它 c.damage 为 0，所以赤牛的加成就在这里补上）
+            case BODY_SLAM -> s.damageEnemy(dealAttackDamage(s, c) + firstBonus);
             case LIMIT_BREAK -> s.gainStrength(s.getStrength()); // 突破极限：将你的力量翻倍
             case DEMON_FORM -> s.activatePower(c); // 恶魔形态：每回合增加力量
             case FEEL_NO_PAIN -> s.activatePower(c); // 无惧疼痛：每有一张牌被消耗获得格挡

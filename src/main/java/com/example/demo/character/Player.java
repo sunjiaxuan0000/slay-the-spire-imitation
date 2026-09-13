@@ -54,6 +54,20 @@ public class Player {
      */
     public boolean chaos = false;
 
+    /**
+     * 猪疾速：本局「练起来」累计起来的额外敏捷。
+     *
+     * <p>篝火处有这件遗物时，休息会被替换成「练起来」—— 不回血，改为这里 +1，
+     * 于是战斗开始获得的敏捷从 1 涨到 2、3……</p>
+     *
+     * <p>⚠ 状态记在 Player 上而不是 {@link Relic} 上：遗物对象是全局共享的单例，
+     * 记在遗物上会跨局残留。</p>
+     */
+    public int pigRushDex = 0;
+
+    /** 猪雪峰事件本局是否已经出现过（一局最多一次） */
+    public boolean xuefengSeen = false;
+
     public Player() {
         deck.addAll(starterDeck()); // 起始牌组
         relics.add(STARTER_RELIC); // 铁甲战猪固有初始遗物：燃烧之血（战斗结束回 6 血的被动，见 RelicFun.onBattleEnd）

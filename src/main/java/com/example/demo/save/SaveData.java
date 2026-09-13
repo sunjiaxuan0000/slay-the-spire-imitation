@@ -65,6 +65,10 @@ public final class SaveData {
     public boolean chaos;                // 混沌：本局地图变异
     public boolean restedAtCampfire;
     public int leaveNoteBattles;         // 请假条：剩余生效战斗场次
+    /** 猪疾速：本局在篝火「练起来」累计的额外敏捷 */
+    public int pigRushDex;
+    /** 猪雪峰：本局是否已经出过这个事件（一局只出一次） */
+    public boolean xuefengSeen;
 
     /** 牌组：每张牌写成 {@code "STRIKE"} 或 {@code "STRIKE+"}（末尾 + 表示已升级） */
     public final List<String> deck = new ArrayList<>();
@@ -133,6 +137,8 @@ public final class SaveData {
         s.chaos = player.chaos;
         s.restedAtCampfire = player.restedAtCampfire;
         s.leaveNoteBattles = player.leaveNoteBattles;
+        s.pigRushDex = player.pigRushDex;
+        s.xuefengSeen = player.xuefengSeen;
         for (Card c : player.deck) {
             s.deck.add(c.kind.name() + (c.upgraded ? "+" : ""));
         }
@@ -153,6 +159,8 @@ public final class SaveData {
         p.setProperty("chaos", Boolean.toString(s.chaos));
         p.setProperty("restedAtCampfire", Boolean.toString(s.restedAtCampfire));
         p.setProperty("leaveNoteBattles", Integer.toString(s.leaveNoteBattles));
+        p.setProperty("pigRushDex", Integer.toString(s.pigRushDex));
+        p.setProperty("xuefengSeen", Boolean.toString(s.xuefengSeen));
         p.setProperty("deck", String.join(",", s.deck));
         p.setProperty("relics", String.join(",", s.relics));
         p.setProperty("reward", String.join(",", s.reward));
@@ -193,6 +201,8 @@ public final class SaveData {
             s.chaos = Boolean.parseBoolean(p.getProperty("chaos", "false"));
             s.restedAtCampfire = Boolean.parseBoolean(p.getProperty("restedAtCampfire", "false"));
             s.leaveNoteBattles = Integer.parseInt(p.getProperty("leaveNoteBattles", "0"));
+            s.pigRushDex = Integer.parseInt(p.getProperty("pigRushDex", "0"));
+            s.xuefengSeen = Boolean.parseBoolean(p.getProperty("xuefengSeen", "false"));
             s.deck.addAll(splitList(p.getProperty("deck", "")));
             s.relics.addAll(splitList(p.getProperty("relics", "")));
             s.reward.addAll(splitList(p.getProperty("reward", "")));
@@ -233,6 +243,8 @@ public final class SaveData {
         p.chaos = chaos;
         p.restedAtCampfire = restedAtCampfire;
         p.leaveNoteBattles = leaveNoteBattles;
+        p.pigRushDex = pigRushDex;
+        p.xuefengSeen = xuefengSeen;
         return p;
     }
 
