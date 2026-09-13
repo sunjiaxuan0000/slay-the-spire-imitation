@@ -424,6 +424,25 @@ public class HelloApplication extends Application {
         hold.play();
     }
 
+    /**
+     * 本场战斗的洗牌种子 = 地图种子 + 当前节点坐标。
+     *
+     * <p>⚠ <b>必须带上 row/col</b>：每场战斗都是 {@code new Random(seed)}，
+     * 只用 {@code map.seed} 的话同一局里每一战的洗牌起点完全一样，
+     * 第 1 层和第 10 层会抽出一模一样的牌序。</p>
+     *
+     * <p>不用存进存档 —— 读档时 {@code map.seed} 和节点坐标都在，算出来还是同一个值，
+     * 所以重进战斗抽到的牌和上次完全一致（SL 刷不了起手）。</p>
+     */
+    private static long battleSeed(GameMap map) {
+        long s = map.seed;
+        if (map.current != null) {
+            s = s * 31 + map.current.row;
+            s = s * 31 + map.current.col;
+        }
+        return s;
+    }
+
     /** 战斗场景：顶�?HUD + 战斗主体，外面再包整页窗口层 */
     private void startBattle(Stage stage, GameMap map, Player player,
                              GameMap.NodeType type, Enemy enemy) {
@@ -467,7 +486,8 @@ public class HelloApplication extends Application {
                 SaveData.delete();       // 阵亡：这一局结束，存档作废
                 returnToMenu(stage);
             }
-        }, type == GameMap.NodeType.BOSS); // true=用 boss 战斗背景，否则 default 背景
+        }, type == GameMap.NodeType.BOSS,   // true=用 boss 战斗背景，否则 default 背景
+                battleSeed(map));           // 洗牌种子：SL 之后牌序不变
         activeBattle = battle;
 
         // 战斗胜利、三张奖励牌刚抽好 → 存档记成「已胜利，待领奖励」。

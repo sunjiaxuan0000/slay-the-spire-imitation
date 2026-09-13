@@ -90,7 +90,19 @@ public class BattleView extends StackPane implements BattleState {
     private final List<Card> draw = new ArrayList<>();
     private final List<Card> discard = new ArrayList<>();
     private final List<Card> hand = new ArrayList<>();
-    private final Random rnd = new Random();
+
+    /**
+     * 洗牌专用随机流：<b>带种子</b>，种子由「地图种子 + 当前节点坐标」算出（见
+     * {@code HelloApplication.battleSeed}）。同一场战斗重进多少次，抽到的牌序都一样 ——
+     * 这样 SL（存档读档）不会把牌序洗乱，玩家也没法靠退出重进刷起手。
+     *
+     * <p>⚠ 只准给洗牌用。战斗里其它随机（比如坚毅随机消耗手牌）走 {@link #miscRnd}，
+     * 否则洗牌结果会依赖「之前调用过几次随机」，改一处就全变。</p>
+     */
+    private final Random shuffleRnd;
+
+    /** 战斗内其它随机（坚毅随机消耗手牌等）：不可复现也无所谓，不参与洗牌。 */
+    private final Random miscRnd;
 
     private int energy = 3;
     private int playerBlock = 0;
@@ -247,12 +259,30 @@ public class BattleView extends StackPane implements BattleState {
 
     private Image battleBg;
 
+    /**
+     * 不指定种子的构造（开发者模式 / 自测用）：每次都是一条新的随机流，和改种子之前一样。
+     *
+     * <p>正式流程请走 {@link #BattleView(Player, RunHud, Enemy, java.util.function.Consumer,
+     * boolean, long)} 并传入战斗种子，否则 SL 之后牌序会变。</p>
+     */
     public BattleView(Player player, RunHud hud, Enemy enemy, Consumer<Boolean> onFinish,
                       boolean bossBattle) {
+        this(player, hud, enemy, onFinish, bossBattle, new Random().nextLong());
+    }
+
+    /**
+     * @param battleSeed 本场战斗的随机种子（地图种子 + 当前节点坐标算出来的那个）
+     */
+    public BattleView(Player player, RunHud hud, Enemy enemy, Consumer<Boolean> onFinish,
+                      boolean bossBattle, long battleSeed) {
         this.player = player;
         this.hud = hud;
         this.enemy = enemy;
         this.onFinish = onFinish;
+        // 两条流分开：洗牌那条必须可复现，misc 那条随便。
+        // misc 用 battleSeed 派生一个不同的值，保证两条流的序列不重合。
+        this.shuffleRnd = new Random(battleSeed);
+        this.miscRnd = new Random(battleSeed ^ 0x5DEECE66DL);
         this.deathOverlay = new DeathOverlay(enemy.name, () -> onFinish.accept(false));
         this.rewardOverlay = new RewardOverlay(() -> { rewardOverlay.hide(); onFinish.accept(true); });
 
@@ -336,8 +366,9 @@ public class BattleView extends StackPane implements BattleState {
         getChildren().addAll(pileOverlay, rewardOverlay, deathOverlay);
 
         // 开局
+        // 洗牌用种子流：牌组顺序（存档保序）+ 同一个种子 = 同一场战斗永远同一个牌序。
         draw.addAll(player.deck);
-        Collections.shuffle(draw, rnd);
+        Collections.shuffle(draw, shuffleRnd);
 
         // 遗物战斗开始效果（请假条、小血瓶、忘情牛肉面、金刚杵）
         playerStrength += RelicFun.onBattleStart(player);
@@ -753,7 +784,8 @@ public class BattleView extends StackPane implements BattleState {
             if (discard.isEmpty()) return null;
             draw.addAll(discard);
             discard.clear();
-            Collections.shuffle(draw, rnd);
+            // 同样是种子流：重进战斗后弃牌堆洗回来的顺序也不会变
+            Collections.shuffle(draw, shuffleRnd);
         }
         return draw.remove(draw.size() - 1);
     }
@@ -1311,7 +1343,7 @@ public class BattleView extends StackPane implements BattleState {
     @Override
        public void exhaustRandomHandCard() {
         if (hand.isEmpty()) return;   // 手牌为空：无目标，不做处理
-        Card c = hand.get(rnd.nextInt(hand.size()));
+        Card c = hand.get(miscRnd.nextInt(hand.size()));
         Point2D from = centerOfCardNode(c);
         hand.remove(c);
         playExhaustFx(c, from);
