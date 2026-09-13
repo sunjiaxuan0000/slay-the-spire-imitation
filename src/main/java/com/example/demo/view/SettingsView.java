@@ -10,6 +10,7 @@ import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Slider;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.image.Image;
 import javafx.scene.layout.Background;
 import javafx.scene.layout.BackgroundImage;
@@ -23,9 +24,10 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
+import javafx.stage.Stage;
 
 /**
- * 设置页面：音乐音量、音效音量、开发者模式开关。
+ * 设置页面：音乐音量、音效音量、开发者模式开关、全屏开关。
  *
  * 从主菜单的 set.png（设置）按钮进入，点“返回主菜单”或按 Esc 回去。
  * 改动会立刻生效，并自动存到用户目录的配置文件里（下次启动还记得）。
@@ -38,7 +40,7 @@ public class SettingsView extends StackPane {
     private final Label musicValue = new Label();
     private final Label sfxValue = new Label();
 
-    public SettingsView(Runnable onBack) {
+    public SettingsView(Runnable onBack, Stage stage) {
         // ---- 背景：沿用主菜单那张图，压暗一点让面板更清楚 ----
         Image bgImage = new Image(SettingsView.class.getResourceAsStream("/com/example/demo/start_menu.png"));
         setBackground(cover(bgImage));
@@ -99,6 +101,28 @@ public class SettingsView extends StackPane {
         HBox devRow = new HBox(14, devText, spacer(), devToggle);
         devRow.setAlignment(Pos.CENTER_LEFT);
 
+        // ---- 全屏 ----
+        Label fsTitle = new Label("全屏");
+        fsTitle.setTextFill(Color.WHITE);
+        fsTitle.setFont(Font.font(17));
+
+        Label fsHint = new Label("在全屏和窗口模式之间切换；退出全屏请点这个开关（Esc 已不再退出全屏）");
+        fsHint.setTextFill(Color.rgb(148, 163, 184));
+        fsHint.setFont(Font.font(12));
+
+        VBox fsText = new VBox(3, fsTitle, fsHint);
+
+        ToggleButton fsToggle = new ToggleButton();
+        fsToggle.setSelected(stage.isFullScreen());
+        styleFullScreenToggle(fsToggle);
+        fsToggle.setOnAction(e -> {
+            stage.setFullScreen(fsToggle.isSelected());
+            styleFullScreenToggle(fsToggle);
+        });
+
+        HBox fsRow = new HBox(14, fsText, spacer(), fsToggle);
+        fsRow.setAlignment(Pos.CENTER_LEFT);
+
         // ---- 返回 ----
         Button back = new Button("返回主菜单");
         back.setFont(Font.font(16));
@@ -136,6 +160,8 @@ public class SettingsView extends StackPane {
                 divider(),
                 devRow,
                 divider(),
+                fsRow,
+                divider(),
                 backBox,
                 tipBox
         );
@@ -143,6 +169,17 @@ public class SettingsView extends StackPane {
         setStyle("-fx-background-color: #0b1020;");
         getChildren().addAll(dim, panel);
         StackPane.setAlignment(panel, Pos.CENTER);
+    }
+
+    /** 全屏开关外观：开=绿色，关=灰色（和 DevModeSwitch 同一套配色） */
+    private static void styleFullScreenToggle(ToggleButton t) {
+        boolean on = t.isSelected();
+        t.setText(on ? "已开启" : "已关闭");
+        t.setFont(Font.font(15));
+        t.setPrefSize(110, 38);
+        // inline -fx-text-fill：不让 .toggle-button 的默认 CSS 把文字色改掉
+        t.setStyle("-fx-background-color: " + (on ? "#16a34a" : "#475569")
+                + "; -fx-text-fill: white; -fx-background-radius: 10; -fx-cursor: hand;");
     }
 
     /** 一行：名字 + 滑条 + 百分比 */

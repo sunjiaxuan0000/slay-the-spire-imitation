@@ -1,11 +1,15 @@
 package com.example.demo.view;
 
 import javafx.animation.ScaleTransition;
+import javafx.event.EventTarget;
 import javafx.geometry.Point2D;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.Cursor;
+import javafx.scene.Node;
+import javafx.scene.control.Button;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.text.Font;
 import javafx.scene.layout.Background;
 import javafx.scene.layout.BackgroundImage;
 import javafx.scene.layout.BackgroundPosition;
@@ -50,6 +54,15 @@ public class MainMenu extends Pane {
     private static final double EXIT_W_IMG = 300;
     // ================================================================================
 
+    // ===== 「放弃上局游戏」按钮（只在有存档时出现）：摆在「开始游戏」右边 =====
+    // 开始游戏占 x=60~580，所以这个按钮从 630 起，两者之间留 50px 空隙。
+    private static final double ABANDON_CX = 800;  // 按钮中心 X（背景图像素）
+    private static final double ABANDON_CY = 497;  // 与「开始游戏」同一水平线
+    private static final double ABANDON_W_IMG = 340;
+    private static final double ABANDON_H_IMG = 96;
+    private static final double ABANDON_FONT_IMG = 40; // 字号也按背景缩放，跟着窗口一起变大变小
+    // ================================================================================
+
     /** 一个图片按钮：图片里的一张图 + 它在背景图上的中心/宽度 + 点击动作。 */
     private static class ImageButton {
         final String name;
@@ -81,16 +94,44 @@ public class MainMenu extends Pane {
     private final Image bgImage;
     private final List<ImageButton> buttons = new ArrayList<>();
     private final List<Rectangle> debugRects = new ArrayList<>(); // 青色框：显示各按钮当前范围（F3）
+    private final Button abandonBtn; // 「放弃上局游戏」；没有存档时为 null
     private ImageButton hovered;
     private int selected = 0; // 方向键当前在调哪个按钮（Tab 切换）
 
+    /** 没有存档时的老写法：只有开始 / 设置 / 退出三个按钮。 */
     public MainMenu(Runnable onStartGame, Runnable onSettings, Runnable onExit) {
+        this(onStartGame, onSettings, onExit, null);
+    }
+
+    /**
+     * @param onAbandon 「放弃上局游戏」的点击动作；<b>传 null = 当前没有存档，不显示这个按钮</b>
+     */
+    public MainMenu(Runnable onStartGame, Runnable onSettings, Runnable onExit, Runnable onAbandon) {
         bgImage = new Image(MainMenu.class.getResourceAsStream("/com/example/demo/start_menu.png"));
         setBackground(buildBackground(bgImage));
 
         addButton("开始", "/com/example/demo/START.png", START_CX, START_CY, BUTTON_W_IMG, onStartGame);
         addButton("设置", "/com/example/demo/icons/set.png", SET_CX, SET_CY, SET_W_IMG, onSettings);
         addButton("退出", "/com/example/demo/icons/exit.png", EXIT_CX, EXIT_CY, EXIT_W_IMG, onExit);
+
+        // 有存档：在「开始游戏」右边再放一个「放弃上局游戏」。
+        // 它是个纯文字按钮（没有美术素材），位置和大小同样按背景图坐标换算，见 layoutAbandonButton。
+        if (onAbandon != null) {
+            abandonBtn = new Button("放弃上局游戏");
+            // 样式全部 inline 钉死：项目里的 .button 默认样式会盖掉代码里设的颜色
+            abandonBtn.setStyle(
+                    "-fx-background-color: rgba(127, 29, 29, 0.88);"
+                            + "-fx-text-fill: #fee2e2;"
+                            + "-fx-border-color: #f87171;"
+                            + "-fx-border-width: 2;"
+                            + "-fx-background-radius: 8;"
+                            + "-fx-border-radius: 8;");
+            abandonBtn.setCursor(Cursor.HAND);
+            abandonBtn.setOnAction(e -> onAbandon.run());
+            getChildren().add(abandonBtn);
+        } else {
+            abandonBtn = null;
+        }
 
         // 调试用的青色外框（默认隐藏，F3 打开），每个按钮一个，画在最上层方便对齐
         for (int i = 0; i < buttons.size(); i++) {
@@ -184,6 +225,49 @@ public class MainMenu extends Pane {
             box.setWidth(r.getWidth());
             box.setHeight(r.getHeight());
         }
+
+        layoutAbandonButton();
+    }
+
+    /**
+     * 摆放「放弃上局游戏」：位置 / 大小 / 字号同样按背景图的 cover 缩放系数换算，
+     * 所以窗口怎么拉伸，它和「开始游戏」的相对位置都不变。
+     *
+     * <p><b>夹回可见范围是必要的：</b>窗口比背景图更「高瘦」时，背景会被左右裁掉一截，
+     * 按背景坐标算出来的位置可能落到屏幕外 —— 那样按钮就点不到了。</p>
+     */
+    private void layoutAbandonButton() {
+        if (abandonBtn == null) return;
+        double paneW = getWidth();
+        double paneH = getHeight();
+        if (paneW <= 0 || paneH <= 0) return;
+
+        double scale = Math.max(paneW / bgImage.getWidth(), paneH / bgImage.getHeight());
+        double offsetX = (paneW - bgImage.getWidth() * scale) / 2;
+        double offsetY = (paneH - bgImage.getHeight() * scale) / 2;
+
+        double w = ABANDON_W_IMG * scale;
+        double h = ABANDON_H_IMG * scale;
+        abandonBtn.setPrefSize(w, h);
+        abandonBtn.setMinSize(w, h);
+        abandonBtn.setMaxSize(w, h);
+        abandonBtn.setFont(Font.font(ABANDON_FONT_IMG * scale));
+
+        double x = ABANDON_CX * scale + offsetX - w / 2;
+        double y = ABANDON_CY * scale + offsetY - h / 2;
+        x = Math.max(8, Math.min(x, paneW - w - 8)); // 别跑出屏幕
+        y = Math.max(8, Math.min(y, paneH - h - 8));
+        abandonBtn.setLayoutX(x);
+        abandonBtn.setLayoutY(y);
+    }
+
+    /** 一次鼠标事件的落点是不是在 node 上（含它的子节点，比如按钮里的文字）。 */
+    private static boolean isInside(EventTarget target, Node node) {
+        if (node == null || !(target instanceof Node start)) return false;
+        for (Node cur = start; cur != null; cur = cur.getParent()) {
+            if (cur == node) return true;
+        }
+        return false;
     }
 
     /** 算出某个按钮当前的窗口矩形（用来摆放、判断点击和悬停）。 */

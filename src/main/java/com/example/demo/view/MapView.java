@@ -56,8 +56,12 @@ public class MapView extends Pane {
         ICON_FILES.put(GameMap.NodeType.TREASURE, "icons/chest.png");
         ICON_FILES.put(GameMap.NodeType.EVENT,    "icons/encounter.png");
         ICON_FILES.put(GameMap.NodeType.START,    "icons/deep.png");    // 起点大图标
-        ICON_FILES.put(GameMap.NodeType.BOSS,     "icons/fishron.png"); // BOSS 大图标
+        // BOSS 不放在这张表里：它按本局的 BOSS 种类换图，见 iconFile()
     }
+
+    /** BOSS 节点图标：按本局 BOSS 种类二选一（猪龙鱼公爵 / 巨猪骑士） */
+    private static final String BOSS_ICON_DUKE = "icons/fishron.png";
+    private static final String BOSS_ICON_BOAR = "icons/guard.png";
 
     /** 图标尺寸：起点/BOSS 用大图标，其余普通大小 */
     private static double nodeDiameter(GameMap.NodeType t) {
@@ -70,8 +74,19 @@ public class MapView extends Pane {
         return in == null ? null : new Image(in);
     }
 
+    /** 节点图标资源（BOSS 不在表里，见 {@link #bossIconFile}）。 */
     private static String iconFile(GameMap.NodeType t) {
         return ICON_FILES.get(t);
+    }
+
+    /**
+     * BOSS 节点图标：按<b>本局的 BOSS 种类</b>二选一 ——
+     * 猪龙鱼公爵用 {@code fishron.png}、巨猪骑士用 {@code guard.png}。
+     *
+     * <p>这样地图上一眼就看得出这局的最终 BOSS 是谁，和真正进房打的那只也对得上。</p>
+     */
+    private static String bossIconFile(GameMap.BossKind kind) {
+        return (kind == GameMap.BossKind.BOAR) ? BOSS_ICON_BOAR : BOSS_ICON_DUKE;
     }
 
     // 各类型节点颜色（只有没图/老的起终点节点用）
@@ -96,9 +111,12 @@ public class MapView extends Pane {
         /** 图标画在这里 —— 混沌开关切换时只重画它，光环和尺寸都不用动 */
         private final StackPane iconHolder = new StackPane();
         private final double diameter;
+        /** BOSS 节点的图标（按本局 BOSS 种类定）；非 BOSS 节点用不到，为 null 即可 */
+        private final String bossIcon;
 
-        NodeView(GameMap.MapNode node, GameMap.NodeType display) {
+        NodeView(GameMap.MapNode node, GameMap.NodeType display, String bossIcon) {
             this.node = node;
+            this.bossIcon = bossIcon;
             this.diameter = nodeDiameter(display); // 大图标节点用大尺寸
             setPrefSize(diameter, diameter);
             setMaxSize(diameter, diameter);
@@ -126,7 +144,8 @@ public class MapView extends Pane {
          */
         void applyDisplay(GameMap.NodeType display) {
             iconHolder.getChildren().clear();
-            String icon = iconFile(display);
+            // BOSS 用本局定好的那只的图标，其余类型照表查
+            String icon = (display == GameMap.NodeType.BOSS) ? bossIcon : iconFile(display);
             if (icon != null) {
                 ImageView img = new ImageView(loadImage(icon));
                 img.setPreserveRatio(true);
@@ -275,7 +294,7 @@ public class MapView extends Pane {
         // 2) 节点图标（盖在连线上）
         for (List<GameMap.MapNode> rowNodes : map.floors) {
             for (GameMap.MapNode n : rowNodes) {
-                NodeView v = new NodeView(n, displayType(n));
+                NodeView v = new NodeView(n, displayType(n), bossIconFile(map.bossKind));
                 if (interactive) {
                     v.setOnMouseClicked(e -> click(n));
                 }

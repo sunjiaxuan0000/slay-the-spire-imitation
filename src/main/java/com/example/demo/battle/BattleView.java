@@ -224,6 +224,8 @@ public class BattleView extends StackPane implements BattleState {
     // 弹层（委托给 view 包）
     private final PileOverlay pileOverlay = new PileOverlay();
     private RewardOverlay rewardOverlay;
+    /** 「卡牌奖励已经抽好」的钩子（存档用），见 {@link #setOnRewardOffers} */
+    private Consumer<List<Card>> onRewardOffers;
     private final DeathOverlay deathOverlay;
     // 死亡演出
     private StackPane playerPortrait;
@@ -1645,6 +1647,17 @@ public class BattleView extends StackPane implements BattleState {
         });
     }
 
+    /**
+     * 设置「卡牌奖励已经抽好」的钩子（<b>存档用</b>）。
+     *
+     * <p>参数就是 {@link #showCardReward()} 抽到的那几张牌。存档把它们记下来，
+     * 读档回到选牌页时还是<b>同样的这几张</b> —— 不然玩家能靠「退出重进」
+     * 把奖励刷到自己满意为止。</p>
+     */
+    public void setOnRewardOffers(Consumer<List<Card>> hook) {
+        this.onRewardOffers = hook;
+    }
+
     /** 显示卡牌奖励选择 */
     private void showCardReward() {
 
@@ -1653,6 +1666,9 @@ public class BattleView extends StackPane implements BattleState {
         // 三连卡牌奖励共用同一份，改卡池只用改一处。
         // 精英战使用精英池（白 50% / 蓝 40% / 金 10%），普通战使用普通池（白 60% / 蓝 37% / 金 3%）。
         List<Card> offers = CardRewardPool.draw(CardRewardPool.rewardPool(), 3, enemy.isElite);
+
+        // 存档：记下「这场已经赢了」+ 抽到的奖励牌（读档会直接回到这个选牌页）
+        if (onRewardOffers != null) onRewardOffers.accept(offers);
 
         rewardOverlay.show(offers, (c, node) -> {
             player.deck.add(c);        // 数据照常即时结算（牌组数量随之更新）

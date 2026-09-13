@@ -81,10 +81,58 @@ public class GameMap {
     public final List<List<MapNode>> floors = new ArrayList<>(); // floors.get(row)
     public MapNode current = null;        // 玩家现在在哪（null = 还没出发）
 
-    private GameMap() {
+    /**
+     * 生成这张图的种子。
+     *
+     * <p><b>存档要用它：</b>地图是随机的，读档时如果重新随机就换了一张图，
+     * 存档里记的「第几层第几列」也就没了意义。存下种子、读档时
+     * {@code GameMap.generate(seed)}，就能拿回一模一样的那张图。</p>
+     */
+    public final long seed;
+
+    private GameMap(long seed) {
+        this.seed = seed;
         for (int i = 0; i < ROWS; i++) {
             floors.add(new ArrayList<>());
         }
+    }
+
+    /**
+     * 按名字取房间类型的中文显示名（存档摘要用）。
+     *
+     * <p>{@code NodeType.label} 是包内可见的，{@code save} 包拿不到，所以开这个口子。
+     * 名字不认识（比如旧存档、手改过）返回空串，调用方自己决定要不要显示。</p>
+     */
+    public static String typeLabel(String typeName) {
+        try {
+            return NodeType.valueOf(typeName).label;
+        } catch (RuntimeException e) {
+            return "";
+        }
+    }
+
+    /**
+     * 本局 BOSS 的种类。
+     *
+     * <p>在<b>生成地图的同时</b>就定下来，这样地图上的 BOSS 节点可以直接画出对应的图标
+     * （猪龙鱼公爵 / 巨猪骑士），而真正进 BOSS 房时遇到的也是同一只 ——
+     * 不会出现「地图上画着鱼、进去打的是猪」。</p>
+     */
+    public enum BossKind { DUKE, BOAR }
+
+    /**
+     * 本局的 BOSS 种类（同一种子 = 同一个 BOSS，读档也不会变）。
+     * 见 {@link BossKind}。
+     */
+    public BossKind bossKind = BossKind.DUKE;
+
+    /** 按「层 + 列」找回节点（读档用）；坐标越界或这一层没有该列时返回 null。 */
+    public MapNode nodeAt(int row, int col) {
+        if (row < 0 || row >= ROWS) return null;
+        for (MapNode n : floors.get(row)) {
+            if (n.col == col) return n;
+        }
+        return null;
     }
 
     // ================= 生成 =================
@@ -97,7 +145,7 @@ public class GameMap {
     /** 用固定种子生成（同一种子 = 同一张图，方便调试/复制每日挑战）。 */
     public static GameMap generate(long seed) {
         Random rnd = new Random(seed);
-        GameMap map = new GameMap();
+        GameMap map = new GameMap(seed);
 
         // ---- 第 1 步：每层摆节点 ----
         // 类型约束：不能“连续两个休息”或“连续两个精英”
@@ -145,6 +193,12 @@ public class GameMap {
         for (int row = 0; row < ROWS - 1; row++) {
             connectRows(map.floors.get(row), map.floors.get(row + 1), rnd);
         }
+
+        // ---- 第 3 步：定下本局的 BOSS ----
+        // ⚠ 放在最后：前面所有节点的生成都已经用完随机流了，这里再取一个
+        //   不会改变任何一层的布局 —— 同一个种子生成的地图和改动前完全一致。
+        map.bossKind = rnd.nextBoolean() ? BossKind.DUKE : BossKind.BOAR;
+
         return map;
     }
 

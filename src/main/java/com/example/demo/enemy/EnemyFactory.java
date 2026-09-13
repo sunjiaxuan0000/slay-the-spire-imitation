@@ -64,8 +64,47 @@ public final class EnemyFactory {
         return new BoomPig();
     }
 
-    /** BOSS 房：猪龙鱼公爵 / 巨猪骑士各 50% */
+    /** BOSS 房：猪龙鱼公爵 / 巨猪骑士各 50%（没有指定种类时的兜底） */
     public static Enemy boss() {
         return Math.random() < 0.5 ? new DukePorcodraco() : new GiantBoarKnight();
+    }
+
+    /**
+     * 按地图定好的种类出 BOSS。
+     *
+     * <p>种类在 {@link GameMap#generate(long)} 时就决定了，地图上 BOSS 节点的图标也按它画，
+     * 所以进战斗必须用同一个 —— 否则会「地图上画着鱼、进去打的是猪」。
+     * 传 {@code null} 时退回随机（和老的 {@link #boss()} 一样）。</p>
+     */
+    public static Enemy boss(GameMap.BossKind kind) {
+        if (kind == GameMap.BossKind.BOAR) return new GiantBoarKnight();
+        if (kind == GameMap.BossKind.DUKE) return new DukePorcodraco();
+        return boss();
+    }
+
+    /**
+     * 按名字重建一只敌人（<b>读档用</b>）。
+     *
+     * <p>存档会把敌人的名字一起记下来，就是为了读档时还能遇到<b>同一只</b>怪 ——
+     * 不然玩家打不过神风猪就退出去重进，刷到史莱姆为止，存档就成了刷怪器。</p>
+     *
+     * <p>名字为空或认不出来（比如旧存档、手改过）时退回随机：
+     * {@code boss=true} 走 BOSS 池，否则按层数走普通怪池 —— 也就是「新进这个节点」的结果。</p>
+     */
+    public static Enemy named(String name, int row, boolean boss) {
+        if (name != null && !name.isEmpty()) {
+            switch (name) {
+                case "史莱姆"     -> { return Slime.base(); }
+                case "大史莱姆"   -> { return Slime.big(); }
+                case "邪教猪"     -> { return CultistPig.base(); }
+                case "老兵邪教猪" -> { return CultistPig.veteran(); }
+                case "神风猪"     -> { return new BoomPig(); }
+                case "卫士猪"     -> { return new GuardPig(); }
+                case "猪龙鱼公爵" -> { return new DukePorcodraco(); }
+                case "巨猪骑士"   -> { return new GiantBoarKnight(); }
+                default -> { }
+            }
+        }
+        return boss ? boss() : normal(row);
     }
 }
