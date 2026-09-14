@@ -678,6 +678,11 @@ public class BattleView extends StackPane implements BattleState {
                 color = "#0284c7";
                 tip = "意图·潮湿：玩家费用 -" + s.value + "，下回合结束清除";
             }
+            case SPIT -> {
+                glyph = "黏";
+                color = "#16a34a";
+                tip = "意图·吐黏液：向抽牌堆塞入 " + s.value + " 张黏液";
+            }
             default -> {
                 glyph = "弱";
                 color = "#7c3aed";
@@ -1525,7 +1530,7 @@ public class BattleView extends StackPane implements BattleState {
         return switch (intent) {
             case ATTACK -> enemyOink();              // 出手叫声：BOSS 鱼龙叫 / 普通猪叫
             case DEFEND -> List.of("GainDefense");   // 复用已有的加盾音效
-            case BUFF, WEAKEN, REFLECT, RITUAL, CHARGE, WET -> List.of("zhou");
+            case BUFF, WEAKEN, REFLECT, RITUAL, CHARGE, WET, SPIT -> List.of("zhou");
             case EXPLODE -> List.of("GetHurt");
         };
     }
@@ -1581,6 +1586,12 @@ public class BattleView extends StackPane implements BattleState {
             case WET -> {
                 // 潮湿：标记，下回合玩家开始时扣费
                 wetTurns = 1;
+            }
+            case SPIT -> {
+                // 吐黏液：向玩家抽牌堆塞入黏液牌
+                for (int i = 0; i < s.value; i++) {
+                    draw.add(Card.slime());
+                }
             }
             case EXPLODE -> {
                 // 神风猪锁血后的最终一击：蓄势层数 × 每层伤害，正常扣格挡/血量，自爆后死亡

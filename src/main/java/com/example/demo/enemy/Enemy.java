@@ -22,7 +22,8 @@ public abstract class Enemy {
         RITUAL("仪式"),
         CHARGE("蓄势"),
         EXPLODE("自爆"),
-        WET("潮湿");
+        WET("潮湿"),
+        SPIT("吐黏液");
         public final String label;
         Intent(String label) { this.label = label; }
     }
@@ -232,6 +233,7 @@ public abstract class Enemy {
             case CHARGE -> s.intent.label + " +" + v + " 层";
             case EXPLODE -> s.intent.label + " " + explodeDamage();
             case WET -> s.intent.label + "减少我方" + v + "费用";
+            case SPIT -> s.intent.label + "向抽牌堆塞入" + v + "张黏液";
         };
     }
 
