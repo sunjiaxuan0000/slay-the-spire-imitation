@@ -13,7 +13,7 @@ public class FlashPig extends Enemy{
     }
     public boolean Dodge(){
         double evasion=Math.random();
-        if(evasion>0.6){
+        if(evasion>0.6 ){
             return true;
         }
         else{
