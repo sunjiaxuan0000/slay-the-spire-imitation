@@ -9,8 +9,9 @@ import com.example.demo.view.GameMap;
  *
  * 第 6 层起（row >= 5）分为两个池子：
  *   基础池：史莱姆 / 邪教猪（池内 6:4），合计生成概率随层数从 40% 线性递减到 20%；
- *   高级池：大史莱姆 / 老兵邪教猪 / 神风猪（池内 4:3:3），
- *           合计生成概率随层数从 60% 线性增大到 80%。
+ *   高级池合计生成概率随层数从 60% 线性增大到 80%。
+ *   row 5~11：大史莱姆 / 老兵邪教猪 / 神风猪（池内 4:3:3）；
+ *   row 12~16（后 5 层）：大史莱姆 / 老兵邪教猪 / 神风猪 / 海兵猪（池内 2:3:1:4）。
  */
 public final class EnemyFactory {
 
@@ -24,10 +25,17 @@ public final class EnemyFactory {
     /** 基础池内部：史莱姆 60% / 邪教猪 40% */
     private static final double BASE_SLIME_RATIO = 0.6;
 
-    // ===== 高级池内部权重：大史莱姆 4 : 老兵邪教猪 3 : 神风猪 3 =====
-    private static final double BIG_SLIME_WEIGHT = 0.4;
-    private static final double VETERAN_CULTIST_WEIGHT = 0.3;
+    // ===== 高级池权重 =====
+    // row 5~11：大史莱姆 4 : 老兵邪教猪 3 : 神风猪 3
+    private static final double MID_BIG_SLIME_W = 0.4;
+    private static final double MID_VETERAN_W = 0.3;
     // 剩余 0.3 为神风猪
+
+    // row 12~16（后 5 层）：大史莱姆 2 : 老兵邪教猪 3 : 神风猪 1 : 海兵猪 4
+    private static final double LATE_BIG_SLIME_W = 0.2;
+    private static final double LATE_VETERAN_W = 0.3;
+    private static final double LATE_BOOM_W = 0.1;
+    // 剩余 0.4 为海兵猪
 
     private EnemyFactory() {
     }
@@ -53,15 +61,20 @@ public final class EnemyFactory {
             return inPool < BASE_SLIME_RATIO ? Slime.base() : CultistPig.base();
         }
 
-        // 落入高级池：大史莱姆 4 / 老兵邪教猪 3 / 神风猪 3
+        // 落入高级池：后 5 层（row >= 12）用 2:3:1:4，其余用 4:3:3
         double inPool = Math.random();
-        if (inPool < BIG_SLIME_WEIGHT) {
-            return Slime.big();
+        if (row >= 12) {
+            // 大史莱姆 2 / 老兵邪教猪 3 / 神风猪 1 / 海兵猪 4
+            if (inPool < LATE_BIG_SLIME_W) return Slime.big();
+            if (inPool < LATE_BIG_SLIME_W + LATE_VETERAN_W) return CultistPig.veteran();
+            if (inPool < LATE_BIG_SLIME_W + LATE_VETERAN_W + LATE_BOOM_W) return new BoomPig();
+            return new SeaSoldierPig();
+        } else {
+            // 大史莱姆 4 / 老兵邪教猪 3 / 神风猪 3
+            if (inPool < MID_BIG_SLIME_W) return Slime.big();
+            if (inPool < MID_BIG_SLIME_W + MID_VETERAN_W) return CultistPig.veteran();
+            return new BoomPig();
         }
-        if (inPool < BIG_SLIME_WEIGHT + VETERAN_CULTIST_WEIGHT) {
-            return CultistPig.veteran();
-        }
-        return new BoomPig();
     }
 
     /** BOSS 房：猪龙鱼公爵 / 巨猪骑士各 50%（没有指定种类时的兜底） */
@@ -104,6 +117,7 @@ public final class EnemyFactory {
                 case "邪教猪"     -> { return CultistPig.base(); }
                 case "老兵邪教猪" -> { return CultistPig.veteran(); }
                 case "神风猪"     -> { return new BoomPig(); }
+                case "海兵猪"     -> { return new SeaSoldierPig(); }
                 case "卫士猪"     -> { return new GuardPig(); }
                 case "闪电猪"     -> { return new FlashPig(); }
                 case "猪龙鱼公爵" -> { return new DukePorcodraco(); }

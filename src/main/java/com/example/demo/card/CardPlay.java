@@ -119,6 +119,11 @@ public final class CardPlay {
             case LIMIT_BREAK -> s.gainStrength(s.getStrength()); // 突破极限：将你的力量翻倍
             case DEMON_FORM -> s.activatePower(c); // 恶魔形态：每回合增加力量
             case FEEL_NO_PAIN -> s.activatePower(c); // 无惧疼痛：每有一张牌被消耗获得格挡
+            case BARRIER -> s.activatePower(c); // 壁垒：你的回合开始时，格挡不再消失
+            case BERSERK -> {                   // 狂暴：自己获得易伤作为代价，每回合开始时 +1 能量
+                s.activatePower(c);
+                s.addPlayerVulnerable(c.upgraded ? 1 : 2);
+            }
             case TRUE_GRIT -> s.exhaustRandomHandCard(); // 坚毅：随机消耗手牌一张（会触发无惧疼痛联动）
             default -> {
             }

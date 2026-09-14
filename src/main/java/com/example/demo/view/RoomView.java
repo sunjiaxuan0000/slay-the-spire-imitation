@@ -330,7 +330,8 @@ public class RoomView extends StackPane {
                     if (!c.canUpgrade()) return "这张牌不能再强化";
                     Card up = c.upgrade();
                     return "升级后：" + up.name() + " —— " + up.desc();
-                });
+                },
+                true);                // 强化模式：隐藏不可强化的牌 + 显示「显示升级」开关
         getChildren().add(picker); // RoomView 是 StackPane：铺在最上层盖住整个房间
         picker.show();
     }
