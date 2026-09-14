@@ -2,6 +2,7 @@ package com.example.demo.enemy;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 /**
  * 战斗中怪物的抽象基类。
@@ -22,7 +23,8 @@ public abstract class Enemy {
         RITUAL("仪式"),
         CHARGE("蓄势"),
         EXPLODE("自爆"),
-        WET("潮湿");
+        WET("潮湿"),
+        SPIT("吐黏液");
         public final String label;
         Intent(String label) { this.label = label; }
     }
@@ -53,6 +55,58 @@ public abstract class Enemy {
 
     /** 反伤比例（0~1）：玩家对其造成伤害时反弹该比例的伤害，0 表示无反伤。子类在构造中设置。 */
     protected double reflectRate = 0;
+
+    /**
+     * 敌方敏捷：每次「获得格挡」时额外加上它（和玩家的敏捷对称）。
+     *
+     * <p>混沌猪的随机增益里有一个「敏捷 +6」，加了之后它的「加 10 格挡」就变成 16。</p>
+     */
+    protected int dexterity = 0;
+
+    // ===== 战斗种子（敌人的随机必须可复现，SL 刷不了） =====
+
+    /**
+     * 本场战斗的种子（= {@code HelloApplication.nodeSeed}，由 {@link #setBattleSeed} 注入）。
+     *
+     * <p>敌人自己的随机（混沌猪的随机增益、闪避判定）都从这里派生，
+     * 所以「读档重打这一战」拿到的增益顺序、闪避结果完全一样 —— 不能靠退出重进刷一个好 buff。</p>
+     */
+    private long battleSeed = 0;
+
+    /** 由 BattleView 在开战时注入本场战斗的种子 */
+    public void setBattleSeed(long seed) {
+        this.battleSeed = seed;
+    }
+
+    public long getBattleSeed() {
+        return battleSeed;
+    }
+
+    /**
+     * 派生第 {@code stream} 条随机流的第 {@code roll} 次取值。
+     *
+     * <p>同一个「战斗种子 + stream + roll」永远给同一个数。
+     * {@code roll} 是「这是第几次掷」—— 不带上它的话每次调用都返回同一个值。</p>
+     *
+     * <p>⚠ <b>必须先把种子搅匀（splitmix64）再交给 {@link Random}</b>：
+     * {@code roll} 是连续递增的，直接拿 {@code seed*31+roll} 当种子会得到一串
+     * <b>相邻</b>的种子，而 {@code Random} 在相邻种子下的 {@code nextDouble()}
+     * 是有偏的 —— 实测「40% 闪避」会跑成 43%（本项目踩过同样的坑）。
+     * 搅匀之后分布就正了。</p>
+     */
+    protected Random rng(int stream, int roll) {
+        return new Random(mix(battleSeed, stream, roll));
+    }
+
+    /** splitmix64 终混合：把 (seed, stream, roll) 搅成一个分布良好的新种子 */
+    private static long mix(long seed, int stream, int roll) {
+        long h = seed + 0x9E3779B97F4A7C15L;
+        h ^= (long) stream * 0x9E3779B97F4A7C15L;
+        h ^= (long) roll * 0xC2B2AE3D27D4EB4FL;
+        h = (h ^ (h >>> 30)) * 0xBF58476D1CE4E5B9L;
+        h = (h ^ (h >>> 27)) * 0x94D049BB133111EBL;
+        return h ^ (h >>> 31);
+    }
 
     /** 仪式：每回合开始自动增加的力量值，0 表示无仪式。由 RITUAL 意图激活。 */
     protected int ritualPower = 0;
@@ -121,6 +175,56 @@ public abstract class Enemy {
         return reflectRate;
     }
 
+    /** 敌方敏捷层数 */
+    public int getDexterity() {
+        return dexterity;
+    }
+
+    /** 叠加敌方敏捷（混沌猪的随机增益） */
+    public void gainDexterity(int n) {
+        dexterity += n;
+    }
+
+    /** DEFEND 意图实际获得的格挡 = 轮盘数值 + 敏捷 */
+    public int blockGain(int base) {
+        return base + dexterity;
+    }
+
+    // ===== BUFF 意图的结算（默认「力量 +value」，子类可覆写） =====
+
+    /**
+     * 结算一次 BUFF 意图。默认就是「力量 +value」。
+     *
+     * <p>混沌猪覆写它：每次随机挑一种增益（力量 / 仪式 / 敏捷 / 闪避 / 反伤）。</p>
+     *
+     * <p>⚠ 只有战斗层才能做的效果（比如「反伤持续 N 回合」要写 BattleView 的
+     * {@code reflectTurns}）不能在这里直接改 —— 用 {@link #grantReflectTurns} 挂个请求，
+     * BattleView 结算完 BUFF 会 {@link #consumeReflectTurns() 取走}。</p>
+     */
+    public void applyBuff(Step s) {
+        power += s.value;
+    }
+
+    /** BUFF 意图的说明文字（意图悬停 / 屏幕描述条用）。子类覆写成本怪的真实效果。 */
+    public String buffIntentTip() {
+        return "意图·强化：这个敌人将要为自己施加增益效果";
+    }
+
+    /** 待结算的反伤回合数（子类用 {@link #grantReflectTurns} 挂上，BattleView 取走） */
+    private int grantedReflectTurns = 0;
+
+    /** 子类请求给自己挂 {@code turns} 回合反伤（取较大值，不叠加） */
+    protected void grantReflectTurns(int turns) {
+        grantedReflectTurns = Math.max(grantedReflectTurns, turns);
+    }
+
+    /** 取走并清零待结算的反伤回合数（BattleView 在 BUFF 结算后调用） */
+    public int consumeReflectTurns() {
+        int n = grantedReflectTurns;
+        grantedReflectTurns = 0;
+        return n;
+    }
+
     /** 仪式每回合增加的力量值 */
     public int getRitualPower() {
         return ritualPower;
@@ -139,6 +243,11 @@ public abstract class Enemy {
     /** 闪避判定：返回 true 表示本次攻击被完全闪避（子类覆写） */
     public boolean dodge() {
         return false;
+    }
+
+    /** 闪避概率（百分比整数，只用于 UI 文案；子类按自己的实际概率覆写） */
+    public int dodgeChanceUi() {
+        return 40;
     }
 
     /** 立绘文件名（BigSlime 可复用史莱姆的图） */
@@ -224,14 +333,17 @@ public abstract class Enemy {
         int v = s.value;
         return switch (s.intent) {
             case ATTACK -> s.intent.label + " " + (baseAttackDamage(s) + power + ritualPower);
-            case DEFEND -> s.intent.label + " " + v;
-            case BUFF   -> s.intent.label + " 力量 +" + v;
+            // 格挡量走 blockGain：敏捷会加成（混沌猪的「加 10 格挡」在有敏捷时是 16）
+            case DEFEND -> s.intent.label + " " + blockGain(v);
+            // 交给子类：普通敌人是「力量 +N」，混沌猪是随机增益（具体哪一种看 buffIntentTip）
+            case BUFF   -> buffIntentTip();
             case WEAKEN -> s.intent.label + " 我方 " + v + " 回合";
             case REFLECT -> s.intent.label +"我方" + v + "回合";
             case RITUAL -> s.intent.label + " 每回合力量 +" + v;
             case CHARGE -> s.intent.label + " +" + v + " 层";
             case EXPLODE -> s.intent.label + " " + explodeDamage();
             case WET -> s.intent.label + "减少我方" + v + "费用";
+            case SPIT -> s.intent.label + "向抽牌堆塞入" + v + "张黏液";
         };
     }
 

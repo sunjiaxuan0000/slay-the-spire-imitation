@@ -2,16 +2,18 @@ package com.example.demo.enemy;
 
 import com.example.demo.view.GameMap;
 
+import java.util.Random;
+
 /**
  * 普通怪的生成规则集中在此，供战斗入口调用。
  *
- * 前 5 层（row 0~4）：只有基础池 —— 史莱姆 60% / 邪教猪 40%。
+ * 前 5 层（row 0~4）：只有基础池 —— 史莱姆 40% / 邪教猪 30% / 海兵猪 30%。
  *
  * 第 6 层起（row >= 5）分为两个池子：
- *   基础池：史莱姆 / 邪教猪（池内 6:4），合计生成概率随层数从 40% 线性递减到 20%；
+ *   基础池：史莱姆 / 邪教猪 / 海兵猪（池内 4:3:3），合计生成概率随层数从 40% 线性递减到 20%；
  *   高级池合计生成概率随层数从 60% 线性增大到 80%。
  *   row 5~11：大史莱姆 / 老兵邪教猪 / 神风猪（池内 4:3:3）；
- *   row 12~16（后 5 层）：大史莱姆 / 老兵邪教猪 / 神风猪 / 海兵猪（池内 2:3:1:4）。
+ *   row 12~16（后 5 层）：大史莱姆 / 老兵邪教猪 / 神风猪 / 猪？（池内 2:3:1:4）。
  */
 public final class EnemyFactory {
 
@@ -22,8 +24,10 @@ public final class EnemyFactory {
     private static final double BASE_RATE_HIGH = 0.4;
     private static final double BASE_RATE_LOW = 0.2;
 
-    /** 基础池内部：史莱姆 60% / 邪教猪 40% */
-    private static final double BASE_SLIME_RATIO = 0.6;
+    /** 基础池内部：史莱姆 40% / 邪教猪 30% / 海兵猪 30% */
+    private static final double BASE_SLIME_RATIO = 0.4;
+    private static final double BASE_CULTIST_RATIO = 0.3;
+    // 剩余 0.3 为海兵猪
 
     // ===== 高级池权重 =====
     // row 5~11：大史莱姆 4 : 老兵邪教猪 3 : 神风猪 3
@@ -31,11 +35,11 @@ public final class EnemyFactory {
     private static final double MID_VETERAN_W = 0.3;
     // 剩余 0.3 为神风猪
 
-    // row 12~16（后 5 层）：大史莱姆 2 : 老兵邪教猪 3 : 神风猪 1 : 海兵猪 4
+    // row 12~16（后 5 层）：大史莱姆 2 : 老兵邪教猪 3 : 神风猪 1 : 猪？ 4
     private static final double LATE_BIG_SLIME_W = 0.2;
     private static final double LATE_VETERAN_W = 0.3;
     private static final double LATE_BOOM_W = 0.1;
-    // 剩余 0.4 为海兵猪
+    // 剩余 0.4 为猪？
 
     private EnemyFactory() {
     }
@@ -45,8 +49,10 @@ public final class EnemyFactory {
         double roll = Math.random();
 
         if (row < UPGRADE_ROW) {
-            // 前 5 层：只有基础池
-            return roll < BASE_SLIME_RATIO ? Slime.base() : CultistPig.base();
+            // 前 5 层：只有基础池 — 史莱姆 40% / 邪教猪 30% / 海兵猪 30%
+            if (roll < BASE_SLIME_RATIO) return Slime.base();
+            if (roll < BASE_SLIME_RATIO + BASE_CULTIST_RATIO) return CultistPig.base();
+            return new SeaSoldierPig();
         }
 
         // 基础池概率：row 5 → 40%，逐层线性递减，末层（row = ROWS-1）→ 20%
@@ -56,19 +62,21 @@ public final class EnemyFactory {
         double advancedRate = 1.0 - baseRate; // 高级池：60% → 80%
 
         if (roll >= advancedRate) {
-            // 落入基础池：池内 6:4
+            // 落入基础池：池内 4:3:3 — 史莱姆 / 邪教猪 / 海兵猪
             double inPool = Math.random();
-            return inPool < BASE_SLIME_RATIO ? Slime.base() : CultistPig.base();
+            if (inPool < BASE_SLIME_RATIO) return Slime.base();
+            if (inPool < BASE_SLIME_RATIO + BASE_CULTIST_RATIO) return CultistPig.base();
+            return new SeaSoldierPig();
         }
 
         // 落入高级池：后 5 层（row >= 12）用 2:3:1:4，其余用 4:3:3
         double inPool = Math.random();
         if (row >= 12) {
-            // 大史莱姆 2 / 老兵邪教猪 3 / 神风猪 1 / 海兵猪 4
+            // 大史莱姆 2 / 老兵邪教猪 3 / 神风猪 1 / 猪？ 4
             if (inPool < LATE_BIG_SLIME_W) return Slime.big();
             if (inPool < LATE_BIG_SLIME_W + LATE_VETERAN_W) return CultistPig.veteran();
             if (inPool < LATE_BIG_SLIME_W + LATE_VETERAN_W + LATE_BOOM_W) return new BoomPig();
-            return new SeaSoldierPig();
+            return new MysteryPig();
         } else {
             // 大史莱姆 4 / 老兵邪教猪 3 / 神风猪 3
             if (inPool < MID_BIG_SLIME_W) return Slime.big();
@@ -82,9 +90,23 @@ public final class EnemyFactory {
         return Math.random() < 0.5 ? new DukePorcodraco() : new GiantBoarKnight();
     }
 
-    /** 精英房：卫士猪 / 闪电猪各 50% */
+    /** 精英房：卫士猪 / 闪电猪 / 混沌猪 各 1/3（无种子版本，自测用） */
     public static Enemy elite() {
-        return Math.random() < 0.5 ? new GuardPig() : new FlashPig();
+        return elite(new Random().nextLong());
+    }
+
+    /**
+     * 精英房：卫士猪 / 闪电猪 / 混沌猪 <b>等概率</b>（各 1/3）。
+     *
+     * <p>传节点种子：同一个精英节点重进（SL / 混沌改判后）遇到的还是同一只精英，
+     * 不能靠「退出重进」把混沌猪刷成卫士猪。</p>
+     */
+    public static Enemy elite(long seed) {
+        return switch (new Random(seed).nextInt(3)) {
+            case 0 -> new GuardPig();
+            case 1 -> new FlashPig();
+            default -> new ChaosPig();
+        };
     }
 
     /**
@@ -118,8 +140,10 @@ public final class EnemyFactory {
                 case "老兵邪教猪" -> { return CultistPig.veteran(); }
                 case "神风猪"     -> { return new BoomPig(); }
                 case "海兵猪"     -> { return new SeaSoldierPig(); }
+                case "猪？"       -> { return new MysteryPig(); }
                 case "卫士猪"     -> { return new GuardPig(); }
                 case "闪电猪"     -> { return new FlashPig(); }
+                case "混沌猪"     -> { return new ChaosPig(); }
                 case "猪龙鱼公爵" -> { return new DukePorcodraco(); }
                 case "巨猪骑士"   -> { return new GiantBoarKnight(); }
                 default -> { }

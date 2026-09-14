@@ -46,6 +46,7 @@ public class MapView extends Pane {
         ICON_FILES.put(GameMap.NodeType.REST,     "icons/rest.png");
         ICON_FILES.put(GameMap.NodeType.TREASURE, "icons/chest.png");
         ICON_FILES.put(GameMap.NodeType.EVENT,    "icons/encounter.png");
+        ICON_FILES.put(GameMap.NodeType.SHOP,     "icons/shop.png");
         ICON_FILES.put(GameMap.NodeType.START,    "icons/deep.png");    // 起点大图标
         // BOSS 不放在这张表里：它按本局的 BOSS 种类换图，见 iconFile()
     }

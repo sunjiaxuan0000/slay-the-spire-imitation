@@ -151,10 +151,11 @@ public class GameMap {
         GameMap map = new GameMap(seed);
 
         // ---- 第 1 步：每层摆节点 ----
-        // 类型约束：不能“连续两个休息”或“连续两个精英”
-        //   prevRest/prevElite = 上一行是否出现过；curX = 本行已经出现过(同层不再放第二个)
+        // 类型约束：不能“连续两个休息” / “连续两个精英” / “连续两个商店”
+        //   prevXxx = 上一行是否出现过；curXxx = 本行已经出现过(同层不再放第二个)
         boolean prevRest = false;
         boolean prevElite = false;
+        boolean prevShop = false;
         int prevStart = 0; // 上一行连续列的起始列（用于“随机游走”，避免直上直下）
 
         for (int row = 0; row < ROWS; row++) {
@@ -179,17 +180,21 @@ public class GameMap {
 
             boolean curRest = false;
             boolean curElite = false;
+            boolean curShop = false;
             // 固定篝火层的下一层不允许出现篝火（避免“休息→休息”直连）
             boolean forceNoRest = (row == REST_ROW - 1);
             for (int c = start; c < start + count; c++) {
                 NodeType t = typeFor(row, rnd,
-                        forceNoRest || prevRest || curRest, prevElite || curElite);
+                        forceNoRest || prevRest || curRest, prevElite || curElite,
+                        prevShop || curShop);
                 if (t == NodeType.REST) curRest = true;
                 if (t == NodeType.ELITE) curElite = true;
+                if (t == NodeType.SHOP) curShop = true;
                 map.floors.get(row).add(new MapNode(row, c, t));
             }
             prevRest = curRest;
             prevElite = curElite;
+            prevShop = curShop;
         }
 
         // ---- 第 2 步：相邻两层连边（每层随机整体斜移，路线不再笔直） ----
@@ -212,14 +217,28 @@ public class GameMap {
     /** 休息(非固定层)最早出现的层：山脚前 4 层不刷篝火，避免过早休息 */
     private static final int MIN_REST_ROW = 5;
 
-    /** 给 row 层定类型。banRest/banElite 用于“不能连续两个休息/精英”。 */
-    private static NodeType typeFor(int row, Random rnd, boolean banRest, boolean banElite) {
+    /** 商店最早出现的层：山脚前 3 层不刷商店 */
+    private static final int MIN_SHOP_ROW = 3;
+
+    /** 商店的出现概率（百分比） */
+    private static final int SHOP_CHANCE = 12;
+
+    /** 给 row 层定类型。banRest/banElite/banShop 用于“不能连续两个休息/精英/商店”。 */
+    private static NodeType typeFor(int row, Random rnd, boolean banRest, boolean banElite,
+                                    boolean banShop) {
         if (row == TREASURE_ROW) return NodeType.TREASURE; // 第 9 层：固定宝箱层
         if (row == REST_ROW) return NodeType.REST;         // BOSS 前一层：固定篝火层
         if (row == 1) return NodeType.MONSTER;             // 起点后第一层只出普通怪（不出事件/休息）
-        if(row>=3&&row<REST_ROW&&rnd.nextInt(100)<12){
+
+        // 商店：过了山脚段才出现，且不能被禁用（防「连续两个商店」，和篝火同一套规则）。
+        // ⚠ 顺序要紧：先无条件取一次随机数、再判断禁用 —— 这样即使这家店被禁掉，
+        //    消耗的随机流和不禁用时完全一样。同一颗种子生成的地图，除了
+        //    「本该连续的那家店换个类型」之外不会有任何其它变化。
+        if (row >= MIN_SHOP_ROW && row < REST_ROW
+                && rnd.nextInt(100) < SHOP_CHANCE && !banShop) {
             return NodeType.SHOP;
         }
+
         int roll = rnd.nextInt(100);
 
         // 休息：只在过了山脚段出现，且不能被禁用（防连续）

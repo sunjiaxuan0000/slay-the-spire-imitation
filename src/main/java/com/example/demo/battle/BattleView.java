@@ -93,7 +93,7 @@ public class BattleView extends StackPane implements BattleState {
 
     /**
      * 洗牌专用随机流：<b>带种子</b>，种子由「地图种子 + 当前节点坐标」算出（见
-     * {@code HelloApplication.battleSeed}）。同一场战斗重进多少次，抽到的牌序都一样 ——
+     * {@code HelloApplication.nodeSeed}）。同一场战斗重进多少次，抽到的牌序都一样 ——
      * 这样 SL（存档读档）不会把牌序洗乱，玩家也没法靠退出重进刷起手。
      *
      * <p>⚠ 只准给洗牌用。战斗里其它随机（比如坚毅随机消耗手牌）走 {@link #miscRnd}，
@@ -103,6 +103,15 @@ public class BattleView extends StackPane implements BattleState {
 
     /** 战斗内其它随机（坚毅随机消耗手牌等）：不可复现也无所谓，不参与洗牌。 */
     private final Random miscRnd;
+
+    /**
+     * 本场战斗的种子（= {@code HelloApplication.nodeSeed}）。
+     *
+     * <p>留着它是因为战斗里还有别的「重进要一样」的随机：Boss 遗物、召唤铃铛的
+     * 三连候选。它们不能用 {@link #shuffleRnd}（会吃掉洗牌序列），所以各自
+     * {@code new Random(battleSeed 派生值)} 起一条新流。</p>
+     */
+    private final long battleSeed;
 
     private int energy = 3;
     private int playerBlock = 0;
@@ -286,6 +295,10 @@ public class BattleView extends StackPane implements BattleState {
         // misc 用 battleSeed 派生一个不同的值，保证两条流的序列不重合。
         this.shuffleRnd = new Random(battleSeed);
         this.miscRnd = new Random(battleSeed ^ 0x5DEECE66DL);
+        this.battleSeed = battleSeed;
+        // 敌人自己的随机（混沌猪的随机增益 / 闪避判定）也从这一份种子派生 ——
+        // 读档重打这一战，buff 顺序和闪避结果完全一致，刷不了。
+        enemy.setBattleSeed(battleSeed);
         this.deathOverlay = new DeathOverlay(enemy.name, () -> onFinish.accept(false));
         this.rewardOverlay = new RewardOverlay(() -> { rewardOverlay.hide(); onFinish.accept(true); });
 
@@ -646,7 +659,8 @@ public class BattleView extends StackPane implements BattleState {
             case BUFF -> {
                 glyph = "强";
                 color = "#d97706";
-                tip = "意图·强化：这个敌人将要为自己施加增益效果";
+                // 普通敌人给通用文案；混沌猪会明示这一回合抽到的具体增益
+                tip = enemy.buffIntentTip();
             }
             case REFLECT ->{
                 glyph="反";
@@ -677,6 +691,11 @@ public class BattleView extends StackPane implements BattleState {
                 glyph = "潮";
                 color = "#0284c7";
                 tip = "意图·潮湿：玩家费用 -" + s.value + "，下回合结束清除";
+            }
+            case SPIT -> {
+                glyph = "黏";
+                color = "#16a34a";
+                tip = "意图·吐黏液：向抽牌堆塞入 " + s.value + " 张黏液";
             }
             default -> {
                 glyph = "弱";
@@ -1504,7 +1523,7 @@ public class BattleView extends StackPane implements BattleState {
         enemy.checkPhaseTransition();
         if (enemy.isSecondPhase && !wasSecondPhase) {
             SoundFx.play("zhou"); // 二阶段变身音效
-            playPhaseTransition(this::performEnemyAction);
+            playPhaseTransition(this::afterEnemyAction);
         } else {
             performEnemyAction();
         }
@@ -1525,7 +1544,7 @@ public class BattleView extends StackPane implements BattleState {
         return switch (intent) {
             case ATTACK -> enemyOink();              // 出手叫声：BOSS 鱼龙叫 / 普通猪叫
             case DEFEND -> List.of("GainDefense");   // 复用已有的加盾音效
-            case BUFF, WEAKEN, REFLECT, RITUAL, CHARGE, WET -> List.of("zhou");
+            case BUFF, WEAKEN, REFLECT, RITUAL, CHARGE, WET, SPIT -> List.of("zhou");
             case EXPLODE -> List.of("GetHurt");
         };
     }
@@ -1572,8 +1591,15 @@ public class BattleView extends StackPane implements BattleState {
                     draw.add(Card.slime());
                 }
             }
-            case DEFEND -> enemy.block += s.value; // 音效由 enemySoundOf(DEFEND) 播放
-            case BUFF -> enemy.power += s.value;
+            // 格挡量走 enemy.blockGain()：敏捷会加成（混沌猪的「敏捷6」= 加 10 格挡变 16）
+            case DEFEND -> enemy.block += enemy.blockGain(s.value); // 音效由 enemySoundOf(DEFEND) 播放
+            case BUFF -> {
+                // 由敌人自己决定加什么：普通敌人 = 力量；混沌猪 = 力量/仪式/敏捷/闪避/反伤 五选一
+                enemy.applyBuff(s);
+                // 混沌猪若抽到「反伤」，把待生效的反伤回合数交给战斗层
+                int rt = enemy.consumeReflectTurns();
+                if (rt > 0) reflectTurns = Math.max(reflectTurns, rt);
+            }
             case WEAKEN -> weakTurns = Math.max(weakTurns, s.value);
             case REFLECT -> reflectTurns = Math.max(reflectTurns,s.value);
             case RITUAL -> enemy.setRitualPower(s.value);
@@ -1581,6 +1607,12 @@ public class BattleView extends StackPane implements BattleState {
             case WET -> {
                 // 潮湿：标记，下回合玩家开始时扣费
                 wetTurns = 1;
+            }
+            case SPIT -> {
+                // 吐黏液：向玩家抽牌堆塞入黏液牌
+                for (int i = 0; i < s.value; i++) {
+                    draw.add(Card.slime());
+                }
             }
             case EXPLODE -> {
                 // 神风猪锁血后的最终一击：蓄势层数 × 每层伤害，正常扣格挡/血量，自爆后死亡
@@ -1600,9 +1632,13 @@ public class BattleView extends StackPane implements BattleState {
                 return;    // 不再推进轮盘 / 开启玩家回合
             }
         }
+        afterEnemyAction();
+    }
+
+    /** 敌人行动完毕后：推进轮盘、刷新 UI、等待后回到玩家回合 */
+    private void afterEnemyAction() {
         if (enemyWeak > 0) enemyWeak--;
         enemy.advance();
-
         refreshAll();
         PauseTransition pause = new PauseTransition(Duration.millis(600));
         pause.setOnFinished(e -> {
@@ -1665,7 +1701,8 @@ public class BattleView extends StackPane implements BattleState {
         // Boss 战胜利：挑一个 Boss 遗物（池为空时跳过）。只挑不拿，见下面那行注释
         if (enemy.isBoss) {
             // 只「挑」不立刻入账 —— 真正入账要等玩家在获取界面上点「拾取」（见 showReward()）
-            bossRelicObtained = RelicFun.pickBossRelic(player);
+            // 传种子：重进这一战（或读档续上）拿到的是同一件 Boss 遗物，刷不了
+            bossRelicObtained = RelicFun.pickBossRelic(player, battleSeed * 31 + 11);
         }
         hud.refresh();
         playerAnim.stop();   // 冻结双方待机呼吸，交给倒地动画接管
@@ -1767,7 +1804,8 @@ public class BattleView extends StackPane implements BattleState {
      * 也就是玩家点「拾取」召唤铃铛的那一刻，不在这里。</p>
      */
     private void showBellRelicOffers() {
-        List<Relic> offers = RelicFun.pickEliteOptions(player, BELL_RELIC_OFFERS);
+        // 传种子：铃铛的三个候选跟着这一战走，重进 / 读档不会换人
+        List<Relic> offers = RelicFun.pickEliteOptions(player, BELL_RELIC_OFFERS, battleSeed * 31 + 12);
         showRelicOffers(offers, 0, this::showCardReward);
     }
 
@@ -1919,6 +1957,10 @@ public class BattleView extends StackPane implements BattleState {
             eChips.getChildren().add(BattleUiFactory.statusChip("力", enemy.power, "#f59e0b",
                     "力量：每段攻击伤害增加"+enemy.power+"点"));
         }
+        if (enemy.getDexterity() > 0) {
+            eChips.getChildren().add(BattleUiFactory.statusChip("敏", enemy.getDexterity(), "#0891b2",
+                    "敏捷 +" + enemy.getDexterity() + "：敌人每次获得格挡时额外增加"));
+        }
         if (enemyVulnerable > 0) {
             eChips.getChildren().add(BattleUiFactory.statusChip("伤", enemyVulnerable, "#dc2626",
                     "易伤： " + enemyVulnerable + " 回合内：承受伤害 ×1.5"));
@@ -1987,10 +2029,10 @@ public class BattleView extends StackPane implements BattleState {
                     "蓄势：每层蓄势造成 " + enemy.getChargeDamagePerStack()
                             + " 点自爆伤害（当前自爆伤害 " + enemy.explodeDamage() + "）"));
         }
-        // 闪电猪闪避：黄底白字圆形「闪」标
+        // 闪电猪 / 混沌猪闪避：黄底白字圆形「闪」标（概率按敌人自己的设定显示）
         if (enemy.hasDodge()) {
             eChips.getChildren().add(BattleUiFactory.statusChip("闪", "#facc15",
-                    "50%概率闪避攻击"));
+                    enemy.dodgeChanceUi() + "%概率闪避攻击"));
         }
         refreshIntent();
 

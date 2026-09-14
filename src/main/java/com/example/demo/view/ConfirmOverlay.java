@@ -66,8 +66,11 @@ public class ConfirmOverlay extends StackPane {
         msg.setMaxWidth(CARD_W - CARD_PAD * 2);
         msg.setStyle("-fx-text-fill: #cbd5e1;");
 
-        HBox buttons = new HBox(14, makeCancel(cancelText), makeOk(okText));
+        // 只给一个按钮的「纯提示」用法（cancelText 传 null）：不画那个空按钮
+        HBox buttons = new HBox(14);
         buttons.setAlignment(Pos.CENTER_RIGHT);
+        if (cancelText != null) buttons.getChildren().add(makeCancel(cancelText));
+        buttons.getChildren().add(makeOk(okText));
 
         card = new VBox(18, titleLabel, msg, buttons);
         card.setAlignment(Pos.CENTER_LEFT);

@@ -69,6 +69,38 @@ public final class CardRewardPool {
                 Card.barrier(), Card.berserk());
     }
 
+    /**
+     * 商店货架：从 {@link #rewardPool()} 里随机抽 {@code count} 张<b>互不重复</b>的牌。
+     *
+     * <p>和战斗奖励的区别：这里是<b>纯均匀随机</b>，不走品质概率 / 怜悯那一套 ——
+     * 商店里金卡应该少见是因为它贵，不是因为它抽不到。稀有度由
+     * {@code ShopView.cardPrice} 体现在价格上（越稀有越贵）。</p>
+     *
+     * <p>⚠ 会显式过滤掉<b>初始卡</b>（打击 / 防御 / 痛击）和
+     * <b>状态卡</b>（伤口 / 黏液）—— 那些不该出现在商店里。
+     * 现在 {@code rewardPool()} 本来就没有它们，但池子以后会加牌，这里兜一道更稳。</p>
+     */
+    public static List<Card> shopStock(int count, Random rnd) {
+        List<Card> pool = new ArrayList<>();
+        for (Card c : rewardPool()) {
+            if (isStarterOrStatus(c)) continue;
+            pool.add(c);
+        }
+        List<Card> out = new ArrayList<>();
+        for (int i = 0; i < count && !pool.isEmpty(); i++) {
+            out.add(pool.remove(rnd.nextInt(pool.size())));
+        }
+        return out;
+    }
+
+    /** 初始牌组的三张 + 状态牌：不进商店、也不该当奖励发 */
+    private static boolean isStarterOrStatus(Card c) {
+        if (c.kind.type == Card.Type.STATUS) return true;
+        return c.kind == Card.Kind.STRIKE
+                || c.kind == Card.Kind.DEFEND
+                || c.kind == Card.Kind.BASH;
+    }
+
     /** 当前怜悯偏移值（百分比），供显示 / 调试 */
     public static double pity() {
         return pity;
