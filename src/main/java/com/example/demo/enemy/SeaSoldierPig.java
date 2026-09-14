@@ -10,7 +10,7 @@ public class SeaSoldierPig extends Enemy{
            new Step(Intent.ATTACK,20),
            new Step(Intent.BUFF,3)
         ));
-        portraitName = "猪龙鱼公爵";  // 复用猪龙鱼公爵一阶段立绘
+        portraitName = "海兵猪";  //
         portraitSize = 180;              // 贴图更小
     }
 }
