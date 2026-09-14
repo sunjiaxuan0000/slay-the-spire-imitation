@@ -21,7 +21,7 @@ public class BoomPig extends Enemy {
     public static final int DAMAGE_PER_STACK = 16;
 
     public BoomPig() {
-        super("神风猪", 42, true, false, List.of(
+        super("神风猪", 56, true, false, List.of(
                 new Step(Intent.ATTACK, 10),
                 new Step(Intent.DEFEND, 5),
                 new Step(Intent.CHARGE, 1)
