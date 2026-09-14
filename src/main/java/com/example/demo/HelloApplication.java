@@ -1143,71 +1143,80 @@ public class HelloApplication extends Application {
      * 事件选项的结算结果：提示文字 + 一件「待玩家决定去留」的遗物（没有就为 null）。
      *
      * <p>遗物不在这里入账 —— 要等玩家在获取界面上点「拾取」。
-     * 所以 ADD_RELIC 分支只「挑」不「拿」，把遗物交给调用方去弹界面。</p>
+     * 所以 ADD_RELIC / ADD_NAMED_RELIC 分支只「挑」不「拿」，把遗物交给调用方去弹界面。</p>
      */
     private record EventOutcome(String message, Relic relic, Card gainedCard) {}
 
-    /** 结算事件选项的真实效果，返回提示文字（遗物只挑不拿，见 {@link EventOutcome}） */
+    /**
+     * 结算事件选项的全部效果（一个选项可含多个 {@link EventDef.Effect}），
+     * 返回 {@link EventOutcome}。
+     *
+     * <p>遗物同样「只挑不拿」—— 交给调用方 {@code offerRelic} 弹获取界面，
+     * 点了「拾取」才入账；获得的卡牌记进 {@code gainedCard}，
+     * 供调用方播「飞入牌组」的演出。</p>
+     */
     private EventOutcome applyEventOption(Player player, EventDef.Option opt) {
-        return switch (opt.action) {
-            case HEAL -> {
-                int before = player.hp();
-                player.heal(opt.amount);
-                yield new EventOutcome(
-                        "回复 " + opt.amount + " 点生命：" + before + " → " + player.hp(), null, null);
-            }
-            case DAMAGE -> {
-                int before = player.hp();
-                player.damage(opt.amount);
-                yield new EventOutcome(
-                        "失去 " + opt.amount + " 点生命：" + before + " → " + player.hp(), null, null);
-            }
-            case ADD_CARD -> {
-                // 数据照常即时入账；「飞入牌组」的演出交给调用方（要等回到地图才有牌组图标）
-                Card c = randomRewardCard();
-                player.deck.add(c);
-                yield new EventOutcome("获得卡牌：「" + c.name() + "」加入牌组（#" + c.id + "）", null, c);
-            }
-            case ADD_RELIC -> {
-                // 只挑不拿：等玩家在获取界面上点「拾取」才入账
-                Relic r = RelicFun.pickEventRelic(player);
-                yield r == null
-                        ? new EventOutcome("遗物池里已经没有新遗物了……", null, null)
-                        : new EventOutcome("发现遗物：「" + r.name + "」\n" + r.desc, r, null);
-            }
-            case RANDOM_WATER -> {
-                int before = player.hp();
-                if (Math.random() < 0.5) {
-                    player.heal(10);
-                    yield new EventOutcome(
-                            "你喝下泉水...运气不错，恢复 10 点生命：" + before + " → " + player.hp(),
-                            null, null);
-                } else {
-                    player.damage(10);
-                    yield new EventOutcome(
-                            "你喝下泉水...糟糕，失去 10 点生命：" + before + " → " + player.hp(),
-                            null, null);
+        StringBuilder msg = new StringBuilder();
+        Relic relic = null;      // 待玩家决定去留的遗物（最多一件）
+        Card gainedCard = null;  // 本次加入牌组的卡（供飞入演出，多张时播最后一张）
+
+        for (EventDef.Effect effect : opt.effects) {
+            switch (effect.action) {
+                case HEAL -> {
+                    int before = player.hp();
+                    player.heal(effect.amount);
+                    msg.append("回复 ").append(effect.amount).append(" 点生命：")
+                            .append(before).append(" → ").append(player.hp());
                 }
+                case DAMAGE -> {
+                    int before = player.hp();
+                    player.damage(effect.amount);
+                    msg.append("失去 ").append(effect.amount).append(" 点生命：")
+                            .append(before).append(" → ").append(player.hp());
+                }
+                case ADD_CARD -> {
+                    Card c = randomRewardCard();
+                    player.deck.add(c);
+                    gainedCard = c;
+                    msg.append("获得卡牌：「").append(c.name())
+                            .append("」加入牌组（#").append(c.id).append("）");
+                }
+                case ADD_RELIC -> {
+                    relic = RelicFun.pickEventRelic(player);
+                    msg.append(relic == null
+                            ? "遗物池里已经没有新遗物了……"
+                            : "发现遗物：「" + relic.name + "」\n" + relic.desc);
+                }
+                case ADD_NAMED_RELIC -> {
+                    relic = EventDef.relicNamed(effect.relicName);
+                    msg.append(relic == null
+                            ? "雕像上的力量已经散了……"
+                            : "发现遗物：「" + relic.name + "」\n" + relic.desc);
+                }
+                case ADD_WOUND -> {
+                    Card wound = Card.wound(); // 每次都新建一张"伤口"，不复用实例
+                    player.deck.add(wound);
+                    gainedCard = wound;
+                    msg.append("获得卡牌：「").append(wound.name()).append("」加入牌组");
+                }
+                case RANDOM_WATER -> {
+                    int before = player.hp();
+                    if (Math.random() < 0.5) {
+                        player.heal(20);
+                        msg.append("你喝下泉水...运气不错，恢复 20 点生命：")
+                                .append(before).append(" → ").append(player.hp());
+                    } else {
+                        player.damage(15);
+                        msg.append("你喝下泉水...糟糕，失去 15 点生命：")
+                                .append(before).append(" → ").append(player.hp());
+                    }
+                }
+                case NOTHING -> msg.append(opt.effectDesc).append("（无事发生）");
             }
-            case CURSE -> {
-                int before = player.hp();
-                player.damage(opt.amount);              // 扣血（amount = 10）
-                Card wound = Card.wound();              // 每次都新建一张"伤口"，不复用实例
-                player.deck.add(wound);
-                yield new EventOutcome("你感受到一股冰冷的力量涌入身体……\n"
-                        + "失去 " + opt.amount + " 点生命：" + before + " → " + player.hp() + "\n"
-                        + "获得卡牌：「" + wound.kind.label + "」加入牌组", null, wound);
-            }
-            case ADD_NAMED_RELIC -> {
-                // 猪雪峰：点名发放专属遗物（那三件不在任何抽取池里）。
-                // 同样「只挑不拿」—— 交给 offerRelic 弹获取界面，点了「拾取」才入账。
-                Relic r = Relic.findByName(opt.relicName);
-                yield r == null
-                        ? new EventOutcome("雕像上的力量已经散了……", null, null)
-                        : new EventOutcome("发现遗物：「" + r.name + "」\n" + r.desc, r, null);
-            }
-            case NOTHING -> new EventOutcome(opt.effectDesc + "（无事发生）", null, null);
-        };
+            msg.append("\n");
+        }
+
+        return new EventOutcome(msg.toString().trim(), relic, gainedCard);
     }
 
     /** 篝火（休息）节点：休息恢复 30% 最大生命，或强化一张牌（二选一） */
