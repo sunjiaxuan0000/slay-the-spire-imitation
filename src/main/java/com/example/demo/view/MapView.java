@@ -47,8 +47,12 @@ public class MapView extends Pane {
         ICON_FILES.put(GameMap.NodeType.TREASURE, "icons/chest.png");
         ICON_FILES.put(GameMap.NodeType.EVENT,    "icons/encounter.png");
         ICON_FILES.put(GameMap.NodeType.START,    "icons/deep.png");    // 起点大图标
-        ICON_FILES.put(GameMap.NodeType.BOSS,     "icons/fishron.png"); // BOSS 大图标
+        // BOSS 不放在这张表里：它按本局的 BOSS 种类换图，见 iconFile()
     }
+
+    /** BOSS 节点图标：按本局 BOSS 种类二选一（猪龙鱼公爵 / 巨猪骑士） */
+    private static final String BOSS_ICON_DUKE = "icons/fishron.png";
+    private static final String BOSS_ICON_BOAR = "icons/guard.png";
 
     /** 图标尺寸：起点/BOSS 用大图标，其余普通大小 */
     private static double nodeDiameter(GameMap.NodeType t) {
@@ -61,8 +65,19 @@ public class MapView extends Pane {
         return in == null ? null : new Image(in);
     }
 
+    /** 节点图标资源（BOSS 不在表里，见 {@link #bossIconFile}）。 */
     private static String iconFile(GameMap.NodeType t) {
         return ICON_FILES.get(t);
+    }
+
+    /**
+     * BOSS 节点图标：按<b>本局的 BOSS 种类</b>二选一 ——
+     * 猪龙鱼公爵用 {@code fishron.png}、巨猪骑士用 {@code guard.png}。
+     *
+     * <p>这样地图上一眼就看得出这局的最终 BOSS 是谁，和真正进房打的那只也对得上。</p>
+     */
+    private static String bossIconFile(GameMap.BossKind kind) {
+        return (kind == GameMap.BossKind.BOAR) ? BOSS_ICON_BOAR : BOSS_ICON_DUKE;
     }
 
     // 各类型节点颜色（只有没图/老的起终点节点用）
@@ -85,42 +100,65 @@ public class MapView extends Pane {
     private static class NodeView extends StackPane {
         final GameMap.MapNode node;
         final Circle ring = new Circle();   // 当前/可到达光环
+        /** 图标画在这里 —— 混沌开关切换时只重画它，光环和尺寸都不用动 */
+        private final StackPane iconHolder = new StackPane();
+        private final double diameter;
+        /** BOSS 节点的图标（按本局 BOSS 种类定）；非 BOSS 节点用不到，为 null 即可 */
+        private final String bossIcon;
 
-        NodeView(GameMap.MapNode node) {
+        NodeView(GameMap.MapNode node, GameMap.NodeType display, String bossIcon) {
             this.node = node;
-            double d = nodeDiameter(node.type); // 大图标节点用大尺寸
-            setPrefSize(d, d);
-            setMaxSize(d, d);
+            this.bossIcon = bossIcon;
+            this.diameter = nodeDiameter(display); // 大图标节点用大尺寸
+            setPrefSize(diameter, diameter);
+            setMaxSize(diameter, diameter);
 
-            String icon = iconFile(node.type);
-            if (icon != null) {
-                ImageView img = new ImageView(loadImage(icon));
-                img.setPreserveRatio(true);
-                img.setFitWidth(d);
-                img.setFitHeight(d);
-                img.setMouseTransparent(true);
-                getChildren().add(img);
-            } else {
-                // 兜底：彩色圆 + 字
-                StackPane disc = new StackPane();
-                disc.setPrefSize(d, d);
-                disc.setMaxSize(d, d);
-                disc.setStyle("-fx-background-color: " + colorOf(node.type)
-                        + "; -fx-background-radius: " + (d / 2) + ";");
-                Label glyph = new Label(node.type.glyph);
-                glyph.setTextFill(Color.WHITE);
-                glyph.setFont(Font.font(d / 3.0));
-                glyph.setStyle("-fx-font-weight: bold;");
-                disc.getChildren().add(glyph);
-                getChildren().add(disc);
-            }
+            iconHolder.setPrefSize(diameter, diameter);
+            iconHolder.setMaxSize(diameter, diameter);
+            iconHolder.setMouseTransparent(true);
+            getChildren().add(iconHolder);
+            applyDisplay(display);
 
             ring.setFill(null);
             ring.setStroke(null);
-            ring.setRadius(d / 2 + 5); // 比图标大一圈的光环
+            ring.setRadius(diameter / 2 + 5); // 比图标大一圈的光环
             ring.setStrokeWidth(3);
             ring.setMouseTransparent(true);
             getChildren().add(ring);
+        }
+
+        /**
+         * 按 {@code display} 重画图标（混沌开关切换时调）。
+         *
+         * <p>只换图不换尺寸：混沌影响的都是普通节点（{@link #NODE_SIZE}），
+         * 而「事件」图标同样走 {@link #NODE_SIZE}，所以 {@code diameter} 恒定，
+         * 光环半径和连线端点（{@link #relayout}）都不用跟着变。</p>
+         */
+        void applyDisplay(GameMap.NodeType display) {
+            iconHolder.getChildren().clear();
+            // BOSS 用本局定好的那只的图标，其余类型照表查
+            String icon = (display == GameMap.NodeType.BOSS) ? bossIcon : iconFile(display);
+            if (icon != null) {
+                ImageView img = new ImageView(loadImage(icon));
+                img.setPreserveRatio(true);
+                img.setFitWidth(diameter);
+                img.setFitHeight(diameter);
+                img.setMouseTransparent(true);
+                iconHolder.getChildren().add(img);
+            } else {
+                // 兜底：彩色圆 + 字
+                StackPane disc = new StackPane();
+                disc.setPrefSize(diameter, diameter);
+                disc.setMaxSize(diameter, diameter);
+                disc.setStyle("-fx-background-color: " + colorOf(display)
+                        + "; -fx-background-radius: " + (diameter / 2) + ";");
+                Label glyph = new Label(display.glyph);
+                glyph.setTextFill(Color.WHITE);
+                glyph.setFont(Font.font(diameter / 3.0));
+                glyph.setStyle("-fx-font-weight: bold;");
+                disc.getChildren().add(glyph);
+                iconHolder.getChildren().add(disc);
+            }
         }
     }
 
@@ -141,6 +179,8 @@ public class MapView extends Pane {
     private final Consumer<GameMap.NodeType> onArrive;
     private final ScrollPane scroll;
     private final boolean interactive;
+    private boolean devMode = false; // 开发者模式：任意节点可点（由设置页开关决定）
+    private boolean chaos = false;   // 混沌：非固定层节点统一画成「事件」图标
     private final List<NodeView> views = new ArrayList<>();
     private final List<Edge> edges = new ArrayList<>();
     private final Label header;
@@ -246,7 +286,7 @@ public class MapView extends Pane {
         // 2) 节点图标（盖在连线上）
         for (List<GameMap.MapNode> rowNodes : map.floors) {
             for (GameMap.MapNode n : rowNodes) {
-                NodeView v = new NodeView(n);
+                NodeView v = new NodeView(n, displayType(n), bossIconFile(map.bossKind));
                 if (interactive) {
                     v.setOnMouseClicked(e -> click(n));
                 }
@@ -259,8 +299,38 @@ public class MapView extends Pane {
     // ================= 状态刷新 =================
 
     private boolean reachable(GameMap.MapNode n) {
+        if (devMode) return true; // 开发者模式：任意节点都能进
         if (map.current == null) return n.row == 0;
         return map.current.next.contains(n);
+    }
+
+    /** 开发者模式：打开后可以直接点任意层级的节点进入（设置页里的开关决定） */
+    public void setDevMode(boolean on) {
+        this.devMode = on;
+        refresh();
+    }
+
+    /**
+     * 混沌：非固定层节点统一显示成「事件」图标（遗物「混沌」拾取后由外部打开）。
+     *
+     * <p>只改<b>画什么</b>：节点真正的 {@link GameMap.MapNode#type} 一个都不动，
+     * 所以进来之后走哪条路、能不能走，全都照旧。进入时随机变成哪种房间是
+     * {@code HelloApplication.handleArrive} 的事。</p>
+     *
+     * <p>可以在构造之后调（本方法会重画全部节点图标），调用方不必改构造函数。</p>
+     */
+    public void setChaos(boolean on) {
+        if (this.chaos == on) return;
+        this.chaos = on;
+        for (NodeView v : views) {
+            v.applyDisplay(displayType(v.node));
+        }
+        refresh();
+    }
+
+    /** 混沌下，非固定层节点一律显示成「事件」；固定层（起点/宝箱/篝火/BOSS）显示自身类型 */
+    private GameMap.NodeType displayType(GameMap.MapNode n) {
+        return chaos && !GameMap.isFixedRow(n.row) ? GameMap.NodeType.EVENT : n.type;
     }
 
     private void refresh() {
@@ -293,6 +363,13 @@ public class MapView extends Pane {
                         + map.current.type.label + "）");
             }
             hint.setText("滚轮滚动浏览地图 · Esc 返回");
+        } else if (devMode) {
+            // 开发者模式：任何节点都能点，提示文字也说清楚
+            header.setText(map.current == null
+                    ? "地图 · 开发者模式（点任意节点出发）"
+                    : "地图 · 第 " + (map.current.row + 1) + " / " + GameMap.ROWS + " 层（"
+                            + map.current.type.label + "）");
+            hint.setText("开发者模式：任意节点都可点击进入 · Esc 返回主菜单");
         } else if (map.current == null) {
             header.setText("地图 · 点击起点出发");
             hint.setText("滚轮上下浏览地图 · 白色光圈可走 · Esc 返回");

@@ -87,6 +87,15 @@ public final class BattleUiFactory {
 
     /** buff/debuff 图标 + 层数 */
     public static HBox statusChip(String glyph, int count, String color, String tip) {
+        return statusChip(glyph, String.valueOf(count), color, tip);
+    }
+
+    /** 无层数的能力图标（用于常驻能力牌，如残暴） */
+    public static HBox statusChip(String glyph, String color, String tip) {
+        return statusChip(glyph, null, color, tip);
+    }
+
+    private static HBox statusChip(String glyph, String count, String color, String tip) {
         StackPane icon = new StackPane();
         icon.setPrefSize(24, 24);
         icon.setMaxSize(24, 24);
@@ -97,16 +106,45 @@ public final class BattleUiFactory {
         g.setStyle("-fx-font-weight: bold;");
         icon.getChildren().add(g);
 
+        HBox chip = new HBox(3);
+        chip.setAlignment(Pos.CENTER_LEFT);
+        chip.setPickOnBounds(true); // 整个图标+数字区域都能触发悬停提示
+        chip.getChildren().add(icon);
+        if (count != null) {
+            Label n = new Label(count);
+            n.setTextFill(Color.WHITE);
+            n.setFont(Font.font(13));
+            n.setStyle("-fx-font-weight: bold;");
+            chip.getChildren().add(n);
+        }
+        attachHover(chip, tip); // Tooltip + 屏幕描述条
+        return chip;
+    }
+
+    /** 菱形状态标（神风猪蓄势专用）：方块旋转 45° 成菱形，内文反向旋转保持正立 */
+    public static HBox diamondChip(String glyph, int count, String color, String tip) {
+        StackPane icon = new StackPane();
+        icon.setPrefSize(24, 24);
+        icon.setMaxSize(24, 24);
+        icon.setStyle("-fx-background-color: " + color + "; -fx-background-radius: 4;");
+        icon.setRotate(45);
+        Label g = new Label(glyph);
+        g.setTextFill(Color.WHITE);
+        g.setFont(Font.font(12));
+        g.setStyle("-fx-font-weight: bold;");
+        g.setRotate(-45); // 抵消菱形旋转，文字保持正立
+        icon.getChildren().add(g);
+
+        HBox chip = new HBox(3);
+        chip.setAlignment(Pos.CENTER_LEFT);
+        chip.setPickOnBounds(true);
+        chip.getChildren().add(icon);
         Label n = new Label(String.valueOf(count));
         n.setTextFill(Color.WHITE);
         n.setFont(Font.font(13));
         n.setStyle("-fx-font-weight: bold;");
-
-        HBox chip = new HBox(3);
-        chip.setAlignment(Pos.CENTER_LEFT);
-        chip.setPickOnBounds(true); // 整个图标+数字区域都能触发悬停提示
-        chip.getChildren().addAll(icon, n);
-        attachHover(chip, tip); // Tooltip + 屏幕描述条
+        chip.getChildren().add(n);
+        attachHover(chip, tip);
         return chip;
     }
 
@@ -121,7 +159,10 @@ public final class BattleUiFactory {
         return p;
     }
 
-    /** 牌堆小图标（左下抽牌堆 / 右下弃牌堆），右下角带数量下标 */
+    /** 牌堆小图标（左下抽牌堆 / 右下弃牌堆），右下角带数量下标。
+     *  @param glyph 图标上的字（「抽」/「弃」）
+     *  @param color 字形颜色（十六进制，如 "#4a3624"）
+     */
     public static StackPane pileIcon(String glyph, String color) {
         StackPane icon = new StackPane();
         icon.setPrefSize(76, 100);
@@ -130,7 +171,7 @@ public final class BattleUiFactory {
         icon.setStyle("-fx-background-color: linear-gradient(to bottom right, #e5e7eb, #9ca3af); "
                 + "-fx-background-radius: 10;");
         Label g = new Label(glyph);
-        g.setTextFill(Color.rgb(55, 65, 81));
+        g.setTextFill(Color.web(color)); // 之前这里写死了深灰，参数一直没生效
         g.setFont(Font.font(26));
         g.setStyle("-fx-font-weight: bold;");
         StackPane.setAlignment(g, Pos.CENTER);

@@ -4,50 +4,65 @@ import com.example.demo.card.BattleState;
 import com.example.demo.card.Card;
 import com.example.demo.card.CardFaceView;
 import com.example.demo.card.CardPlay;
-import com.example.demo.card.CardView;
+import com.example.demo.card.CardRewardPool;
 import com.example.demo.character.Player;
 import com.example.demo.character.Relic;
+import com.example.demo.character.RelicFun;
 import com.example.demo.enemy.Enemy;
+import com.example.demo.enemy.GiantBoarKnight;
+import com.example.demo.sound.SoundFx;
 import com.example.demo.view.BattleUiFactory;
 import com.example.demo.view.DeathOverlay;
+import com.example.demo.view.CardFlyFx;
 import com.example.demo.view.PileOverlay;
+import com.example.demo.view.DeckPickOverlay;
 import com.example.demo.view.RewardOverlay;
+import com.example.demo.view.RelicObtainToast;
 import com.example.demo.view.SpriteAnimator;
 import com.example.demo.view.RunHud;
 
 import javafx.animation.*;
 import javafx.animation.AnimationTimer;
+import javafx.application.Platform;
+import javafx.beans.value.ChangeListener;
+import javafx.beans.value.ObservableValue;
+import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
+import javafx.geometry.Point2D;
 import javafx.geometry.Pos;
-import javafx.scene.control.Button;
-import javafx.scene.control.Label;
-import javafx.scene.control.Tooltip;
+import javafx.scene.Node;
+import javafx.scene.Scene;
+import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.layout.FlowPane;
-import javafx.scene.layout.HBox;
-import javafx.scene.layout.Pane;
-import javafx.scene.layout.StackPane;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Ellipse;
+import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
 import javafx.util.Duration;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
  * 回合制战斗界面（纯战斗逻辑 + 面板拼装）。
  *
- * 卡牌渲染委托 {@link CardView}，静态 UI 构件委托 {@link BattleUiFactory}，
+ * 卡牌渲染委托 {@link CardFaceView}，静态 UI 构件委托 {@link BattleUiFactory}，
  * 弹层（牌堆浏览/奖励/死亡）委托 view 包中各自的 Overlay 类。
  */
-public class BattleView extends javafx.scene.layout.StackPane implements BattleState {
+public class BattleView extends StackPane implements BattleState {
     private StackPane enemyPortrait;
     private ImageView enemyPortraitImg;
+    private double enemyPortraitSize = 210;  // 敌人立绘尺寸（BOSS 放大）
     private SpriteAnimator playerAnim;
     private SpriteAnimator enemyAnim;
     private long lastFrameTime = 0;
@@ -75,7 +90,19 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     private final List<Card> draw = new ArrayList<>();
     private final List<Card> discard = new ArrayList<>();
     private final List<Card> hand = new ArrayList<>();
-    private final Random rnd = new Random();
+
+    /**
+     * 洗牌专用随机流：<b>带种子</b>，种子由「地图种子 + 当前节点坐标」算出（见
+     * {@code HelloApplication.battleSeed}）。同一场战斗重进多少次，抽到的牌序都一样 ——
+     * 这样 SL（存档读档）不会把牌序洗乱，玩家也没法靠退出重进刷起手。
+     *
+     * <p>⚠ 只准给洗牌用。战斗里其它随机（比如坚毅随机消耗手牌）走 {@link #miscRnd}，
+     * 否则洗牌结果会依赖「之前调用过几次随机」，改一处就全变。</p>
+     */
+    private final Random shuffleRnd;
+
+    /** 战斗内其它随机（坚毅随机消耗手牌等）：不可复现也无所谓，不参与洗牌。 */
+    private final Random miscRnd;
 
     private int energy = 3;
     private int playerBlock = 0;
@@ -84,13 +111,91 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     private int enemyVulnerable = 0;
     private int enemyWeak = 0;
     private int pendingStrengthLoss = 0;
+    /** 玩家敏捷：每次获得格挡时额外 +敏捷（猪疾速等来源） */
+    private int playerDexterity = 0;
+    /**
+     * 赤牛：本场第一次攻击的额外伤害，用掉一次归零。
+     *
+     * <p>⚠ 只有真正打出攻击牌才消费（{@code CardPlay.play}），
+     * 悬停预览走的是 {@code CardPlay.dealAttackDamage}，碰不到这个字段。</p>
+     */
+    private int firstAttackBonus = 0;
     private boolean noDrawThisTurn = false;
-    private boolean brutality = false;
+
+    /**
+     * 已激活能力牌的效果总量（值即“每层效果之和”，升级版并入基础能力累加）。
+     * <p>如恶魔形态累加的是每回合力量总值（2/3），无惧疼痛累加的是每张消耗牌的格挡值（3/4），
+     * 残暴累加的是层数（每层 1）。LinkedHashMap 保持登记顺序。
+     */
+    private final Map<Card.Kind, Integer> powerAmount = new LinkedHashMap<>();
+
+    private record PowerBadge(String glyph, String color, String tip) {
+    }
+
     private int playerStrength = 0;
     private boolean playerTurn = true;
     private boolean battleOver = false;
     private boolean paused = false;
     private boolean pendingTurnStart = false;
+    // ---- 本回合出牌统计（每个玩家回合开始时在 startPlayerTurn() 里清零）----
+    // ⚠ 这几个字段以前只被清零、没有任何地方写过，于是「本回合出过牌吗」恒为 false，
+    //   孙子兵法因此每回合都白送 1 点能量。现在统一在 play() 里记录真实出牌。
+    private boolean playedCardThisTurn = false;
+    private boolean firstAttackUsed = false;
+    private boolean firstDamageTriggered = false;
+    private int attackCardsPlayedThisTurn = 0;
+    private boolean fanBonusApplied = false;
+    private int skillCardsPlayedThisTurn = 0;
+    private boolean letterOpenerUsed = false;
+    private Relic bossRelicObtained = null; // Boss 战获得的遗物
+
+    // ===== 卡牌飞行演出（抽牌 / 进弃牌堆 / 消耗） =====
+    /** 手牌卡面宽度（与 buildCardButton 保持一致） */
+    private static final double HAND_FACE_W = 128;
+    private static final double DRAW_FLY_MS = 280;     // 抽牌：单张飞入时长
+    private static final double DRAW_STAGGER_MS = 85;  // 连抽时每张之间的错峰
+    private static final double DISCARD_FLY_MS = 300;  // 飞入弃牌堆时长
+    private static final double DUMP_STAGGER_MS = 55;  // 回合结束整手弃牌的错峰
+    private static final double EXHAUST_FX_MS = 420;   // 消耗演出时长
+
+    /** 召唤铃铛一次给几个遗物机会（每个都是一张可拾取 / 可丢弃的获取界面） */
+    private static final int BELL_RELIC_OFFERS = 3;
+
+    /** 本轮新抽到、还没播“飞入”演出的牌（refreshAll 末尾统一消费） */
+    private final List<Card> pendingDrawFx = new ArrayList<>();
+
+    /**
+     * 正在等待 / 正在飞入的牌：这些牌的**真身**必须一直隐身，直到各自的 ghost 落位。
+     * <p>和 {@link #pendingDrawFx} 的区别：pendingDrawFx 在 flushDrawFx 里就清空了，
+     * 而本集合要一直留到 ghost 飞完 —— 因为错峰飞行期间手牌可能被 refreshAll 重建，
+     * 重建出来的新按钮默认是可见的，会把还没起飞的牌又亮出来。
+     */
+    private final Set<Card> drawFxInFlight = new LinkedHashSet<>();
+
+    /** 手牌按钮的基础 inline 样式 */
+    private static final String CARD_BTN_STYLE =
+            "-fx-background-color: transparent; -fx-padding: 0; -fx-cursor: hand;";
+
+    /**
+     * 手牌按钮的隐身样式。
+     *
+     * ★ 必须用 inline {@code -fx-opacity}，不能只用 {@code setOpacity(0)}：
+     * 抽牌演出期间 {@code animating=true} 会把所有手牌 {@code setDisable(true)}，
+     * 而 modena 对 {@code .button:disabled} 有 {@code -fx-opacity: 0.4}，
+     * CSS 优先级高于代码 setter，会把 setOpacity(0) 盖回去 ——
+     * 那正是“抽牌前先看到半透明真牌”的原因。
+     */
+    private static final String CARD_BTN_HIDDEN_STYLE = CARD_BTN_STYLE + " -fx-opacity: 0;";
+
+    /**
+     * 落位瞬间用的样式：全亮。
+     * 也要走 inline —— 演出还没结束，按钮仍是 :disabled，
+     * 一撤掉 inline 就会被 CSS 的 0.4 压暗，出现“亮一帧又变暗”的闪烁。
+     */
+    private static final String CARD_BTN_LANDED_STYLE = CARD_BTN_STYLE + " -fx-opacity: 1;";
+
+    /** 抽牌演出期间锁住出牌与“结束回合”，避免演出和玩家操作打架 */
+    private boolean animating = false;
 
     // ===== 动画已统一委托给 SpriteAnimator =====
 
@@ -98,28 +203,31 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     // 角色(左)
     private final Label pName = new Label(Player.CHARACTER_NAME);
     private final Label pHpText = new Label();
-    private final javafx.scene.layout.Region pHpFill = new javafx.scene.layout.Region();
-    private final javafx.scene.layout.StackPane pHpWrap = new javafx.scene.layout.StackPane();
-    private final javafx.scene.layout.StackPane pShield = new javafx.scene.layout.StackPane();
+    private final Region pHpFill = new Region();
+    private final StackPane pHpWrap = new StackPane();
+    private final StackPane pShield = new StackPane();
     private final Label pShieldNum = new Label();
     private final FlowPane pChips = new FlowPane(4, 4);
     // 怪物(右)
     private final Label eName = new Label();
-    private final javafx.scene.layout.StackPane eIntentIcon = new javafx.scene.layout.StackPane();
+    private final StackPane eIntentIcon = new StackPane();
     private final Label eIntentNum = new Label();
     private Tooltip eIntentTip; // 意图悬停描述（只建一次）
     private String currentIntentTip = ""; // 意图描述文字（供屏幕描述条用）
     private final Label hoverBar = new Label(); // 悬停描述条（屏幕上方显示）
     private final Label eHpText = new Label();
-    private final javafx.scene.layout.Region eHpFill = new javafx.scene.layout.Region();
-    private final javafx.scene.layout.StackPane eHpWrap = new javafx.scene.layout.StackPane();
-    private final javafx.scene.layout.StackPane eShield = new javafx.scene.layout.StackPane();
+    private final Region eHpFill = new Region();
+    private final StackPane eHpWrap = new StackPane();
+    private final StackPane eShield = new StackPane();
     private final Label eShieldNum = new Label();
     private final FlowPane eChips = new FlowPane(4, 4);
     // 左下角仪式状态栏
     private final Label ritualStatus = new Label();
     // 破甲状态栏（BOSS 二阶段）
     private final Label armorBreakStatus = new Label();
+    // 巨猪骑士：护甲状态栏 + 攻击数值构成（血条下方）
+    private final Label boarArmorStatus = new Label();
+    private final Label boarAttackInfo = new Label();
     // 中下
     private int turn = 0;
     private final Label turnLabel = new Label();
@@ -131,11 +239,14 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     // 牌堆图标 + 计数下标
     private final Label drawBadge = new Label();
     private final Label discardBadge = new Label();
-    private final javafx.scene.layout.StackPane drawIcon = BattleUiFactory.pileIcon("抽", "#78350f");
-    private final javafx.scene.layout.StackPane discardIcon = BattleUiFactory.pileIcon("弃", "#1e293b");
+    // 牌堆图标字形色：和卡面卡名 / 牌组图标「牌」统一用暖深咖 #4a3624
+    private final StackPane drawIcon = BattleUiFactory.pileIcon("抽", "#4a3624");
+    private final StackPane discardIcon = BattleUiFactory.pileIcon("弃", "#4a3624");
     // 弹层（委托给 view 包）
     private final PileOverlay pileOverlay = new PileOverlay();
     private RewardOverlay rewardOverlay;
+    /** 「卡牌奖励已经抽好」的钩子（存档用），见 {@link #setOnRewardOffers} */
+    private Consumer<List<Card>> onRewardOffers;
     private final DeathOverlay deathOverlay;
     // 死亡演出
     private StackPane playerPortrait;
@@ -148,12 +259,30 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
 
     private Image battleBg;
 
+    /**
+     * 不指定种子的构造（开发者模式 / 自测用）：每次都是一条新的随机流，和改种子之前一样。
+     *
+     * <p>正式流程请走 {@link #BattleView(Player, RunHud, Enemy, java.util.function.Consumer,
+     * boolean, long)} 并传入战斗种子，否则 SL 之后牌序会变。</p>
+     */
     public BattleView(Player player, RunHud hud, Enemy enemy, Consumer<Boolean> onFinish,
                       boolean bossBattle) {
+        this(player, hud, enemy, onFinish, bossBattle, new Random().nextLong());
+    }
+
+    /**
+     * @param battleSeed 本场战斗的随机种子（地图种子 + 当前节点坐标算出来的那个）
+     */
+    public BattleView(Player player, RunHud hud, Enemy enemy, Consumer<Boolean> onFinish,
+                      boolean bossBattle, long battleSeed) {
         this.player = player;
         this.hud = hud;
         this.enemy = enemy;
         this.onFinish = onFinish;
+        // 两条流分开：洗牌那条必须可复现，misc 那条随便。
+        // misc 用 battleSeed 派生一个不同的值，保证两条流的序列不重合。
+        this.shuffleRnd = new Random(battleSeed);
+        this.miscRnd = new Random(battleSeed ^ 0x5DEECE66DL);
         this.deathOverlay = new DeathOverlay(enemy.name, () -> onFinish.accept(false));
         this.rewardOverlay = new RewardOverlay(() -> { rewardOverlay.hide(); onFinish.accept(true); });
 
@@ -169,7 +298,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         deadDim.setVisible(false);
         getChildren().add(deadDim);
 
-        javafx.scene.layout.BorderPane main = new javafx.scene.layout.BorderPane();
+        BorderPane main = new BorderPane();
         main.setStyle("-fx-background-color: transparent;");
 
         HBox fighters = new HBox(10);
@@ -237,16 +366,41 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         getChildren().addAll(pileOverlay, rewardOverlay, deathOverlay);
 
         // 开局
+        // 洗牌用种子流：牌组顺序（存档保序）+ 同一个种子 = 同一场战斗永远同一个牌序。
         draw.addAll(player.deck);
-        Collections.shuffle(draw, rnd);
+        Collections.shuffle(draw, shuffleRnd);
 
-        if (hasRelic("保温杯")) {
-            player.heal(10);
-            hud.refresh();
+        // 遗物战斗开始效果（请假条、小血瓶、忘情牛肉面、金刚杵）
+        playerStrength += RelicFun.onBattleStart(player);
+        // 猪疾速：战斗开始时获得敏捷（1 + 篝火「练起来」累计的次数）
+        playerDexterity += RelicFun.battleStartDexterity(player);
+        // 赤牛：本场第一次攻击 +8（这里只登记，真正打出攻击牌时才消费）
+        firstAttackBonus = RelicFun.firstAttackBonus(player);
+        // 请假条：设置怪物血量为 1
+        if (RelicFun.isLeaveNoteActive(player)) {
+            enemy.hp = 1;
         }
+        hud.refresh();
         initAnimators();
         gameTimer.start();
-        startPlayerTurn();
+        SoundFx.playAny(enemyOink());
+        // 牛来的伤害不在这里结算 —— 它改成「每回合开始时」了，见 startPlayerTurn()
+
+        // 猪爆气：战斗开始时自损 2，并对怪物造成 13 点伤害。
+        // 伤害走的是和「牛来」完全一样的路子 —— damageEnemy()，先削怪物的格挡，
+        // 所以怪物带着初始格挡进场时这 13 点会被吃掉，不会直接掉本体血。
+        // 放在 startPlayerTurn() 之前（那是「第一回合开始」，这个效果属于「战斗开始」），
+        // 且必须等 initAnimators() 之后 —— 自损/受击要播动画。
+        if (!battleOver && RelicFun.hasPigBurst(player)) {
+            loseHp(RelicFun.pigBurstSelfDamage(), true);
+            if (!battleOver) {
+                damageEnemy(RelicFun.pigBurstEnemyDamage());
+            }
+        }
+
+        if (!battleOver) {
+            startPlayerTurn();
+        }
     }
 
     // ================= 动画（统一委托 SpriteAnimator） =================
@@ -257,12 +411,6 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         enemyAnim = new SpriteAnimator(enemyPortrait, false, 42, -32);
     }
 
-    private boolean hasRelic(String name) {
-        for (Relic r : player.relics) {
-            if (r.name.equals(name)) return true;
-        }
-        return false;
-    }
 
     // ================= 面板搭建 =================
 
@@ -339,21 +487,34 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         intentRow.setAlignment(Pos.CENTER);
         intentRow.getChildren().addAll(eIntentIcon, eIntentNum);
 
+        enemyPortraitSize = enemy.getPortraitSize();
         StackPane portrait;
-        if (enemy.hasPortrait) {
-            enemyPortraitImg = new ImageView();
-            Image img = new Image(getClass().getResourceAsStream("/com/example/demo/portrait/" + enemy.name + ".png"));
-            enemyPortraitImg.setImage(img);
-            enemyPortraitImg.setFitWidth(210);
-            enemyPortraitImg.setFitHeight(210);
+        // ⚠ 立绘文件缺失时 getResourceAsStream 返回 null，而 new Image(null) 会直接抛
+        //   NullPointerException("Input stream must not be null") —— 那会让「进战斗」这一步
+        //   直接崩掉（曾经因为 portraitName 和 portrait/ 下的文件名不一致踩过一次）。
+        //   所以先判空，缺图就退回「名字首字」占位。
+        InputStream rawPortrait = enemy.hasPortrait
+                ? getClass().getResourceAsStream(
+                        "/com/example/demo/portrait/" + enemy.getPortraitName() + ".png")
+                : null;
+        Image img = rawPortrait == null ? null : new Image(rawPortrait);
+        if (img != null && !img.isError()) {
+            enemyPortraitImg = new ImageView(img);
+            enemyPortraitImg.setFitWidth(enemyPortraitSize);
+            enemyPortraitImg.setFitHeight(enemyPortraitSize);
             enemyPortraitImg.setPreserveRatio(true);
             portrait = new StackPane(enemyPortraitImg);
         } else {
+            enemyPortraitImg = new ImageView(); // 字段保持非空：BOSS 二阶段的淡出动画会用到它
+            if (enemy.hasPortrait) {
+                System.out.println("[BattleView] 缺少立绘 portrait/" + enemy.getPortraitName()
+                        + ".png，改用名字首字占位");
+            }
             portrait = BattleUiFactory.portrait(enemy.name.substring(0, 1),
                     "radial-gradient(center 35% 30%, radius 100%, #6b7280, #1f2937);");
         }
-        portrait.setPrefSize(210, 210);
-        portrait.setMaxSize(210, 210);
+        portrait.setPrefSize(enemyPortraitSize, enemyPortraitSize);
+        portrait.setMaxSize(enemyPortraitSize, enemyPortraitSize);
         enemyPortrait = portrait;
 
         BattleUiFactory.hpWrap(eHpWrap, eHpFill, eHpText, 240, "#dc2626");
@@ -390,10 +551,24 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         armorBreakRow.setPrefWidth(286);
         armorBreakRow.getChildren().add(armorBreakStatus);
 
+        // 巨猪骑士：护甲栏（钢底白字）+ 攻击构成小字，均位于血条下方
+        boarArmorStatus.setTextFill(Color.WHITE);
+        boarArmorStatus.setFont(Font.font(13));
+        boarArmorStatus.setStyle("-fx-font-weight: bold; -fx-background-color: #475569; "
+                + "-fx-background-radius: 10; -fx-padding: 4 10 4 10;");
+        boarArmorStatus.setVisible(false);
+        boarAttackInfo.setTextFill(Color.rgb(203, 213, 225));
+        boarAttackInfo.setFont(Font.font(12));
+        boarAttackInfo.setVisible(false);
+        VBox boarInfo = new VBox(4);
+        boarInfo.setAlignment(Pos.CENTER_LEFT);
+        boarInfo.setPrefWidth(286);
+        boarInfo.getChildren().addAll(boarArmorStatus, boarAttackInfo);
+
         eChips.setPrefWrapLength(286);
         eChips.setAlignment(Pos.CENTER_LEFT);
 
-        box.getChildren().addAll(eName, intentRow, enemyPortrait, cluster, ritualRow, armorBreakRow, eChips);
+        box.getChildren().addAll(eName, intentRow, enemyPortrait, cluster, boarInfo, ritualRow, armorBreakRow, eChips);
         return box;
     }
 
@@ -419,7 +594,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         box.setAlignment(Pos.CENTER);
         box.setPadding(new Insets(6, 0, 4, 0));
 
-        pilesInfo.setTextFill(Color.rgb(148, 163, 184));
+        pilesInfo.setTextFill(Color.rgb(252, 240, 215));
         pilesInfo.setFont(Font.font(13));
 
         handBox.setAlignment(Pos.CENTER);
@@ -443,10 +618,22 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             case ATTACK -> {
                 glyph = "攻";
                 color = "#dc2626";
-                number = s.value + enemy.power;
+                // 预览值 = 基础攻击 + 当前力量 + 仪式力量（下回合开始仪式会先生效再攻击）
+                int previewPower = enemy.power + enemy.getRitualPower();
+                number = enemy.baseAttackDamage(s) + previewPower;
                 if (enemyWeak > 0) number = number * 3 / 4;
+                // 猪龙鱼公爵二阶段：玩家有格挡时攻击 ×1.6
+                if (enemy.isBoss && enemy.isSecondPhase && playerBlock > 0) {
+                    number = (int) Math.floor(number * 1.60);
+                }
                 tip = "意图·攻击：将对玩家造成 " + number + " 伤害"
                         + (enemyWeak > 0 ? "（虚弱 ×0.75）" : "");
+                if (enemy.isBoss && enemy.isSecondPhase && playerBlock > 0) {
+                    tip += "（破甲 ×1.6）";
+                }
+                if (enemy.cutsMaxHpOnAttack()) {
+                    tip += "；该攻击不扣血，改为削减 " + (number * 4 / 5) + " 点血量上限（80%）";
+                }
             }
             case DEFEND -> {
                 glyph = "防";
@@ -463,15 +650,25 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
                 color ="#9400D3";
                 tip="意图·反弹伤害："+s.value+" 回合内，当你攻击时，受到造成伤害30%的伤害";
             }
-            case SPIT -> {
-                glyph = "黏";
-                color = "#16a34a";
-                tip = "意图·吐黏液：向你的抽牌堆塞入 " + s.value + " 张黏液";
-            }
             case RITUAL -> {
                 glyph = "祭";
                 color = "#8b5cf6";
                 tip = "意图·仪式：每回合开始力量 +" + s.value;
+            }
+            case CHARGE -> {
+                glyph = "蓄";
+                color = "#b91c1c";
+                tip = "意图·蓄势：获得 " + s.value + " 层蓄势，每层使自爆伤害 +"
+                        + enemy.getChargeDamagePerStack()
+                        + "（当前自爆伤害 " + enemy.explodeDamage() + "）";
+            }
+            case EXPLODE -> {
+                glyph = "爆";
+                color = "#b91c1c";
+                number = enemy.explodeDamage();
+                tip = "意图·自爆：造成 " + number + " 点伤害（"
+                        + enemy.getChargeStacks() + " 层蓄势 × "
+                        + enemy.getChargeDamagePerStack() + "），自爆后死亡";
             }
             default -> {
                 glyph = "弱";
@@ -489,7 +686,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         eIntentIcon.getChildren().add(g);
 
         eIntentNum.setText(String.valueOf(number));
-        eIntentNum.setVisible(s.intent == Enemy.Intent.ATTACK);
+        eIntentNum.setVisible(s.intent == Enemy.Intent.ATTACK || s.intent == Enemy.Intent.EXPLODE);
         if (eIntentTip != null) eIntentTip.setText(tip); // 只更新文字，保证悬停稳定
         currentIntentTip = tip;                          // 供屏幕描述条使用
     }
@@ -506,17 +703,69 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         if (enemyVulnerable > 0) enemyVulnerable--;
         noDrawThisTurn = false;
         energy = 3;
+        // 遗物额外能量（奴隶贩子颈环、古茶具套装、孙子兵法）。
+        // 读的是「上一回合」的统计，所以必须在下面两行清零之前调。
+        energy += RelicFun.extraEnergy(player, enemy, turn, attackCardsPlayedThisTurn > 0);
+        // 猪冰棍：战斗的前两回合开始时额外 +1 能量
+        energy += RelicFun.turnStartEnergy(player, turn);
+        playedCardThisTurn = false;
+        attackCardsPlayedThisTurn = 0;
+        fanBonusApplied = false;
+        skillCardsPlayedThisTurn = 0;
+        letterOpenerUsed = false;
 
-        // 残暴：每回合开始失去 1 点生命，随后多抽 1 张
-        if (brutality && loseHp(1, true)) return;
+        // 残暴：每回合开始失去效果总量点生命，随后多抽等量张（可叠加）
+        int brutality = powerAmount.getOrDefault(Card.Kind.BRUTALITY, 0);
+        if (brutality > 0 && loseHp(brutality, true)) return;
+        
+        // 恶魔形态：每回合增加效果总量点力量
+        int demonForm = powerAmount.getOrDefault(Card.Kind.DEMON_FORM, 0);
+        if (demonForm > 0) gainStrength(demonForm);
 
-        drawHand(5 + (hasRelic("请假条") ? 1 : 0) + (brutality ? 1 : 0));
-
-        if (turn == 1 && hasRelic("青铜怀表")) {
-            playerBlock = 2;
+        // 牛来：每回合开始时对敌人造成 3 点伤害（先消耗敌人的护盾）。
+        // 放在残暴/恶魔形态之后 —— 残暴把自己扣死了就该直接结束回合，别再打这一下。
+        // 这一下可能打死怪物（victory）也可能被反伤打死（playerDied），两种都置 battleOver，
+        // 所以打完必须 return，否则会在战斗已经结束的情况下继续抽牌。
+        int niulai = RelicFun.turnStartDamage(player);
+        if (niulai > 0) {
+            damageEnemy(niulai);
+            if (battleOver) return;
         }
 
+        // 抽牌：第一回合优先抽入“固有”牌（占用抽牌数）
+        drawTurnStart(5 + brutality);
+
+        // 英雄宝典：第一回合添加免费能力牌
+        RelicFun.addTurnStartCards(player, hand, turn);
+
+        playerBlock += RelicFun.startBlock(player, turn);
+
+        // refreshAll() 末尾的 flushDrawFx() 会消费 pendingDrawFx 并排好飞入演出
         refreshAll();
+    }
+
+    /**
+     * 回合开始的抽牌：第一回合先把抽牌堆中的“固有”牌抽到手牌（占用抽牌数），余下名额再正常抽。
+     */
+    private void drawTurnStart(int n) {
+        if (noDrawThisTurn) return; // 与 drawHand 保持一致：本回合禁抽
+        int innateDrawn = (turn == 1) ? drawInnate(n) : 0;
+        drawHand(n - innateDrawn);
+    }
+
+    /** 抽取抽牌堆中的固有牌，最多 max 张，返回实际抽到的张数 */
+    private int drawInnate(int max) {
+        int drawn = 0;
+        Iterator<Card> it = draw.iterator();
+        while (it.hasNext() && drawn < max && hand.size() < HAND_LIMIT) {
+            Card c = it.next();
+            if (!c.isInnate()) continue;
+            it.remove();
+            hand.add(c);
+            pendingDrawFx.add(c); // 同样补“从抽牌堆飞入”的演出
+            drawn++;
+        }
+        return drawn;
     }
 
     private void drawHand(int n) {
@@ -526,6 +775,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             Card c = drawOne();
             if (c == null) break;
             hand.add(c);
+            pendingDrawFx.add(c); // 记下来，refreshAll 时补一段“从抽牌堆飞入”的演出
         }
     }
 
@@ -534,7 +784,8 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             if (discard.isEmpty()) return null;
             draw.addAll(discard);
             discard.clear();
-            Collections.shuffle(draw, rnd);
+            // 同样是种子流：重进战斗后弃牌堆洗回来的顺序也不会变
+            Collections.shuffle(draw, shuffleRnd);
         }
         return draw.remove(draw.size() - 1);
     }
@@ -543,9 +794,299 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
 
     /** 出牌入口薄壳：具体结算规则见 {@link CardPlay#play(Card, BattleState)}。 */
     private void play(Card c) {
-        if (!playerTurn || battleOver) return;
+        if (!playerTurn || battleOver || animating) return;
         if (c.cost < 0 || c.cost > energy) return;
+        // 本回合出牌统计：孙子兵法「上一回合没出攻击牌」的判定就靠 attackCardsPlayedThisTurn。
+        // 放在两个守卫之后 —— 出不起 / 动画中的点击不算「出过牌」。
+        playedCardThisTurn = true;
+        if (c.kind.type == Card.Type.ATTACK) {
+            attackCardsPlayedThisTurn++;
+        } else if (c.kind.type == Card.Type.SKILL) {
+            skillCardsPlayedThisTurn++;
+        }
+        // 先移出手牌进入“打出中”状态再结算：为效果生成的牌腾出槽位，
+        // 且结算中的抽牌不会把刚打出的牌从弃牌堆洗回。最终去向由 onCardPlayed 决定。
+        hand.remove(c);
         CardPlay.play(c, this);
+    }
+
+    // ================= 卡牌飞行演出 =================
+    //
+    // 做法：数据照常即时结算（抽/弃/消耗都不变），只是在“牌离开手牌”的瞬间
+    // 复制一张只用于观看的卡面（ghost）挂在棋盘上层，让它从起点飞到终点，
+    // 飞完就摘掉。所以演出永远不会影响战斗逻辑，中途被打断也不会出错。
+
+    /** 手牌里这张牌对应的按钮（用 Card 身份比较，同名牌互不干扰） */
+    private Node findCardNode(Card c) {
+        for (Node n : handBox.getChildren()) {
+            if (n.getUserData() == c) return n;
+        }
+        return null;
+    }
+
+    /** 节点中心 → BattleView 局部坐标（节点还没挂上场景时返回 null） */
+    private Point2D centerInLocal(Node n) {
+        if (n == null || n.getScene() == null) return null;
+        Bounds b = n.localToScene(n.getLayoutBounds());
+        if (b == null) return null;
+        return sceneToLocal(b.getMinX() + b.getWidth() / 2, b.getMinY() + b.getHeight() / 2);
+    }
+
+    /** 手牌中某张牌当前的中心点（拿不到就返回 null） */
+    private Point2D centerOfCardNode(Card c) {
+        return centerInLocal(findCardNode(c));
+    }
+
+    /** 造一张只用来飞的卡面：不吃鼠标事件，也不参与父容器布局 */
+    private static StackPane ghostOf(Card c) {
+        StackPane g = CardFaceView.buildAt(c, HAND_FACE_W);
+        g.setMouseTransparent(true);
+        g.setManaged(false);
+        return g;
+    }
+
+    /** 把飞行卡面挂到“棋盘之上、弹窗之下”，并摆在指定中心点上 */
+    private void mountGhost(StackPane g, Point2D center) {
+        double w = HAND_FACE_W, h = HAND_FACE_W * 1.4;
+        g.resize(w, h);
+        g.relocate(center.getX() - w / 2, center.getY() - h / 2);
+        int idx = getChildren().indexOf(pileOverlay);
+        if (idx < 0) getChildren().add(g);
+        else getChildren().add(idx, g);
+    }
+
+    private void unmountGhost(Node g) {
+        getChildren().remove(g);
+    }
+
+    /**
+     * 等“已挂上场景 + 布局完成”后再执行。
+     * 构造期会直接调 startPlayerTurn()，那时场景还没挂上、节点也还没布局，
+     * 拿不到坐标，必须推迟到第一帧之后。
+     */
+    private void afterLayout(Runnable r) {
+        if (getScene() == null) {
+            sceneProperty().addListener(new ChangeListener<Scene>() {
+                @Override
+                public void changed(ObservableValue<? extends Scene> o, Scene oldS, Scene newS) {
+                    if (newS == null) return;
+                    sceneProperty().removeListener(this);
+                    Platform.runLater(() -> runLaidOut(r));
+                }
+            });
+            return;
+        }
+        Platform.runLater(() -> runLaidOut(r));
+    }
+
+    /** 强制走一遍 CSS + 布局，保证接下来读到的坐标是最新的 */
+    private void runLaidOut(Runnable r) {
+        Scene s = getScene();
+        if (s == null) return;
+        if (s.getRoot() != null) {
+            s.getRoot().applyCss();
+            s.getRoot().layout();
+        }
+        r.run();
+    }
+
+    private static void delay(double ms, Runnable r) {
+        if (ms <= 0) { r.run(); return; }
+        PauseTransition wait = new PauseTransition(Duration.millis(ms));
+        wait.setOnFinished(e -> r.run());
+        wait.play();
+    }
+
+    // ---- 演出一：抽牌堆 → 手牌 ----
+
+    /** 待播的飞入演出统一在这里排出去（由 refreshAll 末尾调用） */
+    private void flushDrawFx() {
+        if (pendingDrawFx.isEmpty()) return;
+        List<Card> cards = new ArrayList<>(pendingDrawFx);
+        pendingDrawFx.clear();
+        drawFxInFlight.addAll(cards);
+
+        // 演出期间锁住出牌与“结束回合”，免得玩家点到一张还没落位的牌。
+        // 锁的时长跟真正的演出对齐（都放在 afterLayout 里起算），
+        // 这样首回合那种“场景还没挂上”的情况也不会提前解锁。
+        animating = true;
+        refreshHandEnabled();
+
+        // ★ 立刻把真牌藏掉，就在这一帧、这个调用栈里。
+        //   不能等到 afterLayout 之后的 flyInOne —— 那时至少已经过了一帧，
+        //   错峰的最后一张更是要等 DRAW_STAGGER_MS*(n-1) 才轮到，
+        //   玩家会先看到整手牌闪一下（而且是 :disabled 的 0.4 半透明）。
+        hideInFlightCards();
+
+        double total = DRAW_STAGGER_MS * (cards.size() - 1) + DRAW_FLY_MS + 80;
+
+        afterLayout(() -> {
+            for (int i = 0; i < cards.size(); i++) {
+                final Card c = cards.get(i);
+                delay(DRAW_STAGGER_MS * i, () -> flyInOne(c));
+            }
+            delay(total, () -> {
+                animating = false;
+                if (!battleOver) refreshHandEnabled();
+                // 整段演出结束，把 inline 样式撤掉，交还给 CSS 决定手牌明暗
+                // （打不起的牌该是 0.4 就该是 0.4）
+                for (Node n : handBox.getChildren()) setCardNodeVisible(n);
+            });
+        });
+    }
+
+    /** 把「等待飞入」的牌的真身全部藏起来（幂等） */
+    private void hideInFlightCards() {
+        for (Card c : drawFxInFlight) setCardNodeHidden(findCardNode(c));
+    }
+
+    /** 真身隐身：走 inline style，避免和 {@code .button:disabled} 的 0.4 打架 */
+    private static void setCardNodeHidden(Node cardNode) {
+        if (cardNode instanceof Button b) b.setStyle(CARD_BTN_HIDDEN_STYLE);
+    }
+
+    /** ghost 落位：真身以全亮显示（演出未结束前仍是 disabled，不能撤 inline） */
+    private static void setCardNodeLanded(Node cardNode) {
+        if (cardNode instanceof Button b) b.setStyle(CARD_BTN_LANDED_STYLE);
+    }
+
+    /** 整段演出结束：撤掉 inline 的 -fx-opacity，让 CSS 重新决定明暗 */
+    private static void setCardNodeVisible(Node cardNode) {
+        if (cardNode instanceof Button b) b.setStyle(CARD_BTN_STYLE);
+    }
+
+    /** 一张牌从抽牌堆图标飞到它在手牌里的位置，落位后真牌才显现 */
+    private void flyInOne(Card c) {
+        Node target = findCardNode(c);
+        Point2D from = centerInLocal(drawIcon);
+        Point2D to = centerInLocal(target);
+        if (from == null || to == null) {   // 拿不到坐标就别演了，直接把牌显示出来
+            drawFxInFlight.remove(c);
+            setCardNodeVisible(target);
+            return;
+        }
+
+        StackPane ghost = ghostOf(c);
+        mountGhost(ghost, from);
+        ghost.setScaleX(0.5);
+        ghost.setScaleY(0.5);
+        ghost.setRotate(-20);
+        ghost.setOpacity(0.85);
+        setCardNodeHidden(target); // 兜底：正常情况 flushDrawFx 里已经藏好了
+
+        TranslateTransition move = new TranslateTransition(Duration.millis(DRAW_FLY_MS), ghost);
+        move.setToX(to.getX() - from.getX());
+        move.setToY(to.getY() - from.getY());
+        move.setInterpolator(Interpolator.EASE_OUT);
+
+        ScaleTransition grow = new ScaleTransition(Duration.millis(DRAW_FLY_MS), ghost);
+        grow.setToX(1);
+        grow.setToY(1);
+        grow.setInterpolator(Interpolator.EASE_OUT);
+
+        RotateTransition spin = new RotateTransition(Duration.millis(DRAW_FLY_MS), ghost);
+        spin.setToAngle(0);
+        spin.setInterpolator(Interpolator.EASE_OUT);
+
+        FadeTransition fade = new FadeTransition(Duration.millis(DRAW_FLY_MS), ghost);
+        fade.setToValue(1);
+
+        ParallelTransition all = new ParallelTransition(move, grow, spin, fade);
+        all.setOnFinished(e -> {
+            unmountGhost(ghost);
+            drawFxInFlight.remove(c);
+            setCardNodeLanded(target); // 全亮落位；整段演出结束时才交还给 CSS
+        });
+        all.play();
+    }
+
+    // ---- 演出二：手牌 → 弃牌堆 ----
+
+    /** 打出非消耗牌：卡面从手牌位置飞进右下角弃牌堆（边飞边缩小旋转） */
+    private void flyToDiscard(Card c, Point2D from) {
+        if (from == null) return;
+        Point2D to = centerInLocal(discardIcon);
+        if (to == null) return;
+        dumpOne(c, from, to, 0, 35);
+    }
+
+    /** 回合结束：整手牌错峰飞进弃牌堆 */
+    private void flyHandToDiscard(List<Card> cards, List<Point2D> froms) {
+        if (cards.isEmpty()) return;
+        afterLayout(() -> {
+            Point2D to = centerInLocal(discardIcon);
+            if (to == null) return;
+            for (int i = 0; i < cards.size(); i++) {
+                Point2D from = froms.get(i);
+                if (from == null) continue;
+                dumpOne(cards.get(i), from, to, DUMP_STAGGER_MS * i, 0);
+            }
+        });
+    }
+
+    private void dumpOne(Card c, Point2D from, Point2D to, double delayMs, double spinAngle) {
+        delay(delayMs, () -> {
+            StackPane ghost = ghostOf(c);
+            mountGhost(ghost, from);
+
+            TranslateTransition move = new TranslateTransition(Duration.millis(DISCARD_FLY_MS), ghost);
+            move.setToX(to.getX() - from.getX());
+            move.setToY(to.getY() - from.getY());
+            move.setInterpolator(Interpolator.EASE_BOTH);
+
+            ScaleTransition shrink = new ScaleTransition(Duration.millis(DISCARD_FLY_MS), ghost);
+            shrink.setToX(0.25);
+            shrink.setToY(0.25);
+
+            FadeTransition fade = new FadeTransition(Duration.millis(DISCARD_FLY_MS), ghost);
+            fade.setFromValue(1);
+            fade.setToValue(0.1);
+
+            RotateTransition spin = new RotateTransition(Duration.millis(DISCARD_FLY_MS), ghost);
+            spin.setToAngle(spinAngle);
+
+            ParallelTransition all = new ParallelTransition(move, shrink, fade, spin);
+            all.setOnFinished(e -> unmountGhost(ghost));
+            all.play();
+        });
+    }
+
+    // ---- 演出三：消耗牌燃尽 ----
+
+    /** 打出消耗牌：卡面在原地上浮、泛金、燃尽消失（不进弃牌堆） */
+    private void playExhaustFx(Card c, Point2D from) {
+        if (from == null) return;
+        StackPane ghost = ghostOf(c);
+        mountGhost(ghost, from);
+
+        Rectangle glow = new Rectangle(HAND_FACE_W, HAND_FACE_W * 1.4);
+        glow.setArcWidth(16);
+        glow.setArcHeight(16);
+        glow.setFill(Color.rgb(251, 191, 36, 0.85));
+        glow.setOpacity(0);
+        glow.setMouseTransparent(true);
+        ghost.getChildren().add(glow);
+
+        TranslateTransition rise = new TranslateTransition(Duration.millis(EXHAUST_FX_MS), ghost);
+        rise.setToY(-70);
+        rise.setInterpolator(Interpolator.EASE_OUT);
+
+        ScaleTransition blow = new ScaleTransition(Duration.millis(EXHAUST_FX_MS), ghost);
+        blow.setToX(1.18);
+        blow.setToY(1.18);
+
+        FadeTransition burn = new FadeTransition(Duration.millis(EXHAUST_FX_MS), ghost);
+        burn.setFromValue(1);
+        burn.setToValue(0);
+
+        FadeTransition flash = new FadeTransition(Duration.millis(130), glow);
+        flash.setFromValue(0);
+        flash.setToValue(0.9);
+
+        SequentialTransition seq = new SequentialTransition(
+                flash, new ParallelTransition(rise, blow, burn));
+        seq.setOnFinished(e -> unmountGhost(ghost));
+        seq.play();
     }
 
     // ================= BattleState 实现 =================
@@ -586,6 +1127,29 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     }
 
     @Override
+    public int getDexterity() {
+        return playerDexterity;
+    }
+
+    @Override
+    public void gainDexterity(int amount) {
+        playerDexterity += amount;
+    }
+
+    @Override
+    public int consumeFirstAttackBonus() {
+        if (firstAttackBonus <= 0) return 0;
+        int b = firstAttackBonus;
+        firstAttackBonus = 0; // 一次性：取走即作废
+        return b;
+    }
+
+    @Override
+    public int peekFirstAttackBonus() {
+        return Math.max(0, firstAttackBonus);
+    }
+
+    @Override
     public int getWeakTurns() {
         return weakTurns;
     }
@@ -621,8 +1185,31 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     }
 
     @Override
-    public void enableBrutality() {
-        brutality = true;
+    public void activatePower(Card card) {
+        // 能力牌可叠加：同一基础款累加“效果总量”（升级版数值更大，但仍归并到同一 Kind）
+        powerAmount.merge(card.kind, powerMagnitude(card), Integer::sum);
+    }
+
+    /** 该能力牌的每回合效果数值（恶魔形态＝力量；无惧疼痛＝消耗一张牌的格挡；其余＝1） */
+    private static int powerMagnitude(Card card) {
+        return switch (card.kind) {
+            case DEMON_FORM -> card.upgraded ? 3 : 2;
+            case FEEL_NO_PAIN -> card.upgraded ? 4 : 3;
+            default -> 1;
+        };
+    }
+
+    /** 能力牌 → 状态栏角标（新增常驻能力牌时在此登记即可自动显示；amount 为当前效果总量） */
+    private PowerBadge powerBadgeOf(Card.Kind kind, int amount) {
+        return switch (kind) {
+            case BRUTALITY -> new PowerBadge("残", "#701a75",
+                    "残暴 ×" + amount + "：每回合开始失去 " + amount + " 点生命，随后多抽 " + amount + " 张");
+            case DEMON_FORM -> new PowerBadge("恶魔", "#701a75",
+                    "恶魔形态：每回合增加 " + amount + " 点力量");
+            case FEEL_NO_PAIN -> new PowerBadge("无惧", "#701a75",
+                    "无惧疼痛：每有一张牌被消耗，获得 " + amount + " 点格挡");
+            default -> null;
+        };
     }
 
     @Override
@@ -632,11 +1219,40 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
 
     @Override
     public void addBlock(int amount) {
-        playerBlock += amount;
+        if (amount <= 0) return; // 没真的获得格挡 → 也不该吃到敏捷加成
+        SoundFx.play("GainDefense"); // 玩家获得格挡音效
+        // 敏捷：每次获得格挡都额外 +敏捷层数（和力量加在攻击伤害上对称）
+        playerBlock += amount + playerDexterity;
+    }
+
+    /**
+     * 开发者模式专用：一键秒杀当前敌人（战斗 HUD 上那个红色「杀」按钮调的）。
+     *
+     * <p>直接把敌人血量清零，然后走<b>正常的胜利流程</b>（倒地动画 → 奖励结算），
+     * 所以遗物、卡牌奖励这些都照常发。</p>
+     *
+     * <p><b>刻意绕过 {@link #resolveEnemyLethal()} 的濒死锁血</b> —— 那个会给神风猪
+     * 锁 1 点血、逼它下次行动自爆，把玩家一起炸死，那就不叫「秒杀」了。</p>
+     *
+     * <p>已经结束的战斗直接忽略；{@code victory()} 自身也有 {@code battleOver} 守卫，
+     * 连点不会二次结算。</p>
+     */
+    public void devKillEnemy() {
+        if (battleOver) return;
+        enemy.hp = 0;
+        enemy.block = 0;
+        refreshAll(); // 立刻把血条刷成 0、手牌置灰
+        victory();
     }
 
     @Override
     public void damageEnemy(int dmg) {
+        // 闪避判定：在削格挡、扣血、反伤之前
+        if (enemy.hasDodge() && enemy.dodge()) {
+            showDodgeText();
+            return;
+        }
+        if (dmg > 0) SoundFx.play("ironclad_attack"); // 玩家攻击牌命中怪物音效
         enemyAnim.triggerHitKnock();
         if (enemy.block > 0) {
             int absorb = Math.min(enemy.block, dmg);
@@ -645,11 +1261,43 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         }
         enemy.hp = Math.max(0, enemy.hp - dmg);
         applyReflect(dmg);
-        if (enemy.hp == 0) victory();
+        resolveEnemyLethal();
+    }
+
+    /** 闪避时在敌人立绘上方弹出白字「闪避！」并淡出 */
+    private void showDodgeText() {
+        Label dodge = new Label("闪避！");
+        dodge.setTextFill(javafx.scene.paint.Color.WHITE);
+        dodge.setFont(javafx.scene.text.Font.font(28));
+        dodge.setStyle("-fx-font-weight: bold; -fx-effect: dropshadow(gaussian, #000, 4, 0.5, 0, 0);");
+        StackPane.setAlignment(dodge, javafx.geometry.Pos.TOP_CENTER);
+        enemyPortrait.getChildren().add(dodge);
+
+        FadeTransition fade = new FadeTransition(Duration.millis(800), dodge);
+        fade.setFromValue(1.0);
+        fade.setToValue(0.0);
+        fade.setOnFinished(e -> enemyPortrait.getChildren().remove(dodge));
+        fade.play();
+    }
+
+    /**
+     * 敌人 HP 归 0 的统一处理：
+     * 神风猪等有濒死机制的敌人锁血 1 点、强制下次行动自爆；其余直接胜利。
+     * 锁血期间再受致命伤害保持 1 血，不再触发胜利。
+     */
+    private void resolveEnemyLethal() {
+        if (enemy.hp > 0) return;
+        if (enemy.isDeathLocked() || enemy.triggerDeathLock()) {
+            enemy.hp = 1;
+            refreshAll(); // 立即把意图刷新为自爆
+            return;
+        }
+        victory();
     }
 
     @Override
     public boolean loseHp(int hp, boolean withHurtAnim) {
+        if (hp > 0) SoundFx.play("GetHurt"); // 玩家受伤音效（含自伤牌）
         player.damage(hp);
         if (withHurtAnim) playerAnim.triggerHurt();
         hud.refresh();
@@ -668,18 +1316,89 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     }
 
     @Override
+    public void addToHand(Card c) {
+        // 手牌已满（打出中的牌已提前移出 hand）：溢出的牌放入抽牌堆
+        if (hand.size() >= HAND_LIMIT) {
+            draw.add(c);
+        } else {
+            hand.add(c);
+        }
+    }
+
+    @Override
     public void onCardPlayed(Card c) {
+        // 先趁牌还在手牌里把位置记下来，之后 hand.remove + refreshAll 就找不到它了
+        Point2D from = centerOfCardNode(c);
         hand.remove(c);
         if (c.isExhaustOnPlay()) {
-            // 消耗（含能力牌）：不进入弃牌堆
+            playExhaustFx(c, from);   // 消耗（含能力牌）：原地燃尽，不进弃牌堆
+            // 无惧疼痛：只有带“消耗”词条的牌才算“被消耗”，能力牌使用离场不计
+            if (c.exhaust) gainBlockFromExhaust();
         } else {
             discard.add(c);
+            flyToDiscard(c, from);    // 普通牌：飞进弃牌堆
         }
+    }
+
+    /** 无惧疼痛：每当一张牌被消耗，获得效果总量点格挡 */
+    private void gainBlockFromExhaust() {
+        int amount = powerAmount.getOrDefault(Card.Kind.FEEL_NO_PAIN, 0);
+        if (amount > 0) addBlock(amount);
+    }
+
+    @Override
+    public void exhaustNonAttackCardsInHand() {
+        // 先快照：遍历中会从 hand 移除，且消耗会触发格挡等副作用
+        List<Card> targets = new ArrayList<>();
+        for (Card c : hand) {
+            if (c.kind.type != Card.Type.ATTACK) targets.add(c);
+        }
+        for (Card c : targets) {
+            Point2D from = centerOfCardNode(c);
+            hand.remove(c);
+            playExhaustFx(c, from);
+            gainBlockFromExhaust();   // 这些牌确实被消耗，触发无惧疼痛
+        }
+    }
+
+    @Override
+       public void exhaustRandomHandCard() {
+        if (hand.isEmpty()) return;   // 手牌为空：无目标，不做处理
+        Card c = hand.get(miscRnd.nextInt(hand.size()));
+        Point2D from = centerOfCardNode(c);
+        hand.remove(c);
+        playExhaustFx(c, from);
+        gainBlockFromExhaust();       // 这张牌确实被消耗，触发无惧疼痛
     }
 
     @Override
     public void refreshIfAlive() {
         if (!battleOver) refreshAll();
+    }
+
+    // ================= 供开发者面板（com.example.demo.operator）使用的通用接口 =================
+    // 说明：手牌/抽牌堆/弃牌堆都是 BattleView 的私有状态，operator 包碰不到，
+    // 所以这里只暴露三个「不带游戏规则」的通用操作，开发者语义留在 operator 包里。
+
+    /** 手牌（活引用，可直接增删，改完调用 {@link #refreshUi()} 重画） */
+    public List<Card> handCards() {
+        return hand;
+    }
+
+    /** 把一张牌从本场战斗的手牌 / 抽牌堆 / 弃牌堆里删掉（不动玩家的牌组） */
+    public void removeCardFromBattle(Card c) {
+        if (c == null) return;
+        hand.remove(c);
+        draw.remove(c);
+        discard.remove(c);
+        refreshUi();
+    }
+
+    /** 界面重画（改了手牌/牌组/遗物之后调用） */
+    public void refreshUi() {
+        if (battleOver) return;
+        refreshAll();
+        hud.refresh();
     }
 
     /** 反伤：怪物处于反伤状态时，把玩家造成伤害的一定比例反弹给玩家（先扣格挡再扣血）。 */
@@ -693,13 +1412,28 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             reflectDmg -= absorb;
         }
         player.hp = Math.max(0, player.hp - reflectDmg);
+        SoundFx.play("GetHurt"); // 反伤受击音效
         hud.refresh();
         if (player.hp == 0) playerDied();
     }
+    /** 玩家受到伤害，处理百年积木遗物效果 */
+    private void takeDamage(int dmg) {
+        if (dmg <= 0) return;
+        int hpBefore = player.hp();
+        player.damage(dmg);
+        // 百年积木：每场战斗第一次失去生命值时抽 3 张牌
+        if (!firstDamageTriggered && player.hp() < hpBefore
+                && RelicFun.shouldDrawOnFirstDamage(player, true)) {
+            firstDamageTriggered = true;
+            drawHand(3);
+        }
+    }
+
     // ================= 怪物回合 =================
 
     private void endPlayerTurn() {
         if (!playerTurn || battleOver) return;
+        SoundFx.play("EndTurn"); // 结束玩家回合音效
         playerTurn = false;
         if (reflectTurns > 0) reflectTurns--;
 
@@ -709,9 +1443,23 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             pendingStrengthLoss = 0;
         }
 
+        // 忘情牛肉面：第一回合结束后移除临时 3 点力量
+        if (RelicFun.shouldRemoveNoodleBonus(player, turn)) {
+            playerStrength -= 3;
+        }
+
+        // 遗物回合结束格挡（奥利哈钢、taffy）
+        playerBlock += RelicFun.endTurnBlock(player, playerBlock, player.hp(), player.maxHp);
+
+        // 先记下每张手牌的位置，再把它们一起丢进弃牌堆（之后就找不到节点了）
+        List<Card> dumped = new ArrayList<>(hand);
+        List<Point2D> froms = new ArrayList<>();
+        for (Card c : dumped) froms.add(centerOfCardNode(c));
+
         discard.addAll(hand);
         hand.clear();
         refreshAll();
+        flyHandToDiscard(dumped, froms);
 
         PauseTransition pause = new PauseTransition(Duration.millis(700));
         pause.setOnFinished(e -> enemyAct());
@@ -721,23 +1469,55 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     private void enemyAct() {
         if (battleOver || paused) return;
 
-        enemy.block = 0;
-        enemy.applyRitual();
+        if (!enemy.isBlockPersistent()) enemy.block = 0; // 护甲类敌人（巨猪骑士）护甲跨回合保留
+        enemy.onTurnStart();
         boolean wasSecondPhase = enemy.isSecondPhase;
         enemy.checkPhaseTransition();
         if (enemy.isSecondPhase && !wasSecondPhase) {
+            SoundFx.play("zhou"); // 二阶段变身音效
             playPhaseTransition(this::performEnemyAction);
         } else {
             performEnemyAction();
         }
     }
 
+    /**
+     * 怪物行为音效（含 BOSS 专属版本）。
+     *
+     * 命名约定（都放在 resources/com/example/demo/sound/ 下）：
+     *   normalOink / normalDie    —— 普通怪（卫兵猪、史莱姆……）
+     *   fishronOink / fishronDie  —— BOSS 鱼龙
+     *   zhou                      —— 强化/减益/反伤/吐黏液/仪式 等施法类通用音效
+     *
+     * BOSS 优先用自己的音效，文件缺失时自动退回普通怪音效（见 {@link SoundFx#playAny}），
+     * 所以只做一个 BOSS 的叫声也不会出现「静音」的怪。
+     */
+    private List<String> enemySoundOf(Enemy.Intent intent) {
+        return switch (intent) {
+            case ATTACK -> enemyOink();              // 出手叫声：BOSS 鱼龙叫 / 普通猪叫
+            case DEFEND -> List.of("GainDefense");   // 复用已有的加盾音效
+            case BUFF, WEAKEN, REFLECT, RITUAL, CHARGE -> List.of("zhou");
+            case EXPLODE -> List.of("GetHurt");
+        };
+    }
+
+    /** 怪物出手叫声：BOSS 用 fishronOink，没有就退回 normalOink */
+    private List<String> enemyOink() {
+        return enemy.isBoss ? List.of("fishronOink", "normalOink") : List.of("normalOink");
+    }
+
+    /** 怪物死亡音效：BOSS 用 fishronDie，没有就退回 normalDie */
+    private List<String> enemyDie() {
+        return enemy.isBoss ? List.of("fishronDie", "normalDie") : List.of("normalDie");
+    }
+
     private void performEnemyAction() {
         Enemy.Step s = enemy.current();
+        SoundFx.playAny(enemySoundOf(s.intent)); // 怪物行为音效，映射见 enemySoundOf
         switch (s.intent) {
             case ATTACK -> {
                 enemyAnim.triggerAttackDash();
-                int dmg = s.value + enemy.power;
+                int dmg = enemy.baseAttackDamage(s) + enemy.power;
                 if (enemyWeak > 0) dmg = dmg * 3 / 4;
                 if (enemy.isBoss && enemy.isSecondPhase && playerBlock > 0) {
                     dmg = (int) Math.floor(dmg * 1.60);
@@ -747,21 +1527,44 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
                     playerBlock -= absorb;
                     dmg -= absorb;
                 }
-                player.damage(dmg);
+                if (enemy.cutsMaxHpOnAttack()) {
+                    // 巨猪骑士：不直接扣血，改为削减 80% 血量上限
+                    player.reduceMaxHp(dmg * 4 / 5);
+                } else {
+                    takeDamage(dmg);
+                }
                 playerAnim.triggerHurt();
+                if (dmg > 0) SoundFx.play("GetHurt"); // 玩家被怪物攻击的受伤音效
                 hud.refresh();
                 if (player.hp() == 0) { playerDied(); return; }
-            }
-            case DEFEND -> enemy.block += s.value;
-            case BUFF -> enemy.power += s.value;
-            case WEAKEN -> weakTurns = Math.max(weakTurns, s.value);
-            case REFLECT -> reflectTurns = Math.max(reflectTurns,s.value);
-            case SPIT -> {
-                for (int i = 0; i < s.value; i++) {
+                // 攻击后附加效果：向玩家抽牌堆塞入黏液（史莱姆特有）
+                for (int i = 0; i < enemy.getSlimeOnAttack(); i++) {
                     draw.add(Card.slime());
                 }
             }
+            case DEFEND -> enemy.block += s.value; // 音效由 enemySoundOf(DEFEND) 播放
+            case BUFF -> enemy.power += s.value;
+            case WEAKEN -> weakTurns = Math.max(weakTurns, s.value);
+            case REFLECT -> reflectTurns = Math.max(reflectTurns,s.value);
             case RITUAL -> enemy.setRitualPower(s.value);
+            case CHARGE -> enemy.addChargeStacks(s.value); // 叠蓄势，自爆伤害随之增加
+            case EXPLODE -> {
+                // 神风猪锁血后的最终一击：蓄势层数 × 每层伤害，正常扣格挡/血量，自爆后死亡
+                enemyAnim.triggerAttackDash();
+                int dmg = enemy.explodeDamage();
+                if (playerBlock > 0) {
+                    int absorb = Math.min(playerBlock, dmg);
+                    playerBlock -= absorb;
+                    dmg -= absorb;
+                }
+                takeDamage(dmg);
+                playerAnim.triggerHurt();
+                if (dmg > 0) SoundFx.play("GetHurt");
+                hud.refresh();
+                if (player.hp() == 0) { playerDied(); return; }
+                victory(); // 自爆结算完，神风猪死亡 → 胜利奖励
+                return;    // 不再推进轮盘 / 开启玩家回合
+            }
         }
         if (enemyWeak > 0) enemyWeak--;
         enemy.advance();
@@ -782,8 +1585,8 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         Image img = new Image(getClass().getResourceAsStream(
                 "/com/example/demo/portrait/" + enemy.name + "二阶段.png"));
         second.setImage(img);
-        second.setFitWidth(210);
-        second.setFitHeight(210);
+        second.setFitWidth(enemyPortraitSize);
+        second.setFitHeight(enemyPortraitSize);
         second.setPreserveRatio(true);
         second.setOpacity(0);
         enemyPortrait.getChildren().add(second);
@@ -821,12 +1624,41 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
     }
 
     private void victory() {
-        gameTimer.stop();
         if (battleOver) return;
         battleOver = true;
         playerAnim.stop();
+        RelicFun.onBattleEnd(player);
+        // Boss 战胜利：挑一个 Boss 遗物（池为空时跳过）。只挑不拿，见下面那行注释
+        if (enemy.isBoss) {
+            // 只「挑」不立刻入账 —— 真正入账要等玩家在获取界面上点「拾取」（见 showReward()）
+            bossRelicObtained = RelicFun.pickBossRelic(player);
+        }
+        hud.refresh();
+        playerAnim.stop();   // 冻结双方待机呼吸，交给倒地动画接管
+        enemyAnim.stop();
         clearStatusCards();
-        showReward();
+        refreshAll();        // 先把怪物血条刷成 0、手牌置灰
+        refreshHandEnabled();
+
+        // ---- 敌人倒地演出：向后倒下 + 下沉，然后才弹胜利奖励 ----
+        SoundFx.playAny(enemyDie()); // 怪物倒地/死亡音效（BOSS 用 fishronDie）
+        RotateTransition rotate = new RotateTransition(Duration.millis(750), enemyPortrait);
+        rotate.setToAngle(82);           // 顺时针倒下（朝远离玩家的方向）
+        rotate.setInterpolator(Interpolator.EASE_IN);
+
+        TranslateTransition fall = new TranslateTransition(Duration.millis(750), enemyPortrait);
+        fall.setToX(18);
+        fall.setToY(70);
+        fall.setInterpolator(Interpolator.EASE_IN);
+
+        ParallelTransition fallDown = new ParallelTransition(rotate, fall);
+        SequentialTransition seq = new SequentialTransition(
+                fallDown, new PauseTransition(Duration.millis(180)));
+        seq.setOnFinished(e -> {
+            gameTimer.stop();
+            showReward();
+        });
+        seq.play();
     }
 
     private void playerDied() {
@@ -838,6 +1670,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         clearStatusCards();
 
         deadDim.setVisible(true);
+        SoundFx.play("normalDie");
 
         RotateTransition rotate = new RotateTransition(Duration.millis(900), playerPortrait);
         rotate.setToAngle(85);
@@ -851,47 +1684,145 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         both.play();
     }
 
-    /** 屏幕中央出现三张随机牌，点一张加入牌组（或跳过），然后离开战斗 */
+    /**
+     * Boss 遗物获取界面 → 遗物后续效果 → 屏幕中央出现三张随机牌，
+     * 点一张加入牌组（或跳过），然后离开战斗。
+     *
+     * <p>Boss 遗物「可拿可不拿」：先弹获取界面，点「拾取」才入账，并且<b>只有拿了</b>
+     * 才触发它的后续效果（空鸟笼 = 删 2 张牌 / 召唤铃铛 = 连弹三个遗物获取界面）。
+     * 点「丢弃」就直接进卡牌奖励。</p>
+     */
     private void showReward() {
         pileOverlay.hide();
 
-        List<Card> pool = List.of(
-                Card.sweep(), Card.bleed(),
-                Card.pommelStrike(), Card.shrug(),
-                Card.hammer(), Card.impregnable(),
-                Card.doubleStrike(), Card.kindle(), Card.lightning(),
-                Card.rage(), Card.offering(), Card.wildStrike(),
-                Card.fortify(), Card.focus(), Card.shockwave(),
-                Card.heavyBlade(), Card.adamantArm(), Card.brutality(), Card.flex());
-        // 权重直接取自 Card.Kind.weight（4=白/普通，3=蓝/罕见，1=金/稀有），
-        // 避免与卡池硬编码的双份数据源不同步。
-        List<Integer> weights = pool.stream()
-                .map(c -> c.kind.weight)
-                .toList();
-
-        List<Card> offers = new ArrayList<>();
-        List<Card> remaining = new ArrayList<>(pool);
-        List<Integer> remainingWeights = new ArrayList<>(weights);
-        for (int i = 0; i < 3; i++) {
-            int total = remainingWeights.stream().mapToInt(Integer::intValue).sum();
-            int r = rnd.nextInt(total);
-            int cumulative = 0;
-            for (int j = 0; j < remaining.size(); j++) {
-                cumulative += remainingWeights.get(j);
-                if (r < cumulative) {
-                    offers.add(remaining.get(j));
-                    remaining.remove(j);
-                    remainingWeights.remove(j);
-                    break;
+        if (bossRelicObtained != null) {
+            Relic boss = bossRelicObtained;
+            RelicObtainToast.showChoice(getScene(), boss, taken -> {
+                if (!taken) {
+                    bossRelicObtained = null;   // 丢弃：它的后续效果一并作废
+                    showCardReward();
+                    return;
                 }
+                RelicFun.grantRelic(player, boss);
+                hud.refresh();                  // 右上角遗物栏 / 生命值同步
+                String action = RelicFun.bossVictoryAction(boss);
+                if ("REMOVE_CARDS".equals(action)) {
+                    removeCardsFromDeck(2, this::showCardReward);
+                } else if ("BELL_OFFERS".equals(action)) {
+                    showBellRelicOffers();
+                } else {
+                    showCardReward();
+                }
+            });
+        } else {
+            showCardReward();
+        }
+    }
+
+    /**
+     * 召唤铃铛的后续效果：连弹 {@value #BELL_RELIC_OFFERS} 个遗物获取界面。
+     *
+     * <p>用的是和宝箱 / 精英战利品<b>完全同一个</b> {@link RelicObtainToast} 界面 ——
+     * 每个都能「拾取」或「丢弃」，丢弃就不入账。</p>
+     *
+     * <p>候选在开头一次性抽好（互不重复、仍按精英池权重），再一个一个弹。
+     * 这样即使玩家把前面几个都丢了，也还是稳稳的三次机会 —— 不会因为
+     * 「丢掉的没进 relics」而被重复抽到同一个。</p>
+     *
+     * <p>代价（往牌组塞一张伤口）在 {@link RelicFun#onRelicObtained} 里结算，
+     * 也就是玩家点「拾取」召唤铃铛的那一刻，不在这里。</p>
+     */
+    private void showBellRelicOffers() {
+        List<Relic> offers = RelicFun.pickEliteOptions(player, BELL_RELIC_OFFERS);
+        showRelicOffers(offers, 0, this::showCardReward);
+    }
+
+    /** 把 {@code offers} 从 {@code index} 起一个一个弹出来，全弹完再调 {@code onDone} */
+    private void showRelicOffers(List<Relic> offers, int index, Runnable onDone) {
+        if (index >= offers.size()) {
+            onDone.run();
+            return;
+        }
+        Relic offer = offers.get(index);
+        RelicObtainToast.showChoice(getScene(), offer, taken -> {
+            if (taken) {
+                RelicFun.grantRelic(player, offer);
+                hud.refresh();                  // 右上角遗物栏 / 生命值同步
             }
+            showRelicOffers(offers, index + 1, onDone);
+        });
+    }
+
+    /**
+     * 设置「卡牌奖励已经抽好」的钩子（<b>存档用</b>）。
+     *
+     * <p>参数就是 {@link #showCardReward()} 抽到的那几张牌。存档把它们记下来，
+     * 读档回到选牌页时还是<b>同样的这几张</b> —— 不然玩家能靠「退出重进」
+     * 把奖励刷到自己满意为止。</p>
+     */
+    public void setOnRewardOffers(Consumer<List<Card>> hook) {
+        this.onRewardOffers = hook;
+    }
+
+    /** 显示卡牌奖励选择 */
+    private void showCardReward() {
+
+        // 抽取规则（品质概率 + 怜悯偏移）集中在 CardRewardPool；
+        // 卡池本身也挪到了那里（CardRewardPool.rewardPool），遗物「混沌」的
+        // 三连卡牌奖励共用同一份，改卡池只用改一处。
+        // 精英战使用精英池（白 50% / 蓝 40% / 金 10%），普通战使用普通池（白 60% / 蓝 37% / 金 3%）。
+        List<Card> offers = CardRewardPool.draw(CardRewardPool.rewardPool(), 3, enemy.isElite);
+
+        // 存档：记下「这场已经赢了」+ 抽到的奖励牌（读档会直接回到这个选牌页）
+        if (onRewardOffers != null) onRewardOffers.accept(offers);
+
+        rewardOverlay.show(offers, (c, node) -> {
+            player.deck.add(c);        // 数据照常即时结算（牌组数量随之更新）
+            hud.refresh();
+            rewardOverlay.hide();
+            // 获得的卡飞入牌组图标（ghost 卡面，落位后自动摘除，不阻塞流程）
+            CardFlyFx.flyIntoDeck(getScene(), node, hud.getDeckIcon(), c,
+                    () -> onFinish.accept(true));
+        });
+    }
+
+    /** 移除卡牌：显示 UI 让玩家选择移除 count 张牌，完成后调用 onDone */
+    private void removeCardsFromDeck(int count, Runnable onDone) {
+        if (player.deck.size() <= count) {
+            // 牌组不足，直接跳过
+            onDone.run();
+            return;
+        }
+        showRemovePicker(count, onDone);
+    }
+
+    /**
+     * 弹出「删牌页」让玩家选一张移除；还有剩余就再弹一次。
+     *
+     * <p><b>⚠ 这里绝对不能用 {@code Alert.showAndWait()}</b>。本方法是
+     * {@code showReward()} → 由 {@code enemyDied()} 里 {@code seq.setOnFinished(...)} 调进来的，
+     * 也就是跑在<b>动画回调</b>里，而 JavaFX 明确禁止在动画/布局处理中 {@code showAndWait}，
+     * 会抛 {@code IllegalStateException: showAndWait is not allowed during animation or layout processing}
+     * —— 玩家点完 Boss 就卡死在战斗界面，既没有删牌框也拿不到卡牌奖励。
+     * {@link DeckPickOverlay} 是普通节点，天然没这个限制。
+     */
+    private void showRemovePicker(int remaining, Runnable onDone) {
+        if (remaining <= 0 || player.deck.isEmpty()) {
+            onDone.run();
+            return;
         }
 
-        rewardOverlay.show(offers, c -> {
-            player.deck.add(c);
-            rewardOverlay.hide();
-            onFinish.accept(true);
-        });
+        DeckPickOverlay picker = new DeckPickOverlay(
+                player,
+                "空鸟笼 · 选择一张牌移除（还剩 " + remaining + " 张）",
+                c -> {
+                    player.deck.remove(c);
+                    hud.refresh();                        // 右上角牌组角标同步
+                    showRemovePicker(remaining - 1, onDone);
+                },
+                onDone);                                  // 「取消」= 跳过剩余删牌，继续流程
+        getChildren().add(picker); // BattleView 是 StackPane：铺在最上层盖住战斗界面
+        picker.show();
     }
 
     // ================= 刷新 =================
@@ -901,7 +1832,7 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         energyLabel.setText("能量 " + energy + " / 3");
 
         // 角色
-        double pRatio = (double) player.hp() / player.maxHp;
+        double pRatio = player.maxHp > 0 ? (double) player.hp() / player.maxHp : 0.0;
         pHpText.setText(player.hp() + " / " + player.maxHp);
         pHpFill.setPrefWidth(Math.max(0, 240.0 * pRatio));
         pHpFill.setStyle("-fx-background-color: " + (pRatio < 0.4 ? "#ef4444" : "#22c55e")
@@ -918,6 +1849,17 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         if (playerStrength > 0) {
             pChips.getChildren().add(BattleUiFactory.statusChip("力", playerStrength, "#f59e0b",
                     "力量 +" + playerStrength + "：每段攻击伤害增加"));
+        }
+        if (playerDexterity > 0) {
+            pChips.getChildren().add(BattleUiFactory.statusChip("敏", playerDexterity, "#0891b2",
+                    "敏捷 +" + playerDexterity + "：每次获得格挡时额外增加"));
+        }
+        for (Map.Entry<Card.Kind, Integer> e : powerAmount.entrySet()) {
+            PowerBadge badge = powerBadgeOf(e.getKey(), e.getValue());
+            if (badge != null) {
+                pChips.getChildren().add(BattleUiFactory.statusChip(
+                        badge.glyph(), e.getValue(), badge.color(), badge.tip()));
+            }
         }
 
         // 怪物
@@ -954,6 +1896,38 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
             ritualStatus.setVisible(false);
         }
 
+        // 巨猪骑士：血条下方显示护甲残量与攻击数值构成
+        if (enemy instanceof GiantBoarKnight boar) {
+            boarArmorStatus.setText("护甲 " + boar.block + " / " + GiantBoarKnight.MAX_ARMOR
+                    + (boar.isArmorBroken()
+                            ? "（已破甲）"
+                            : "（不随回合消失，每回合自损 4%）"));
+            boarArmorStatus.setVisible(true);
+
+            Enemy.Step s = boar.current();
+            if (s.intent == Enemy.Intent.ATTACK) {
+                int lost = boar.lostArmor();
+                int base = boar.baseAttackDamage(s);
+                int pct = boar.isArmorBroken() ? 2 : 3;
+                int constant = boar.isArmorBroken() ? 10 : 5;
+                StringBuilder txt = new StringBuilder("攻击构成：")
+                        .append(constant).append(" + 损甲").append(lost)
+                        .append("×").append(pct).append("% = ").append(base);
+                if (boar.power > 0) {
+                    txt.append("，+力量").append(boar.power).append(" → ").append(base + boar.power);
+                }
+                if (enemyWeak > 0) txt.append("（虚弱 ×0.75）");
+                txt.append("，命中削血量上限 80%");
+                boarAttackInfo.setText(txt.toString());
+                boarAttackInfo.setVisible(true);
+            } else {
+                boarAttackInfo.setVisible(false);
+            }
+        } else {
+            boarArmorStatus.setVisible(false);
+            boarAttackInfo.setVisible(false);
+        }
+
         // 破甲状态栏：BOSS 二阶段时显示特殊破甲机制
         if (enemy.isBoss && enemy.isSecondPhase) {
             armorBreakStatus.setText("破甲：你持盾时其攻击 ×1.6");
@@ -964,6 +1938,17 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         if (enemyWeak > 0) {
             eChips.getChildren().add(BattleUiFactory.statusChip("弱", enemyWeak, "#7c3aed",
                     "虚弱 " + enemyWeak + " 回合：敌人造成的伤害 ×0.75"));
+        }
+        // 神风猪蓄势：血条左下角红底白字菱形「蓄」标
+        if (enemy.getChargeStacks() > 0) {
+            eChips.getChildren().add(BattleUiFactory.diamondChip("蓄", enemy.getChargeStacks(), "#dc2626",
+                    "蓄势：每层蓄势造成 " + enemy.getChargeDamagePerStack()
+                            + " 点自爆伤害（当前自爆伤害 " + enemy.explodeDamage() + "）"));
+        }
+        // 闪电猪闪避：黄底白字圆形「闪」标
+        if (enemy.hasDodge()) {
+            eChips.getChildren().add(BattleUiFactory.statusChip("闪", "#facc15",
+                    "50%概率闪避攻击"));
         }
         refreshIntent();
 
@@ -980,31 +1965,83 @@ public class BattleView extends javafx.scene.layout.StackPane implements BattleS
         discardBadge.setText(String.valueOf(discard.size()));
         discardBadge.setVisible(discard.size() > 0);
 
-        endTurnBtn.setDisable(!playerTurn || battleOver);
+        endTurnBtn.setDisable(!playerTurn || battleOver || animating);
+
+        flushDrawFx(); // 新抽到的牌在这里补上“从抽牌堆飞入”的演出
     }
 
     private void refreshHandEnabled() {
-        // 仅处理“非玩家回合 / 战斗结束”时的整体禁用；
-        // 其余情况保留 refreshAll 中按 CardPlay.canPlay 逐张计算的结果，
+        // 非玩家回合 / 战斗结束 / 抽牌演出中：整体禁用；
+        // 其余情况按 CardPlay.canPlay 逐张重算，
         // 避免把能量不足或不可打出的牌（如“伤口”）错误地重新启用。
-        if (!playerTurn || battleOver) {
+        if (!playerTurn || battleOver || animating) {
             for (var node : handBox.getChildren()) {
                 if (node instanceof Button btn) {
                     btn.setDisable(true);
                 }
             }
+            endTurnBtn.setDisable(true);
+            return;
         }
+        for (var node : handBox.getChildren()) {
+            if (node instanceof Button btn) {
+                Card c = (Card) btn.getUserData();
+                if (c != null) btn.setDisable(!CardPlay.canPlay(c, this));
+            }
+        }
+        endTurnBtn.setDisable(false);
+    }
+
+    /**
+     * 生成战斗中卡面用的描述文字：把卡面上的数值换成<b>这一刻真打出去会得到的值</b>。
+     * <ul>
+     *   <li>攻击牌：描述里的基础伤害 → {@link CardPlay#dealAttackDamage} 的结果
+     *       （含力量 / 虚弱 / 易伤）<b>+ 赤牛的首攻加成</b></li>
+     *   <li>全身撞击：追加“（造成 X 点伤害）”，X 为格挡 + 力量（+ 赤牛）</li>
+     *   <li>带格挡的牌：描述里的「获得 N 点格挡」→ N + 敏捷</li>
+     * </ul>
+     *
+     * <p>⚠ 这里<b>只准看、不准拿</b>：赤牛的加成是一次性的，必须用
+     * {@link #peekFirstAttackBonus()} 而不是 {@link #consumeFirstAttackBonus()} ——
+     * 卡面每帧都可能重建，取走的话鼠标划一下加成就没了。</p>
+     */
+    private String battleDesc(Card c) {
+        String desc = c.desc();
+        boolean bodySlam = c.kind == Card.Kind.BODY_SLAM;
+
+        // ---- 伤害 ----
+        if (c.damage > 0 || bodySlam) {
+            int actualDmg = CardPlay.dealAttackDamage(this, c);
+            // 赤牛：只对攻击牌生效，且这里必须用 peek（不能消耗）
+            if (c.kind.type == Card.Type.ATTACK) {
+                actualDmg += peekFirstAttackBonus();
+            }
+            if (bodySlam) {
+                desc = desc + "（造成 " + actualDmg + " 点伤害）";
+            } else {
+                desc = desc.replaceFirst("\\b" + c.damage + "\\b", String.valueOf(actualDmg));
+            }
+        }
+
+        // ---- 格挡：敏捷加在「每次获得格挡」上，卡面要跟着变 ----
+        if (c.block > 0 && playerDexterity > 0) {
+            desc = desc.replaceFirst("获得\\s*(\\d+)\\s*点格挡",
+                    "获得 " + (c.block + playerDexterity) + " 点格挡");
+        }
+        return desc;
     }
 
     private Button buildCardButton(Card c) {
         // 多层贴图卡面（固定尺寸容器，手牌高度稳定，防止打牌/换回合时画面跳动）
-        javafx.scene.layout.StackPane face = CardFaceView.buildAt(c, 128);
+        // 战斗中描述文字用实际伤害数值（含力量/虚弱/易伤加成）
+        StackPane face = CardFaceView.buildAt(c, HAND_FACE_W, battleDesc(c));
 
         Button btn = new Button();
         btn.setGraphic(face);
-        btn.setStyle("-fx-background-color: transparent; -fx-padding: 0; -fx-cursor: hand;");
-        btn.setDisable(c.cost < 0 || c.cost > energy || !playerTurn || battleOver);
-        btn.setDisable(!CardPlay.canPlay(c, this));
+        btn.setUserData(c); // 飞行演出靠它把按钮和牌对上
+        // 还没落位的牌（错峰飞行中手牌被重建）要保持隐身，否则会先亮出来再消失
+        btn.setStyle(drawFxInFlight.contains(c) ? CARD_BTN_HIDDEN_STYLE : CARD_BTN_STYLE);
+        btn.setDisable(!CardPlay.canPlay(c, this) || animating);
         btn.setOnAction(e -> {
             play(c);
             refreshHandEnabled();

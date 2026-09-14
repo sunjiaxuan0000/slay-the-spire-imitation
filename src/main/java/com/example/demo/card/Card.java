@@ -16,36 +16,45 @@ public class Card {
 
     /** 牌的种类 */
     public enum Kind {
-        STRIKE("打击", "造成 6 点伤害", Type.ATTACK, 4),
-        DEFEND("防御", "获得 5 点格挡", Type.SKILL, 4),
-        BASH("痛击", "造成 8 点伤害，给予敌人 2 层易伤", Type.ATTACK, 4),
-        SWEEP("铁斩波", "造成 5 点伤害，获得 5 点格挡", Type.ATTACK, 4),
-        POMMEL("剑柄打击", "造成 9 点伤害，抽 1 张牌", Type.ATTACK, 3),
-        SHRUG("耸肩无视", "获得 8 点格挡，抽 1 张牌", Type.SKILL, 3),
-        BLEED("放血", "获得 2 点能量，自己失去 3 点生命", Type.SKILL, 3),
+        STRIKE("打击", "造成 6 点伤害", Type.ATTACK, 3),
+        DEFEND("防御", "获得 5 点格挡", Type.SKILL, 3),
+        BASH("痛击", "造成 8 点伤害，给予敌人 2 层易伤", Type.ATTACK, 3),
+        SWEEP("铁斩波", "造成 5 点伤害，获得 5 点格挡", Type.ATTACK, 3),
+        POMMEL("剑柄打击", "造成 9 点伤害，抽 1 张牌", Type.ATTACK, 2),
+        SHRUG("耸肩无视", "获得 8 点格挡，抽 1 张牌", Type.SKILL, 2),
+        BLEED("放血", "获得 2 点能量，自己失去 3 点生命", Type.SKILL, 2),
         HAMMER("重锤", "造成 32 点伤害", Type.ATTACK, 1),
-        IMPREGNABLE("岿然不动", "获得 30 点格挡", Type.SKILL, 1),
-        DOUBLE_STRIKE("双重打击", "造成 5 点伤害两次", Type.ATTACK, 4),
-        KINDLE("燃烧", "获得 2 层力量", Type.POWER, 3),
-        LIGHTNING("闪电霹雳", "对敌人造成 6 点伤害，给予 1 层易伤", Type.ATTACK, 4),
-        RAGE("盛怒", "获得 2 点能量，消耗", Type.SKILL, 3),
+        IMPREGNABLE("岿然不动", "获得 30 点格挡，消耗", Type.SKILL, 1),
+        DOUBLE_STRIKE("双重打击", "造成 5 点伤害两次", Type.ATTACK, 3),
+        KINDLE("燃烧", "获得 2 层力量", Type.POWER, 2),
+        LIGHTNING("闪电霹雳", "对敌人造成 6 点伤害，给予 1 层易伤", Type.ATTACK, 3),
+        RAGE("盛怒", "获得 2 点能量，消耗", Type.SKILL, 2),
         OFFERING("祭品", "自己失去 6 点生命，获得 2 点能量，抽 3 张牌，消耗", Type.SKILL, 1),
-        FORTIFY("巩固", "将你当前的格挡翻倍", Type.SKILL, 3),
-        FOCUS("战斗专注", "抽 3 张牌，本回合不能再抽牌", Type.SKILL, 3),
-        SHOCKWAVE("震荡波", "给予敌人 4 层虚弱，4 层易伤，消耗", Type.SKILL, 3),
-        HEAVY_BLADE("重刃", "造成 14 点伤害，力量在重刃上发挥 3 倍效果", Type.ATTACK, 4),
-        WILD_STRIKE("狂野打击", "造成 12 点伤害，将一张“伤口”放入你的抽牌堆", Type.ATTACK, 4),
-        ADAMANT_ARM("金刚臂", "造成 12 点伤害，给予 2 层虚弱", Type.ATTACK, 4),
+        FORTIFY("巩固", "将你当前的格挡翻倍", Type.SKILL, 2),
+        FOCUS("战斗专注", "抽 3 张牌，本回合不能再抽牌", Type.SKILL, 2),
+        SHOCKWAVE("震荡波", "给予敌人 4 层虚弱，4 层易伤，消耗", Type.SKILL, 2),
+        HEAVY_BLADE("重刃", "造成 14 点伤害，力量在重刃上发挥 3 倍效果", Type.ATTACK, 3),
+        WILD_STRIKE("狂野打击", "造成 12 点伤害，将一张“伤口”放入你的抽牌堆", Type.ATTACK, 3),
+        ADAMANT_ARM("金刚臂", "造成 12 点伤害，给予 2 层虚弱", Type.ATTACK, 3),
         BRUTALITY("残暴", "使用后每回合开始时失去一点体力，多抽一张牌", Type.POWER, 1),
-        FLEX("活动肌肉", "获得 2 点力量，回合结束时失去 2 点力量", Type.SKILL, 4),
-        WOUND("伤口", "无法被打出", Type.STATUS, 4),
-        SLIME("黏液", "消耗", Type.STATUS, 4);
-
+        FLEX("活动肌肉", "获得 2 点力量，回合结束时失去 2 点力量", Type.SKILL, 3),
+        POWER_THROUGH("硬撑", "获得 15 点格挡，将两张伤口加入手牌", Type.SKILL, 2),
+        SOUL_SEVER("断魂斩", "消耗手牌中所有的非攻击牌，造成 16 点伤害", Type.ATTACK, 2),
+        BODY_SLAM("全身撞击","造成等同于你格挡值的伤害",Type.ATTACK,3),
+        HEMOKINESIS("御血术","失去2点生命，造成15点伤害",Type.ATTACK,2),
+        UPPERCUT("上勾拳","造成13点伤害，给予1层虚弱，给予1层易伤",Type.ATTACK,2),
+        LIMIT_BREAK("突破极限","将你的力量翻倍，消耗",Type.SKILL,1),
+        DEMON_FORM("恶魔形态","每回合增加两点力量",Type.POWER,1),
+        TRUE_GRIT("坚毅","获得7点格挡，随机消耗一张手牌",Type.SKILL,3),
+        FEEL_NO_PAIN("无惧疼痛","每有一张牌被消耗，获得 3 点格挡",Type.POWER,2),
+        WOUND("伤口", "无法被打出", Type.STATUS, 3),
+        SLIME("黏液", "消耗", Type.STATUS, 3);
+        // 升级版不再是独立 Kind：由 Card 的 upgraded 布尔值 + Card.of(kind, true) 表达
 
         public final String label;
         public final String desc;
         public final Type type;
-        public final int weight; // 奖励池权重（4=白卡/普通，3=蓝卡/罕见，1=金卡/稀有）
+        public final int weight; // 品质：1=金卡，2=蓝卡，3=白卡（仅表示品质，不再是抽取权重）
 
         Kind(String label, String desc, Type type, int weight) {
             this.label = label;
@@ -62,13 +71,35 @@ public class Card {
     public final int block;   // 格挡数值（攻击牌为 0）
     public final int draw;    // 打出后额外抽牌数（大多数牌为 0）
     public final boolean exhaust; // 消耗：打出后不进入弃牌堆，每场战斗只能用一次
+    public final boolean innate;  // 固有：第一回合抽牌时必定抽到手牌（占用一个抽牌数）
     public final int hits;    // 攻击段数（默认 1，双重打击为 2）
+    public final boolean upgraded; // 是否升级版：与基础卡共用 Kind / 美术，仅数值与文案不同
 
     private static int nextId = 0;
 
      /** 能否被打出：约定 cost &lt; 0 表示不可打出（如“伤口”）。 */
     public boolean isPlayable() {
         return cost >= 0;
+    }
+
+    /**
+     * 能否升级：已经升过的不再升；状态牌（伤口 / 黏液）也不能升。
+     * <p>篝火「强化卡牌」用这个筛选可选的牌。
+     */
+    public boolean canUpgrade() {
+        return !upgraded && kind.type != Type.STATUS;
+    }
+
+    /**
+     * 升级：返回一张同种类、<b>同 id</b> 的升级版（费用 / 数值 / 文案换成升级版）。
+     *
+     * <p>保留 id 是为了让牌组页（按 id 排序）里的位置不变 —— 直接
+     * {@code Card.of(kind, true)} 会拿到一个新 id，强化完的牌会跳到列表末尾。
+     * 已经是升级版则原样返回。
+     */
+    public Card upgrade() {
+        if (upgraded) return this;
+        return new Card(of(kind, true), id, true);
     }
 
     /**
@@ -79,7 +110,64 @@ public class Card {
         return exhaust || kind.type == Type.POWER;
     }
 
-    private Card(Kind kind, int cost, int damage, int block, int draw, boolean exhaust, int hits) {
+    /** 固有：第一回合抽牌时必定抽到手牌（占用一个抽牌数）。 */
+    public boolean isInnate() {
+        return innate;
+    }
+
+    /** 卡名：升级版在基础名后加“+”。 */
+    public String name() {
+        return upgraded ? kind.label + "+" : kind.label;
+    }
+
+    /** 描述：升级版用升级文案，其余与基础版一致。 */
+    public String desc() {
+        return upgraded ? upgradedDesc(kind) : kind.desc;
+    }
+
+    /** 升级后的描述文案（升级不改文案的牌返回基础文案）。 */
+    private static String upgradedDesc(Kind kind) {
+        return switch (kind) {
+            case STRIKE -> "造成 9 点伤害";
+            case DEFEND -> "获得 8 点格挡";
+            case BASH -> "造成 10 点伤害，给予敌人 3 层易伤";
+            case SWEEP -> "造成 7 点伤害，获得 7 点格挡";
+            case POMMEL -> "造成 10 点伤害，抽 2 张牌";
+            case SHRUG -> "获得 11 点格挡，抽 1 张牌";
+            case BLEED -> "获得 3 点能量，自己失去 3 点生命";
+            case HAMMER -> "造成 42 点伤害";
+            case IMPREGNABLE -> "获得 40 点格挡，消耗";
+            case DOUBLE_STRIKE -> "造成 7 点伤害两次";
+            case KINDLE -> "获得 3 层力量";
+            case LIGHTNING -> "对敌人造成 7 点伤害，给予 1 层易伤";
+            case RAGE -> "获得 2 点能量，消耗";
+            case OFFERING -> "自己失去 6 点生命，获得 2 点能量，抽 5 张牌，消耗";
+            case FORTIFY -> "将你当前的格挡翻倍";
+            case FOCUS -> "抽 4 张牌，本回合不能再抽牌";
+            case SHOCKWAVE -> "给予敌人 4 层虚弱，4 层易伤，消耗";
+            case HEAVY_BLADE -> "造成 14 点伤害，力量在重刃上发挥 5 倍效果";
+            case WILD_STRIKE -> "造成 17 点伤害，将一张“伤口”放入你的抽牌堆";
+            case ADAMANT_ARM -> "造成 14 点伤害，给予 3 层虚弱";
+            case BRUTALITY -> "使用后每回合开始时失去一点体力，多抽一张牌，固有";
+            case FLEX -> "获得 4 点力量，回合结束时失去 4 点力量";
+            case POWER_THROUGH -> "获得 20 点格挡，将两张伤口加入手牌";
+            case SOUL_SEVER -> "消耗手牌中所有的非攻击牌，造成 20 点伤害";
+            case BODY_SLAM -> "造成等同于你格挡值的伤害";
+            case HEMOKINESIS -> "失去2点生命，造成20点伤害";
+            case UPPERCUT -> "造成13点伤害，给予2层虚弱，给予2层易伤";
+            case LIMIT_BREAK -> "将你的力量翻倍";
+            case DEMON_FORM -> "每回合增加 3 点力量";
+            case TRUE_GRIT -> "获得9点格挡，随机消耗一张手牌";
+            case FEEL_NO_PAIN -> "每有一张牌被消耗，获得 4 点格挡";
+            default -> kind.desc;
+        };
+    }
+
+    private Card(Kind kind, int cost, int damage, int block, int draw, boolean exhaust, boolean innate, int hits) {
+        this(kind, cost, damage, block, draw, exhaust, innate, hits, false);
+    }
+
+    private Card(Kind kind, int cost, int damage, int block, int draw, boolean exhaust, boolean innate, int hits, boolean upgraded) {
         this.id = ++nextId;
         this.kind = kind;
         this.cost = cost;
@@ -87,7 +175,27 @@ public class Card {
         this.block = block;
         this.draw = draw;
         this.exhaust = exhaust;
+        this.innate = innate;
         this.hits = hits;
+        this.upgraded = upgraded;
+    }
+
+    /** 私有：照抄 {@code src} 的数值，但用指定 id（{@link #upgrade()} 用来保留原 id）。 */
+    private Card(Card src, int id, boolean upgraded) {
+        this.id = id;
+        this.kind = src.kind;
+        this.cost = src.cost;
+        this.damage = src.damage;
+        this.block = src.block;
+        this.draw = src.draw;
+        this.exhaust = src.exhaust;
+        this.innate = src.innate;
+        this.hits = src.hits;
+        this.upgraded = upgraded;
+    }
+
+    private Card(Kind kind, int cost, int damage, int block, int draw, boolean exhaust, int hits) {
+        this(kind, cost, damage, block, draw, exhaust, false, hits);
     }
 
     private Card(Kind kind, int cost, int damage, int block, int draw, boolean exhaust) {
@@ -123,11 +231,112 @@ public class Card {
     public static Card fortify()     { return new Card(Kind.FORTIFY, 2, 0, 0); }
     public static Card focus()       { return new Card(Kind.FOCUS, 0, 0, 0); }
     public static Card shockwave()   { return new Card(Kind.SHOCKWAVE, 2, 0, 0, 0, true); }
+    public static Card uppercut()    { return new Card(Kind.UPPERCUT,2,13,0);}
     public static Card heavyBlade()  { return new Card(Kind.HEAVY_BLADE, 2, 14, 0); } // 力量 3 倍效果在 play() 中处理
     public static Card wildStrike()  { return new Card(Kind.WILD_STRIKE, 1, 12, 0); } // 加伤口效果在 play() 中处理
     public static Card adamantArm()  { return new Card(Kind.ADAMANT_ARM, 2, 12, 0); } // 给虚弱效果在 play() 中处理
     public static Card brutality()   { return new Card(Kind.BRUTALITY, 0, 0, 0); } // 每回合效果在 play() 中处理
     public static Card flex()        { return new Card(Kind.FLEX, 0, 0, 0); } // 临时力量效果在 play() 中处理
+    public static Card powerThrough(){ return new Card(Kind.POWER_THROUGH, 1, 0, 15); } // 往手牌塞两张伤口的效果在 play() 中处理
+    public static Card soulSever()   { return new Card(Kind.SOUL_SEVER, 2, 16, 0); } // 消耗手牌中非攻击牌的效果在 play() 中处理
+    public static Card limitBreak()  { return new Card(Kind.LIMIT_BREAK, 1, 0, 0,0,true); } // 将你的力量翻倍，消耗
+    public static Card hemokinesis() { return new Card(Kind.HEMOKINESIS, 1, 15, 0); } // 造成15点伤害，失去2点生命值
+    public static Card bodySlam()    { return new Card(Kind.BODY_SLAM, 1, 0, 0); } // 造成你当前格挡值的伤害
+    public static Card demonForm()   { return new Card(Kind.DEMON_FORM, 3, 0, 0); } // 每回合增加两点力量
+    public static Card feelNoPain()  { return new Card(Kind.FEEL_NO_PAIN, 1, 0, 0); } // 每有一张牌被消耗时获得格挡
+    public static Card trueGrit()    { return new Card(Kind.TRUE_GRIT, 1, 0, 7); } // 获得7点格挡，随机消耗一张手牌
     public static Card wound()       { return new Card(Kind.WOUND, -1, 0, 0); } // -1 表示无法打出
     public static Card slime()       { return new Card(Kind.SLIME, 1, 0, 0, 0, true); } // 可打出，消耗
+
+    /** 英雄宝典遗物：随机生成一张不消耗能量的能力牌 */
+    public static Card freePower() {
+        Kind[] powers = { Kind.KINDLE, Kind.BRUTALITY };
+        Kind k = powers[new java.util.Random().nextInt(powers.length)];
+        return new Card(k, 0, 0, 0, 0);
+    }
+
+    /**
+     * 按种类造一张牌；{@code upgraded=true} 时造升级版
+     * （费用 / 数值 / 消耗 / 固有可能与基础版不同）。
+     */
+    public static Card of(Kind kind, boolean upgraded) {
+        if (!upgraded) return of(kind);
+        return switch (kind) {
+            case STRIKE -> new Card(kind, 1, 9, 0, 0, false, false, 1, true);
+            case DEFEND -> new Card(kind, 1, 0, 8, 0, false, false, 1, true);
+            case BASH -> new Card(kind, 2, 10, 0, 0, false, false, 1, true);
+            case SWEEP -> new Card(kind, 1, 7, 7, 0, false, false, 1, true);
+            case POMMEL -> new Card(kind, 1, 10, 0, 2, false, false, 1, true);
+            case SHRUG -> new Card(kind, 1, 0, 11, 1, false, false, 1, true);
+            case BLEED -> new Card(kind, 0, 0, 0, 0, false, false, 1, true);
+            case HAMMER -> new Card(kind, 3, 42, 0, 0, false, false, 1, true);
+            case IMPREGNABLE -> new Card(kind, 2, 0, 40, 0, true, false, 1, true);
+            case DOUBLE_STRIKE -> new Card(kind, 1, 7, 0, 0, false, false, 2, true);
+            case KINDLE -> new Card(kind, 1, 0, 0, 0, false, false, 1, true);
+            case LIGHTNING -> new Card(kind, 1, 7, 0, 0, false, false, 1, true);
+            case RAGE -> new Card(kind, 0, 0, 0, 0, true, false, 1, true);
+            case OFFERING -> new Card(kind, 0, 0, 0, 5, true, false, 1, true);
+            case FORTIFY -> new Card(kind, 1, 0, 0, 0, false, false, 1, true);
+            case FOCUS -> new Card(kind, 0, 0, 0, 0, false, false, 1, true);
+            case SHOCKWAVE -> new Card(kind, 1, 0, 0, 0, true, false, 1, true);
+            case HEAVY_BLADE -> new Card(kind, 2, 14, 0, 0, false, false, 1, true);
+            case WILD_STRIKE -> new Card(kind, 1, 17, 0, 0, false, false, 1, true);
+            case ADAMANT_ARM -> new Card(kind, 2, 14, 0, 0, false, false, 1, true);
+            case BRUTALITY -> new Card(kind, 0, 0, 0, 0, false, true, 1, true);
+            case FLEX -> new Card(kind, 0, 0, 0, 0, false, false, 1, true);
+            case POWER_THROUGH -> new Card(kind, 1, 0, 20, 0, false, false, 1, true);
+            case SOUL_SEVER -> new Card(kind, 2, 20, 0, 0, false, false, 1, true);
+            case BODY_SLAM -> new Card(kind, 0, 0, 0, 0, false, false, 1, true);
+            case HEMOKINESIS -> new Card(kind, 1, 20, 0, 0, false, false, 1, true);
+            case UPPERCUT -> new Card(kind, 2, 13, 0, 0, false, false, 1, true);
+            case LIMIT_BREAK -> new Card(kind, 1, 0, 0, 0, false, false, 1, true);
+            case DEMON_FORM -> new Card(kind, 3, 0, 0, 0, false, false, 1, true);
+            case TRUE_GRIT -> new Card(kind, 1, 0, 9, 0, false, false, 1, true);
+            case FEEL_NO_PAIN -> new Card(kind, 1, 0, 0, 0, false, false, 1, true);
+            case WOUND -> new Card(kind, -1, 0, 0, 0, false, false, 1, true);
+            case SLIME -> new Card(kind, 1, 0, 0, 0, true, false, 1, true);
+        };
+    }
+
+    /**
+     * 按种类造一张标准数值的牌（开发者模式面板的"加牌"列表用）。
+     * 新增卡牌种类时，这里补一个 case 即可。
+     */
+    public static Card of(Kind kind) {
+        return switch (kind) {
+            case STRIKE -> strike();
+            case DEFEND -> defend();
+            case BASH -> bash();
+            case SWEEP -> sweep();
+            case POMMEL -> pommelStrike();
+            case SHRUG -> shrug();
+            case BLEED -> bleed();
+            case HAMMER -> hammer();
+            case IMPREGNABLE -> impregnable();
+            case DOUBLE_STRIKE -> doubleStrike();
+            case KINDLE -> kindle();
+            case LIGHTNING -> lightning();
+            case RAGE -> rage();
+            case OFFERING -> offering();
+            case FORTIFY -> fortify();
+            case FOCUS -> focus();
+            case SHOCKWAVE -> shockwave();
+            case HEAVY_BLADE -> heavyBlade();
+            case WILD_STRIKE -> wildStrike();
+            case ADAMANT_ARM -> adamantArm();
+            case BRUTALITY -> brutality();
+            case FLEX -> flex();
+            case POWER_THROUGH -> powerThrough();
+            case SOUL_SEVER -> soulSever();
+            case WOUND -> wound();
+            case SLIME -> slime();
+            case UPPERCUT -> uppercut();
+            case BODY_SLAM -> bodySlam();
+            case HEMOKINESIS -> hemokinesis();
+            case LIMIT_BREAK -> limitBreak();
+            case DEMON_FORM -> demonForm();
+            case FEEL_NO_PAIN -> feelNoPain();
+            case TRUE_GRIT -> trueGrit();
+        };
+    }
 }

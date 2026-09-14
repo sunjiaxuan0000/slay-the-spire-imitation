@@ -5,6 +5,7 @@ import com.example.demo.character.Relic;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
@@ -34,6 +35,7 @@ public class RunHud extends VBox {
     private final StackPane deckIcon = new StackPane();
     private final Label deckBadge = new Label();
     private final HBox relicRow = new HBox(10);
+    private final HBox topRow = new HBox(18);
 
     public RunHud(Player player,
                   Consumer<Relic> onRelicClick,
@@ -43,7 +45,7 @@ public class RunHud extends VBox {
         this.player = player;
 
         // ---------- 第一行 ----------
-        HBox row1 = new HBox(18);
+        HBox row1 = topRow;
         row1.setAlignment(Pos.CENTER_LEFT);
         row1.setPadding(new Insets(8, 18, 8, 18));
         row1.setStyle("-fx-background-color: #111827;");
@@ -95,7 +97,7 @@ public class RunHud extends VBox {
         deckIcon.setPrefSize(46, 58);
         deckIcon.setMaxSize(46, 58);
         Label glyph = new Label("牌");
-        glyph.setTextFill(Color.rgb(55, 65, 81));
+        glyph.setTextFill(Color.rgb(74, 54, 36));
         glyph.setFont(Font.font(17));
         glyph.setStyle("-fx-font-weight: bold;");
         deckIcon.getChildren().add(glyph);
@@ -118,6 +120,35 @@ public class RunHud extends VBox {
     }
 
     private final Consumer<Relic> onRelicClick;
+
+    /**
+     * 开发者模式：在 HUD 上挂一个橙色的「开」按钮（在牌组图标左边），点开开发者面板。
+     * 只有设置里开了开发者模式时，外层才会调用这个方法。
+     */
+    public void addDevButton(Runnable onClick) {
+        StackPane dev = iconCard("开",
+                "linear-gradient(to bottom right, #fde68a, #f59e0b);", "#78350f");
+        Tooltip.install(dev, new Tooltip("开发者模式：修改牌组 / 手牌 / 遗物"));
+        dev.setOnMouseClicked(e -> onClick.run());
+
+        int idx = topRow.getChildren().indexOf(deckIcon);
+        topRow.getChildren().add(Math.max(0, idx), dev);
+    }
+
+    /**
+     * 开发者模式：在 HUD 上再挂一个红色的「杀」按钮（紧挨着「开」按钮），
+     * 点一下直接秒杀当前敌人。
+     * 只有<b>战斗中</b>且设置里开了开发者模式时，外层才会调用这个方法。
+     */
+    public void addDevKillButton(Runnable onClick) {
+        StackPane kill = iconCard("杀",
+                "linear-gradient(to bottom right, #fca5a5, #dc2626);", "#450a0a");
+        Tooltip.install(kill, new Tooltip("开发者模式：一键秒杀当前敌人（直接结算胜利）"));
+        kill.setOnMouseClicked(e -> onClick.run());
+
+        int idx = topRow.getChildren().indexOf(deckIcon);
+        topRow.getChildren().add(Math.max(0, idx), kill);
+    }
 
     /** 通用小图标（地图用） */
     private static StackPane iconCard(String glyph, String grad, String color) {
@@ -146,11 +177,16 @@ public class RunHud extends VBox {
         badge.setVisible(false);
     }
 
+    /** 牌组图标（右上角）；卡牌飞入牌组特效以此为终点。 */
+    public Node getDeckIcon() {
+        return deckIcon;
+    }
+
     /** 刷新：血条 / 牌组数量 / 遗物图标 */
     public void refresh() {
         goldText.setText("\uD83D\uDCB0"+player.gold);
         hpText.setText(player.hp() + " / " + player.maxHp);
-        double ratio = (double) player.hp() / player.maxHp;
+        double ratio = player.maxHp > 0 ? (double) player.hp() / player.maxHp : 0.0;
         hpFill.setPrefWidth(Math.max(0, BAR_WIDTH * ratio));
         hpFill.setStyle("-fx-background-color: " + (ratio < 0.4 ? "#ef4444" : "#22c55e")
                 + "; -fx-background-radius: 7;");
@@ -161,27 +197,8 @@ public class RunHud extends VBox {
 
         relicRow.getChildren().clear();
         for (Relic r : player.relics) {
-            relicRow.getChildren().add(buildRelicIcon(r));
+            relicRow.getChildren().add(r.buildIcon(onRelicClick));
         }
         relicRow.setVisible(!player.relics.isEmpty());
-    }
-
-    /** 单个遗物小图标：悬停看名字/效果，点击让外层弹整页详情 */
-    private StackPane buildRelicIcon(Relic r) {
-        StackPane icon = new StackPane();
-        icon.setPrefSize(30, 30);
-        icon.setMaxSize(30, 30);
-        icon.setCursor(javafx.scene.Cursor.HAND);
-        icon.setStyle("-fx-background-color: #7c3aed; -fx-background-radius: 8;");
-
-        Label g = new Label(r.name.substring(0, 1));
-        g.setTextFill(Color.WHITE);
-        g.setFont(Font.font(14));
-        g.setStyle("-fx-font-weight: bold;");
-        icon.getChildren().add(g);
-
-        Tooltip.install(icon, new Tooltip(r.name + "\n" + r.desc));
-        icon.setOnMouseClicked(e -> onRelicClick.accept(r));
-        return icon;
     }
 }
