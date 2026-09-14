@@ -54,6 +54,9 @@ public interface BattleState {
     /** 增加敌人易伤层数 */
     void addEnemyVulnerable(int amount);
 
+    /** 玩家获得易伤层数：受到的攻击伤害 ×1.5，每回合开始时减少 1 层（狂暴） */
+    void addPlayerVulnerable(int amount);
+
     /** 给予敌人虚弱（敌人攻击伤害 ×0.75） */
     void addEnemyWeak(int amount);
 

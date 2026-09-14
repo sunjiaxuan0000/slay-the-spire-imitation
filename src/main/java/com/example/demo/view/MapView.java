@@ -24,16 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
-/**
- * 地图界面：把 GameMap 画出来，支持“点击可到达的节点往上走”。
- *
- * 画法：连线用 icons/arrow.png（沿节点方向拉伸旋转）垫底，
- *       节点用各类型图标（icons/*.png）盖在线上。
- * 规则：只能走到当前节点的 next（上层）里；没选到的节点变暗不可点；
- *       走上一个节点后触发 onArrive(类型)，由外面决定发生什么。
- *
- * 宽度自适应：内容宽度随窗口变化时，节点和箭头会整体重排（配合 ScrollPane 的 fitToWidth）。
- */
+
 public class MapView extends Pane {
 
     private static final double ROW_SPACING = 95; // 层与层之间的纵向间距（拉长、不挤）
@@ -99,6 +90,7 @@ public class MapView extends Pane {
             case TREASURE-> "#b45309";
             case EVENT   -> "#0d9488";
             case BOSS    -> "#7f1d1d";
+            case SHOP    -> "#9333ea";
         };
     }
 

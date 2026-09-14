@@ -30,7 +30,10 @@ public class GameMap {
         REST("休息", "休"),
         TREASURE("宝箱", "箱"),
         EVENT("事件", "？"),
-        BOSS("BOSS", "王");
+        BOSS("BOSS", "王"),
+        SHOP("商店", "店");
+
+
 
         final String label;   // 完整名字
         final String glyph;   // 圆圈里显示的字
@@ -214,7 +217,9 @@ public class GameMap {
         if (row == TREASURE_ROW) return NodeType.TREASURE; // 第 9 层：固定宝箱层
         if (row == REST_ROW) return NodeType.REST;         // BOSS 前一层：固定篝火层
         if (row == 1) return NodeType.MONSTER;             // 起点后第一层只出普通怪（不出事件/休息）
-
+        if(row>=3&&row<REST_ROW&&rnd.nextInt(100)<12){
+            return NodeType.SHOP;
+        }
         int roll = rnd.nextInt(100);
 
         // 休息：只在过了山脚段出现，且不能被禁用（防连续）
