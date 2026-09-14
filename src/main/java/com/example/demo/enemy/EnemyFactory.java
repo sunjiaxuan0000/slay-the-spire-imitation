@@ -2,6 +2,8 @@ package com.example.demo.enemy;
 
 import com.example.demo.view.GameMap;
 
+import java.util.Random;
+
 /**
  * 普通怪的生成规则集中在此，供战斗入口调用。
  *
@@ -88,9 +90,23 @@ public final class EnemyFactory {
         return Math.random() < 0.5 ? new DukePorcodraco() : new GiantBoarKnight();
     }
 
-    /** 精英房：卫士猪 / 闪电猪各 50% */
+    /** 精英房：卫士猪 / 闪电猪 / 混沌猪 各 1/3（无种子版本，自测用） */
     public static Enemy elite() {
-        return Math.random() < 0.5 ? new GuardPig() : new FlashPig();
+        return elite(new Random().nextLong());
+    }
+
+    /**
+     * 精英房：卫士猪 / 闪电猪 / 混沌猪 <b>等概率</b>（各 1/3）。
+     *
+     * <p>传节点种子：同一个精英节点重进（SL / 混沌改判后）遇到的还是同一只精英，
+     * 不能靠「退出重进」把混沌猪刷成卫士猪。</p>
+     */
+    public static Enemy elite(long seed) {
+        return switch (new Random(seed).nextInt(3)) {
+            case 0 -> new GuardPig();
+            case 1 -> new FlashPig();
+            default -> new ChaosPig();
+        };
     }
 
     /**
@@ -127,6 +143,7 @@ public final class EnemyFactory {
                 case "猪？"       -> { return new MysteryPig(); }
                 case "卫士猪"     -> { return new GuardPig(); }
                 case "闪电猪"     -> { return new FlashPig(); }
+                case "混沌猪"     -> { return new ChaosPig(); }
                 case "猪龙鱼公爵" -> { return new DukePorcodraco(); }
                 case "巨猪骑士"   -> { return new GiantBoarKnight(); }
                 default -> { }

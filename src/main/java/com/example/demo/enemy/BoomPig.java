@@ -23,8 +23,8 @@ public class BoomPig extends Enemy {
     public BoomPig() {
         super("神风猪", 56, true, false, List.of(
                 new Step(Intent.ATTACK, 10),
-                new Step(Intent.DEFEND, 5),
-                new Step(Intent.CHARGE, 1)
+                new Step(Intent.CHARGE, 1),
+                new Step(Intent.CHARGE, 5)
         ));
         chargeDamagePerStack = DAMAGE_PER_STACK;
         portraitName = "神风猪"; // 必须和 portrait/ 下的文件名一致

@@ -16,7 +16,6 @@ import com.example.demo.operator.DevEntry;
 import com.example.demo.save.SaveData;
 import com.example.demo.view.CardFlyFx;
 import com.example.demo.view.ConfirmOverlay;
-import com.example.demo.view.DeckPickOverlay;
 import com.example.demo.view.GameMap;
 import com.example.demo.view.MainMenu;
 import com.example.demo.view.RewardOverlay;
@@ -108,22 +107,6 @@ public class HelloApplication extends Application {
             GameMap.NodeType.EVENT,
             GameMap.NodeType.REST,
             GameMap.NodeType.TREASURE,
-    };
-
-    /**
-     * 混沌掷房间用（<b>固定宝箱层之后</b>的楼层）：比上面多一个商店，6 选 1 各 1/6。
-     *
-     * <p>为什么要分两张表：商店是在「宝箱层之后」才出现的房间类型
-     * （见 {@code GameMap.typeFor} 的 {@code row>=3&&row<REST_ROW} 那一段），
-     * 让混沌在山脚几层就掷出商店会和正常地图的节奏对不上。</p>
-     */
-    private static final GameMap.NodeType[] CHAOS_ROOMS_WITH_SHOP = {
-            GameMap.NodeType.MONSTER,
-            GameMap.NodeType.ELITE,
-            GameMap.NodeType.EVENT,
-            GameMap.NodeType.REST,
-            GameMap.NodeType.TREASURE,
-            GameMap.NodeType.SHOP,
     };
 
     /** 混沌掷房间用的随机源 */
@@ -439,18 +422,16 @@ public class HelloApplication extends Application {
     }
 
     /**
-     * 节点级随机种子 = 地图种子 + 当前节点坐标。
+     * 本场战斗的洗牌种子 = 地图种子 + 当前节点坐标。
      *
-     * <p>凡是「进这个节点时掷一次、重进还得是同一结果」的随机都用它：
-     * 战斗洗牌（{@code BattleView}）、事件挑选（{@link EventDef#pick}）、
-     * 商店货架与价格、宝箱 / 精英 / Boss 的遗物、事件掉落……</p>
+     * <p>⚠ <b>必须带上 row/col</b>：每场战斗都是 {@code new Random(seed)}，
+     * 只用 {@code map.seed} 的话同一局里每一战的洗牌起点完全一样，
+     * 第 1 层和第 10 层会抽出一模一样的牌序。</p>
      *
-     * <p>⚠ <b>必须带上 row/col</b>：只用 {@code map.seed} 的话同一局里每个节点
-     * 的随机起点完全一样，第 1 层和第 10 层会洗出一模一样的牌序、抽到同一个事件。</p>
-     *
-     * <p>不用存进存档 —— 读档时 {@code map.seed} 和节点坐标都在，算出来还是同一个值。</p>
+     * <p>不用存进存档 —— 读档时 {@code map.seed} 和节点坐标都在，算出来还是同一个值，
+     * 所以重进战斗抽到的牌和上次完全一致（SL 刷不了起手）。</p>
      */
-    private static long nodeSeed(GameMap map) {
+    private static long battleSeed(GameMap map) {
         long s = map.seed;
         if (map.current != null) {
             s = s * 31 + map.current.row;
@@ -458,32 +439,6 @@ public class HelloApplication extends Application {
         }
         return s;
     }
-
-    /**
-     * 从节点种子派生第 {@code stream} 条独立随机流。
-     *
-     * <p>同一个节点里往往有好几处随机（商店的货架 / 价格、战斗的洗牌 / Boss 遗物…）。
-     * 各走一条流、用不同的 {@code stream} 编号，改其中一处「抽了几次」不会把
-     * 别处的结果一起带偏 —— 共用一个 {@link Random} 就会。</p>
-     */
-    private static Random stream(long seed, int stream) {
-        return new Random(subSeed(seed, stream));
-    }
-
-    /** {@link #stream} 的 long 版本：给「要的是种子而不是 Random 对象」的 API 用。 */
-    private static long subSeed(long seed, int stream) {
-        return seed * 31 + stream;
-    }
-
-    // 各处随机用的流编号。编号只要互不相同就行，具体数值没有含义。
-    private static final int STREAM_SHOP_STOCK = 1;   // 商店：4 张卡牌货架
-    private static final int STREAM_SHOP_RELIC = 2;   // 商店：3 件遗物货架
-    private static final int STREAM_SHOP_PRICE = 3;   // 商店：价格浮动（±30）
-    private static final int STREAM_NODE_RELIC = 4;   // 精英战利品 / 宝箱遗物
-    private static final int STREAM_EVENT_DROP = 5;   // 事件掉落（遗物 / 卡牌 / 泉水结果）
-    private static final int STREAM_START_RELIC = 6;  // 起点房间：三选一初始遗物
-    private static final int STREAM_FALLBACK_EVENT = 7; // 读档时按名字找不到事件 → 兜底重挑
-    private static final int STREAM_GOLD_REWARD = 8;  // 战斗胜利的金币奖励
 
     /** 战斗场景：顶�?HUD + 战斗主体，外面再包整页窗口层 */
     private void startBattle(Stage stage, GameMap map, Player player,
@@ -501,14 +456,12 @@ public class HelloApplication extends Application {
             activeBattle = null;
             battleMapOpen = false;
             if (won) {
-                player.gold += calculateGoldReward(type, nodeSeed(map)); // 战斗胜利发放金币
+                player.gold += calculateGoldReward(type); // 战斗胜利发放金币
 
                 // 精英战利品：只「挑」不「拿」。真正入账要等玩家在获取界面上点「拾取」，
                 // 所以这里拿到的只是一个候选 —— 丢弃就什么都不发生。
-                // 传节点种子：读档续上的那条路（afterBattleReward）用的是同一个种子，
-                // 所以「退出重进」拿到的还是这一件，不会白送一次重摇。
                 Relic eliteRelic = (type == GameMap.NodeType.ELITE)
-                        ? RelicFun.pickEliteRelic(player, Set.of(), subSeed(nodeSeed(map), STREAM_NODE_RELIC))
+                        ? RelicFun.pickEliteRelic(player)
                         : null;
 
                 // 所有战斗胜利后都回到地图。新 HUD 是在遗物入账【之前】建的，
@@ -533,7 +486,7 @@ public class HelloApplication extends Application {
                 returnToMenu(stage);
             }
         }, type == GameMap.NodeType.BOSS,   // true=用 boss 战斗背景，否则 default 背景
-                nodeSeed(map));             // 洗牌种子：SL 之后牌序不变
+                battleSeed(map));           // 洗牌种子：SL 之后牌序不变
         activeBattle = battle;
 
         // 战斗胜利、三张奖励牌刚抽好 → 存档记成「已胜利，待领奖励」。
@@ -562,20 +515,13 @@ public class HelloApplication extends Application {
             }
         });
     }
-    /**
-     * 战斗胜利的金币奖励。
-     *
-     * @param seed 节点种子 —— 同一场战斗重打拿到的是同一笔金币，
-     *             不能靠「打之前退出重进」反复摇一个更高的数。
-     */
-    private int calculateGoldReward(GameMap.NodeType type, long seed) {
-        Random rnd = stream(seed, STREAM_GOLD_REWARD);
+    private int calculateGoldReward(GameMap.NodeType type){
         if (type == GameMap.NodeType.MONSTER) {
-            return 10 + rnd.nextInt(16);
+            return 10 + new Random().nextInt(16);
         }
 
         if (type == GameMap.NodeType.ELITE) {
-            return 25 + rnd.nextInt(26);
+            return 25 + new Random().nextInt(26);
         }
 
         if (type == GameMap.NodeType.BOSS) {
@@ -908,10 +854,7 @@ public class HelloApplication extends Application {
         // 混沌：非固定层节点在地图上都画成「事件」，但真正进哪个房间是等概率掷出来的。
         // 只覆盖非固定层 —— 起点 / 固定宝箱层 / 固定篝火层 / BOSS 层照旧按自身类型走。
         if (player.chaos && map.current != null && !GameMap.isFixedRow(map.current.row)) {
-            // 过了固定宝箱层之后，商店也进池子（6 选 1，和其他房间类型概率相等）
-            GameMap.NodeType[] rooms =
-                    (map.current.row > GameMap.TREASURE_ROW) ? CHAOS_ROOMS_WITH_SHOP : CHAOS_ROOMS;
-            type = rooms[CHAOS_RND.nextInt(rooms.length)];
+            type = CHAOS_ROOMS[CHAOS_RND.nextInt(CHAOS_ROOMS.length)];
         }
         enterNode(stage, map, player, hud, type, null, null);
     }
@@ -941,10 +884,9 @@ public class HelloApplication extends Application {
             // BOSS 按地图定好的种类出（和地图上画的那只对得上），不再临场随机
             case BOSS    -> { if (enemy == null) enemy = EnemyFactory.boss(map.bossKind); }
             case EVENT   -> {
-                // ⚠ 走 EventDef.pick(player, seed) 而不是均匀抽 EventDef.pool() ——
-                // 猪雪峰是「一局一次 + 低概率」，pick 里单独掷骰子并置 xuefengSeen；
-                // 传节点种子则是为了「重进这个节点还是同一个事件」（SL 刷不了）。
-                if (ev == null) ev = EventDef.pick(player, nodeSeed(map));
+                // ⚠ 走 EventDef.pick(player) 而不是均匀抽 EventDef.pool() ——
+                // 猪雪峰是「一局一次 + 低概率」，pick 里单独掷骰子并置 xuefengSeen。
+                if (ev == null) ev = EventDef.pick(player);
             }
             default -> { }
         }
@@ -963,9 +905,7 @@ public class HelloApplication extends Application {
             case REST    -> showRestScene(stage, map, player);
             case TREASURE -> {
                 // 只挑不拿：等玩家在获取界面上点「拾取」才入账
-                // 传节点种子：同一个宝箱重进还是那一件，退出重进刷不了
-                Relic gained = RelicFun.pickEliteRelic(player, Set.of(),
-                        subSeed(nodeSeed(map), STREAM_NODE_RELIC));
+                Relic gained = RelicFun.pickEliteRelic(player);
                 if (gained != null) {
                     offerRelic(stage, player, hud, gained, () -> markCleared(map, player));
                 } else {
@@ -979,145 +919,77 @@ public class HelloApplication extends Application {
 
     // ================= 商店 =================
 
-    /**
-     * 商店场景：展示卡牌 / 遗物商品 + 「移除卡牌」服务，购买逻辑都在这里结算。
-     *
-     * <p><b>货源</b>：
-     * <ul>
-     *   <li>卡牌 —— {@link CardRewardPool#shopStock} 从奖励池随机 4 张（不含初始卡 / 状态卡），
-     *       价格按稀有度（白 50 / 蓝 100 / 金 150）再 ±30 浮动</li>
-     *   <li>遗物 —— {@link RelicFun#pickEliteOptions} 从<b>精英池</b>（和宝箱同一池）按权重抽 3 件，
-     *       价格 150 ±30；{@link ShopView} 负责显示名称 + 图标 + 描述</li>
-     * </ul>
-     * ⚠ 遗物必须是 {@code Relic} 池子里的<b>原对象</b>（带 imagePath），
-     * 不能 {@code new Relic(name, desc)} —— 那个两参构造会把图标路径置空。</p>
-     *
-     * <p><b>随机全部走节点种子</b>：货架、遗物、价格各一条独立随机流
-     * （{@link #stream}）。所以同一个商店节点退出重进，卖的东西和标价完全一致 ——
-     * 没法靠反复读档刷出更便宜的金卡。</p>
-     */
+    /** 商店场景：展示卡牌/遗物商品，购买和离开的逻辑都在这里结算 */
     private void startShopScene(Stage stage, GameMap map, Player player) {
-        long seed = nodeSeed(map);
-
-        List<Card> cardGoods = CardRewardPool.shopStock(4, stream(seed, STREAM_SHOP_STOCK));
-        List<Relic> relicGoods = RelicFun.pickEliteOptions(
-                player, 3, subSeed(seed, STREAM_SHOP_RELIC));
-        long priceSeed = subSeed(seed, STREAM_SHOP_PRICE);
-
-        // 顶部 HUD：和地图 / 战斗 / 事件页同一个（生命 / 金币 / 牌组 / 遗物栏）
-        RunHud hud = buildHud(player, map, () -> { }, false);
-        DevEntry.attachDevButton(hud, player, null, hud::refresh,
-                node -> showWindow(page(node)), this::closeWindow);
+        // 本店商品（先固定一批，以后可换成随机）
+        List<Card> cardGoods = List.of(
+                Card.heavyBlade(), Card.impregnable(), Card.kindle(), Card.offering());
+        // 本店遗物：从初始 + 精英 + 事件三个池子里随机抽 2 件，排除玩家已拥有的
+        List<Relic> shopRelicPool = new ArrayList<>();
+        shopRelicPool.addAll(Relic.starterRelics());
+        shopRelicPool.addAll(Relic.eliteRelics());
+        shopRelicPool.addAll(Relic.eventRelics());
+        List<Relic> available = RelicFun.filterOwned(shopRelicPool, player);
+        List<Relic> relicGoods = drawShopRelics(available, 2);
 
         // 购买回调里要刷新商店 UI，但 shop 此时还没构造完 → 先用数组占位，构造完再填
         final ShopView[] shopRef = new ShopView[1];
-        // 覆盖层（选牌界面 / 提示弹窗）挂在外层 StackPane 上 ——
-        // ShopView 自己是 BorderPane，直接往里塞覆盖层会被当成某个区域去布局。
-        final StackPane[] hostRef = new StackPane[1];
-        final DeckPickOverlay[] pickerRef = new DeckPickOverlay[1];
-        final boolean[] removeUsed = { false };
 
         ShopView shop = new ShopView(player, cardGoods, relicGoods,
                 c -> { // 购买卡牌
-                    // ⚠ 价格必须问 ShopView 要（每个商品有自己的 ±30 浮动），
-                    //   不能再调静态的 ShopView.cardPrice —— 那是没浮动过的基准价。
-                    int price = shopRef[0].priceOf(c);
+                    int price = ShopView.cardPrice(c);
                     if (player.gold < price) {
-                        shopAlert(hostRef[0], "金币不足！",
-                                "这张牌要 " + price + " 金币，你只有 " + player.gold + "。");
+                        shopAlert("金币不足！", "这件商品要 " + price + " 金币，你只有 " + player.gold + "。");
                         return;
                     }
                     player.gold -= price;
                     player.deck.add(c);
                     shopRef[0].refreshGold();
                     shopRef[0].markSold(c);
-                    hud.refresh(); // 顶部 HUD 的金币也跟着变
                 },
                 r -> { // 购买遗物
-                    int price = shopRef[0].priceOf(r);
+                    int price = ShopView.relicPrice();
                     if (player.gold < price) {
-                        shopAlert(hostRef[0], "金币不足！",
-                                "这件遗物要 " + price + " 金币，你只有 " + player.gold + "。");
+                        shopAlert("金币不足！", "这件商品要 " + price + " 金币，你只有 " + player.gold + "。");
                         return;
                     }
                     player.gold -= price;
-                    // ⚠ 走 addRelic：遗物「获得时」的即时效果（草莓 +7 上限、请假条计数…）要靠它触发
                     player.addRelic(r);
                     shopRef[0].refreshGold();
                     shopRef[0].markSold(r);
-                    hud.refresh();
                 },
-                () -> { // 移除卡牌服务
-                    if (removeUsed[0]) return;
-                    int price = ShopView.removeCardPrice();
-                    if (player.gold < price) {
-                        shopAlert(hostRef[0], "金币不足！",
-                                "这项服务要 " + price + " 金币，你只有 " + player.gold + "。");
-                        return;
-                    }
-                    // 牌组只剩一张就别删了 —— 删空了这局直接没法打
-                    if (player.deck.size() <= 1) {
-                        shopAlert(hostRef[0], "无法移除", "你的牌组已经不能再少了。");
-                        return;
-                    }
-                    DeckPickOverlay picker = new DeckPickOverlay(player,
-                            "移除卡牌 · 选择一张牌",
-                            "点击要移除的卡牌 · 点「取消」什么都不做",
-                            null,                 // 用玩家当前牌组
-                            c -> true,            // 所有牌都能选
-                            c -> {                // 真的删掉
-                                player.gold -= price;
-                                player.deck.remove(c);
-                                removeUsed[0] = true;
-                                pickerRef[0] = null;
-                                shopRef[0].refreshGold();
-                                shopRef[0].markRemoveUsed();
-                                hud.refresh();
-                            },
-                            () -> pickerRef[0] = null, // 取消：什么都不做
-                            c -> "移除后「" + c.name() + "」将永久离开你的牌组");
-                    pickerRef[0] = picker;
-                    hostRef[0].getChildren().add(picker);
-                    picker.show();
-                },
-                () -> showMapScene(stage, map, player), // 离开商店 → 回地图
-                priceSeed);
+                () -> showMapScene(stage, map, player)); // 离开商店 → 回地图
         shopRef[0] = shop;
 
-        // HUD 放 top、商店放 center（商店自己的「离开商店」按钮在最底部）
-        BorderPane content = new BorderPane();
-        content.setTop(hud);
-        content.setCenter(shop);
-
-        // 覆盖层挂在最外层：选牌界面 / 提示弹窗要盖住整页（含顶部 HUD）
-        StackPane host = new StackPane(content);
-        hostRef[0] = host;
-
         // 复用 Scene 切换（不新建 Scene → 不动窗口尺寸/全屏），Esc = 离开商店
-        switchScene(stage, wrapOverlay(host), e -> {
-            if (e.getCode() != KeyCode.ESCAPE) return;
-            // 选牌界面开着的时候，Esc 先关它，别把商店一起退了
-            if (pickerRef[0] != null) {
-                host.getChildren().remove(pickerRef[0]);
-                pickerRef[0] = null;
-                return;
+        switchScene(stage, shop, e -> {
+            if (e.getCode() == KeyCode.ESCAPE) {
+                showMapScene(stage, map, player); // ESC = 离开商店
             }
-            showMapScene(stage, map, player);
         });
     }
 
+    /** 商店提示弹窗（金币不足等） */
+    private void shopAlert(String title, String text) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(text);
+        alert.showAndWait();
+    }
+
     /**
-     * 商店提示弹窗（金币不足等）。
+     * 从可用遗物池中随机抽取指定数量的遗物作为商店商品。
      *
-     * <p>用 {@link ConfirmOverlay} 而不是 {@link Alert}：和游戏画风一致，
-     * 也不会踩「动画 / 布局处理中不能 showAndWait」那颗雷（和放弃存档的确认框同一套）。</p>
-     *
-     * @param parent 要挂上去的容器（商店外面那层 StackPane）；传 null 就什么都不弹
+     * <p>池子不够时能抽多少抽多少，不会报错；
+     * 返回的是原始 Relic 对象（带 imagePath），图标能正常显示。</p>
      */
-    private void shopAlert(Pane parent, String title, String text) {
-        if (parent == null) return;
-        // cancelText 传 null → 只画一个「知道了」按钮
-        new ConfirmOverlay(title, text, "知道了", null, null, null).show(parent);
+    private static List<Relic> drawShopRelics(List<Relic> available, int count) {
+        if (available.isEmpty()) return List.of();
+        List<Relic> pool = new ArrayList<>(available);
+        Collections.shuffle(pool);
+        int n = Math.min(count, pool.size());
+        return pool.subList(0, n);
     }
 
     /**
@@ -1157,7 +1029,7 @@ public class HelloApplication extends Application {
                     case BOSS -> enemy = EnemyFactory.boss(map.bossKind);
                     case MONSTER, ELITE -> enemy =
                             EnemyFactory.named(s.enemy, map.current.row, false);
-                    case EVENT -> ev = findEvent(s.event, nodeSeed(map));
+                    case EVENT -> ev = findEvent(s.event);
                     default -> { }
                 }
                 // hud 传 null：宝箱房要弹遗物界面，而刚读档还没有 HUD —— offerRelic 允许 hud 为 null，
@@ -1218,52 +1090,38 @@ public class HelloApplication extends Application {
             return;
         }
         if (type == GameMap.NodeType.ELITE) {
-            // 和战斗胜利那条路用同一个种子（STREAM_NODE_RELIC）→ 读档续上的还是同一件战利品
-            Relic eliteRelic = RelicFun.pickEliteRelic(player, Set.of(),
-                    subSeed(nodeSeed(map), STREAM_NODE_RELIC));
+            Relic eliteRelic = RelicFun.pickEliteRelic(player);
             offerRelic(stage, player, hud, eliteRelic, () -> markCleared(map, player));
         }
     }
 
-    /** 按名字找回存档里的事件；找不到（或旧存档没记）就按节点种子兜底挑一个。 */
-    private static EventDef findEvent(String name, long seed) {
+    /** 按名字找回存档里的事件；找不到（或旧存档没记）就随机挑一个，和「新进节点」一致。 */
+    private static EventDef findEvent(String name) {
         List<EventDef> pool = EventDef.pool();
         if (name != null && !name.isEmpty()) {
             for (EventDef e : pool) {
                 if (e.name.equals(name)) return e;
             }
         }
-        return pool.get(stream(seed, STREAM_FALLBACK_EVENT).nextInt(pool.size()));
+        return pool.get(new java.util.Random().nextInt(pool.size()));
     }
 
-    /** 随机奖励一张卡（事件奖励用）。传种子 → 重进这个事件抽到的是同一张。 */
-    private Card randomRewardCard(long seed) {
+    /** 随机奖励一张卡（事�?奖励用） */
+    private Card randomRewardCard() {
         List<Card> pool = List.of(
                 Card.strike(), Card.defend(), Card.bash(),
                 Card.hammer(), Card.impregnable(),
                 Card.doubleStrike(), Card.kindle());
-        int idx = stream(seed, STREAM_EVENT_DROP).nextInt(pool.size());
+        int idx = new java.util.Random().nextInt(pool.size());
         return pool.get(idx);
     }
 
     // ================= 事件 =================
 
-    /**
-     * 事件场景：顶部 HUD + 专属背景图 + 右侧名称/描述 + 选项，选完结算回地图。
-     *
-     * <p>HUD 和地图 / 战斗页是同一个 {@link RunHud}（生命 / 金币 / 牌组图标 + 遗物栏），
-     * 所以事件页里也看得到自己的状态。事件里用到的随机全部由节点种子派生 ——
-     * 退出重进这个事件，掉落的遗物 / 卡牌、泉水是加血还是掉血，都和第一次一样。</p>
-     */
+    /** 事件场景：专属背景图 + 右侧名称/描述 + 选项，选完结算回地�?*/
     private void startEventScene(Stage stage, GameMap map, Player player, EventDef ev) {
-        long seed = nodeSeed(map);
-
-        RunHud hud = buildHud(player, map, () -> { }, false); // 事件页不放「地图」按钮
-        DevEntry.attachDevButton(hud, player, null, hud::refresh,
-                node -> showWindow(page(node)), this::closeWindow);
-
         EventView view = new EventView(ev, opt -> {
-            EventOutcome out = applyEventOption(player, opt, seed);
+            EventOutcome out = applyEventOption(player, opt);
             if (player.hp() == 0) {
                 // 事件里把血扣光了：这一局结束，存档作废
                 SaveData.delete();
@@ -1280,7 +1138,7 @@ public class HelloApplication extends Application {
                 RunHud mapHud = showMapScene(stage, map, player);
 
                 // 事件给了卡牌：复用「获得卡牌 → 飞入牌组」演出（和战斗奖励同一套）。
-                // ⚠ 必须等回到地图，牌组图标才是新的那一个，所以放在 showMapScene 之后；
+                // ⚠ 必须等回到地图才有牌组图标（事件页本身没有 HUD），所以放在 showMapScene 之后；
                 //    再包一层 runLater 等新场景完成一次布局，否则图标尺寸还是 0，飞落点会算错。
                 if (out.gainedCard() != null) {
                     Platform.runLater(() -> {
@@ -1296,96 +1154,87 @@ public class HelloApplication extends Application {
             }
         });
 
-        // 事件页保留顶部 HUD（生命 / 金币 / 牌组 / 遗物栏）：HUD 放 top，事件主体放 center
-        BorderPane content = new BorderPane();
-        content.setTop(hud);
-        content.setCenter(view);
-
-        // Esc：牌组 / 遗物详情窗口开着时先关窗（别把整局退回主菜单），否则回主菜单
-        switchScene(stage, wrapOverlay(content), e -> {
-            if (e.getCode() != KeyCode.ESCAPE) return;
-            if (isWindowOpen()) {
-                closeWindow();
-            } else {
-                returnToMenu(stage);
-            }
-        });
+        switchScene(stage, view, escToMenu(stage));
     }
 
     /**
      * 事件选项的结算结果：提示文字 + 一件「待玩家决定去留」的遗物（没有就为 null）。
      *
      * <p>遗物不在这里入账 —— 要等玩家在获取界面上点「拾取」。
-     * 所以 ADD_RELIC 分支只「挑」不「拿」，把遗物交给调用方去弹界面。</p>
+     * 所以 ADD_RELIC / ADD_NAMED_RELIC 分支只「挑」不「拿」，把遗物交给调用方去弹界面。</p>
      */
     private record EventOutcome(String message, Relic relic, Card gainedCard) {}
 
     /**
-     * 结算事件选项的真实效果，返回提示文字（遗物只挑不拿，见 {@link EventOutcome}）。
+     * 结算事件选项的全部效果（一个选项可含多个 {@link EventDef.Effect}），
+     * 返回 {@link EventOutcome}。
      *
-     * @param seed 节点种子派生的事件流种子 —— 事件里的随机（给哪张牌 / 给哪件遗物 /
-     *             泉水是加血还是掉血）全部由它决定，重进这个事件结果不变。
+     * <p>遗物同样「只挑不拿」—— 交给调用方 {@code offerRelic} 弹获取界面，
+     * 点了「拾取」才入账；获得的卡牌记进 {@code gainedCard}，
+     * 供调用方播「飞入牌组」的演出。</p>
      */
-    private EventOutcome applyEventOption(Player player, EventDef.Option opt, long seed) {
-        return switch (opt.action) {
-            case HEAL -> {
-                int before = player.hp();
-                player.heal(opt.amount);
-                yield new EventOutcome(
-                        "回复 " + opt.amount + " 点生命：" + before + " → " + player.hp(), null, null);
-            }
-            case DAMAGE -> {
-                int before = player.hp();
-                player.damage(opt.amount);
-                yield new EventOutcome(
-                        "失去 " + opt.amount + " 点生命：" + before + " → " + player.hp(), null, null);
-            }
-            case ADD_CARD -> {
-                // 数据照常即时入账；「飞入牌组」的演出交给调用方（要等回到地图才有牌组图标）
-                Card c = randomRewardCard(seed);
-                player.deck.add(c);
-                yield new EventOutcome("获得卡牌：「" + c.name() + "」加入牌组（#" + c.id + "）", null, c);
-            }
-            case ADD_RELIC -> {
-                // 只挑不拿：等玩家在获取界面上点「拾取」才入账
-                Relic r = RelicFun.pickEventRelic(player, seed);
-                yield r == null
-                        ? new EventOutcome("遗物池里已经没有新遗物了……", null, null)
-                        : new EventOutcome("发现遗物：「" + r.name + "」\n" + r.desc, r, null);
-            }
-            case RANDOM_WATER -> {
-                int before = player.hp();
-                if (stream(seed, STREAM_EVENT_DROP).nextDouble() < 0.5) {
-                    player.heal(10);
-                    yield new EventOutcome(
-                            "你喝下泉水...运气不错，恢复 10 点生命：" + before + " → " + player.hp(),
-                            null, null);
-                } else {
-                    player.damage(10);
-                    yield new EventOutcome(
-                            "你喝下泉水...糟糕，失去 10 点生命：" + before + " → " + player.hp(),
-                            null, null);
+    private EventOutcome applyEventOption(Player player, EventDef.Option opt) {
+        StringBuilder msg = new StringBuilder();
+        Relic relic = null;      // 待玩家决定去留的遗物（最多一件）
+        Card gainedCard = null;  // 本次加入牌组的卡（供飞入演出，多张时播最后一张）
+
+        for (EventDef.Effect effect : opt.effects) {
+            switch (effect.action) {
+                case HEAL -> {
+                    int before = player.hp();
+                    player.heal(effect.amount);
+                    msg.append("回复 ").append(effect.amount).append(" 点生命：")
+                            .append(before).append(" → ").append(player.hp());
                 }
+                case DAMAGE -> {
+                    int before = player.hp();
+                    player.damage(effect.amount);
+                    msg.append("失去 ").append(effect.amount).append(" 点生命：")
+                            .append(before).append(" → ").append(player.hp());
+                }
+                case ADD_CARD -> {
+                    Card c = randomRewardCard();
+                    player.deck.add(c);
+                    gainedCard = c;
+                    msg.append("获得卡牌：「").append(c.name())
+                            .append("」加入牌组（#").append(c.id).append("）");
+                }
+                case ADD_RELIC -> {
+                    relic = RelicFun.pickEventRelic(player);
+                    msg.append(relic == null
+                            ? "遗物池里已经没有新遗物了……"
+                            : "发现遗物：「" + relic.name + "」\n" + relic.desc);
+                }
+                case ADD_NAMED_RELIC -> {
+                    relic = EventDef.relicNamed(effect.relicName);
+                    msg.append(relic == null
+                            ? "雕像上的力量已经散了……"
+                            : "发现遗物：「" + relic.name + "」\n" + relic.desc);
+                }
+                case ADD_WOUND -> {
+                    Card wound = Card.wound(); // 每次都新建一张"伤口"，不复用实例
+                    player.deck.add(wound);
+                    gainedCard = wound;
+                    msg.append("获得卡牌：「").append(wound.name()).append("」加入牌组");
+                }
+                case RANDOM_WATER -> {
+                    int before = player.hp();
+                    if (Math.random() < 0.5) {
+                        player.heal(20);
+                        msg.append("你喝下泉水...运气不错，恢复 20 点生命：")
+                                .append(before).append(" → ").append(player.hp());
+                    } else {
+                        player.damage(15);
+                        msg.append("你喝下泉水...糟糕，失去 15 点生命：")
+                                .append(before).append(" → ").append(player.hp());
+                    }
+                }
+                case NOTHING -> msg.append(opt.effectDesc).append("（无事发生）");
             }
-            case CURSE -> {
-                int before = player.hp();
-                player.damage(opt.amount);              // 扣血（amount = 10）
-                Card wound = Card.wound();              // 每次都新建一张"伤口"，不复用实例
-                player.deck.add(wound);
-                yield new EventOutcome("你感受到一股冰冷的力量涌入身体……\n"
-                        + "失去 " + opt.amount + " 点生命：" + before + " → " + player.hp() + "\n"
-                        + "获得卡牌：「" + wound.kind.label + "」加入牌组", null, wound);
-            }
-            case ADD_NAMED_RELIC -> {
-                // 猪雪峰：点名发放专属遗物（那三件不在任何抽取池里）。
-                // 同样「只挑不拿」—— 交给 offerRelic 弹获取界面，点了「拾取」才入账。
-                Relic r = Relic.findByName(opt.relicName);
-                yield r == null
-                        ? new EventOutcome("雕像上的力量已经散了……", null, null)
-                        : new EventOutcome("发现遗物：「" + r.name + "」\n" + r.desc, r, null);
-            }
-            case NOTHING -> new EventOutcome(opt.effectDesc + "（无事发生）", null, null);
-        };
+            msg.append("\n");
+        }
+
+        return new EventOutcome(msg.toString().trim(), relic, gainedCard);
     }
 
     /** 篝火（休息）节点：休息恢复 30% 最大生命，或强化一张牌（二选一） */
@@ -1398,9 +1247,7 @@ public class HelloApplication extends Application {
     /** 起点房间：NPC + 三选一初始遗物 */
     private void showRoomScene(Stage stage, GameMap map, Player player) {
         // 从「起点遗物池」里随机抽 3 个当候选（不再把整个池子全列出来）
-        // 传节点种子：读档回起点还是那三个候选，刷不出一份更好的初始遗物
-        List<Relic> starters = RelicFun.pickStarterOptions(
-                player, STARTER_RELIC_OPTIONS, subSeed(nodeSeed(map), STREAM_START_RELIC));
+        List<Relic> starters = RelicFun.pickStarterOptions(player, STARTER_RELIC_OPTIONS);
 
         // 猪神的随机台词池（每次进房间随机一句；点对话框还能再换一句）
         List<String> npcLines = List.of(
