@@ -9,21 +9,20 @@ import java.util.List;
  *
  * <h3>行动轮盘</h3>
  * <pre>
- *   第 1 回合  攻击 8
- *   第 2 回合  随机增益（力量 6 / 仪式 6 / 敏捷 6 / 闪避 / 反伤 6）
- *   第 3 回合  攻击 10
+ *   第 1 回合  随机增益（力量 6 / 仪式 6 / 敏捷 6 / 闪避 / 反伤 6）
+ *   第 2 回合  攻击 15
  *   ───────── 之后无限循环下面三步 ─────────
- *   加 10 格挡 → 随机增益 → 攻击 10
+ *   加 12 格挡 → 随机增益 → 攻击 15
  * </pre>
  *
- * <p>攻击是<b>基础值 + 自身力量</b>（力量会加上去）：所以第 3 回合是 10，
- * 等它叠了几次「力量 / 仪式」之后，同一招就会打出 16、22……</p>
+ * <p>攻击是<b>基础值 + 自身力量</b>（力量会加上去）：所以第 2 回合是 15，
+ * 等它叠了几次「力量 / 仪式」之后，同一招就会打出 21、27……</p>
  *
  * <h3>五种随机增益</h3>
  * <ul>
  *   <li>力量 6 —— {@code power += 6}（每段攻击 +6）</li>
  *   <li>仪式 6 —— 每回合开始自动 +6 力量</li>
- *   <li>敏捷 6 —— 之后每次获得格挡都 +6（「加 10 格挡」变成 16）</li>
+ *   <li>敏捷 6 —— 之后每次获得格挡都 +6（「加 12 格挡」变成 18）</li>
  *   <li>闪避 —— 获得闪避能力（每次被攻击有 {@value #DODGE_CHANCE_UI}% 概率完全闪开）</li>
  *   <li>反伤 6 —— {@value #REFLECT_TURNS} 回合内反伤 {@value #REFLECT_RATE_UI}%（沿用卫士猪那套）</li>
  * </ul>
@@ -71,14 +70,21 @@ public class ChaosPig extends Enemy {
     private static final int STREAM_BUFF = 41;
     private static final int STREAM_DODGE = 42;
 
-    /** 轮盘前 3 步只播一遍，之后从下标 {@value #LOOP_START}（「加 10 格挡」）开始无限循环 */
-    private static final int LOOP_START = 3;
+    /**
+     * 轮盘前 {@value #LOOP_START} 步只播一遍，之后从下标 {@value #LOOP_START}（「加 12 格挡」）
+     * 开始无限循环。
+     *
+     * <p>⚠ 改 {@link #WHEEL} 的长度 / 顺序时<b>必须同步改这个常量</b>，
+     * 它要正好指向循环段的第一步 —— 否则循环会从中间截断，
+     * 循环段里的第一步（加格挡）就只会出现一次。</p>
+     */
+    private static final int LOOP_START = 2;
 
     private static final List<Step> WHEEL = List.of(
-            new Step(Intent.BUFF, BUFF_VALUE),          // 第 1 回合：随机增益
-            new Step(Intent.ATTACK, 15),          // 第 2回合
+            new Step(Intent.BUFF, BUFF_VALUE),   // 第 1 回合：随机增益
+            new Step(Intent.ATTACK, 15),         // 第 2 回合
             new Step(Intent.DEFEND, 12),         // ┐
-            new Step(Intent.BUFF, BUFF_VALUE),   // ├ 循环段
+            new Step(Intent.BUFF, BUFF_VALUE),   // ├ 循环段（从下标 LOOP_START=2 起无限循环）
             new Step(Intent.ATTACK, 15)          // ┘
     );
 
@@ -113,17 +119,35 @@ public class ChaosPig extends Enemy {
 
     // ================= 轮盘 =================
 
-    /** 轮盘不走基类（基类固定在 0 处循环，混沌猪要从第 4 步起循环） */
+    /** 轮盘不走基类（基类固定在 0 处循环，混沌猪要从下标 {@value #LOOP_START} 起循环） */
     @Override
     public Step current() {
         return WHEEL.get(idx);
+    }
+
+    /**
+     * 接住战斗种子后，如果当前就停在 BUFF 步（轮盘第 1 步就是随机增益），
+     * 立刻把这次增益掷好。
+     *
+     * <p>否则开局那一回合的意图栏只能显示「将随机获得一种增益」，
+     * 看不到具体是哪一种 —— 后面几轮都在 {@link #advance()} 里掷好了，只有第 1 轮是例外。</p>
+     *
+     * <p>掷的是同一条流的第 0 个随机数，和原先在 {@code applyBuff} 里兜底掷的<b>完全一样</b>，
+     * 所以增益顺序不变，只是意图栏能提前看到。</p>
+     */
+    @Override
+    public void setBattleSeed(long seed) {
+        super.setBattleSeed(seed);
+        if (WHEEL.get(idx).intent == Intent.BUFF) {
+            pendingBuff = rollBuff();
+        }
     }
 
     @Override
     public void advance() {
         idx++;
         if (idx >= WHEEL.size()) {
-            idx = LOOP_START; // 前 3 回合只播一遍，之后在最后 3 步里循环
+            idx = LOOP_START; // 前 LOOP_START 步只播一遍，之后在最后 3 步里循环
         }
         steps++;
         if (WHEEL.get(idx).intent == Intent.BUFF) {
