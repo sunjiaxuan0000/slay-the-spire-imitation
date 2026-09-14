@@ -81,12 +81,7 @@ public class EventDef {
 
     // ================= 事件池（进事件节点时随机挑一个） =================
 
-    /**
-     * 常规事件池 —— {@link #pick(Player)} 默认在里面挑。
-     *
-     * <p>⚠ 猪雪峰<b>不在</b>这里：它一局只出一次、概率还低，
-     * 由 {@link #pick(Player)} 单独掷一次骰子决定出不出。</p>
-     */
+
     private static final List<EventDef> NORMAL_POOL = List.of(
                 new EventDef("岔路口的雕像",
                         "一尊古老的石像立在路中间，底座刻着几行模糊的字："
