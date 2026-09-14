@@ -29,7 +29,7 @@ public class RunHud extends VBox {
     private static final double BAR_WIDTH = 190; // 血条宽度
 
     private final Player player;
-
+    private final Label goldText;
     private final Label hpText;
     private final Region hpFill;
     private final StackPane deckIcon = new StackPane();
@@ -55,6 +55,10 @@ public class RunHud extends VBox {
         name.setFont(Font.font(20));
         name.setStyle("-fx-font-weight: bold;");
 
+        goldText = new Label();
+        goldText.setTextFill(Color.WHITE);
+        goldText.setText("\uD83D\uDCB0"+player.gold);
+        goldText.setFont(Font.font(16));
         hpText = new Label();
         hpText.setTextFill(Color.WHITE);
         hpText.setFont(Font.font(16));
@@ -75,7 +79,7 @@ public class RunHud extends VBox {
         Region spacer = new Region();
         HBox.setHgrow(spacer, javafx.scene.layout.Priority.ALWAYS);
 
-        row1.getChildren().addAll(name, hpArea, spacer);
+        row1.getChildren().addAll(name, hpArea,goldText, spacer);
 
         // 地图图标（只在地图页之外的场景显示，例如战斗中用于“查看地图”）
         if (showMapIcon) {
@@ -180,6 +184,7 @@ public class RunHud extends VBox {
 
     /** 刷新：血条 / 牌组数量 / 遗物图标 */
     public void refresh() {
+        goldText.setText("\uD83D\uDCB0"+player.gold);
         hpText.setText(player.hp() + " / " + player.maxHp);
         double ratio = player.maxHp > 0 ? (double) player.hp() / player.maxHp : 0.0;
         hpFill.setPrefWidth(Math.max(0, BAR_WIDTH * ratio));

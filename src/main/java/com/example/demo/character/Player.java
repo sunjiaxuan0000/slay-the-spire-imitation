@@ -38,6 +38,8 @@ public class Player {
 
     public int maxHp = BASE_MAX_HP;
 
+    public int gold=100;
+
     public int hp = maxHp;
     public final List<Card> deck = new ArrayList<>();
     public final List<Relic> relics = new ArrayList<>(); // 本局获得的遗物
