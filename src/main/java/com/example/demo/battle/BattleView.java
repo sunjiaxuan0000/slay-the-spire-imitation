@@ -1247,6 +1247,11 @@ public class BattleView extends StackPane implements BattleState {
 
     @Override
     public void damageEnemy(int dmg) {
+        // 闪避判定：在削格挡、扣血、反伤之前
+        if (enemy.hasDodge() && enemy.dodge()) {
+            showDodgeText();
+            return;
+        }
         if (dmg > 0) SoundFx.play("ironclad_attack"); // 玩家攻击牌命中怪物音效
         enemyAnim.triggerHitKnock();
         if (enemy.block > 0) {
@@ -1257,6 +1262,22 @@ public class BattleView extends StackPane implements BattleState {
         enemy.hp = Math.max(0, enemy.hp - dmg);
         applyReflect(dmg);
         resolveEnemyLethal();
+    }
+
+    /** 闪避时在敌人立绘上方弹出白字「闪避！」并淡出 */
+    private void showDodgeText() {
+        Label dodge = new Label("闪避！");
+        dodge.setTextFill(javafx.scene.paint.Color.WHITE);
+        dodge.setFont(javafx.scene.text.Font.font(28));
+        dodge.setStyle("-fx-font-weight: bold; -fx-effect: dropshadow(gaussian, #000, 4, 0.5, 0, 0);");
+        StackPane.setAlignment(dodge, javafx.geometry.Pos.TOP_CENTER);
+        enemyPortrait.getChildren().add(dodge);
+
+        FadeTransition fade = new FadeTransition(Duration.millis(800), dodge);
+        fade.setFromValue(1.0);
+        fade.setToValue(0.0);
+        fade.setOnFinished(e -> enemyPortrait.getChildren().remove(dodge));
+        fade.play();
     }
 
     /**
@@ -1923,6 +1944,11 @@ public class BattleView extends StackPane implements BattleState {
             eChips.getChildren().add(BattleUiFactory.diamondChip("蓄", enemy.getChargeStacks(), "#dc2626",
                     "蓄势：每层蓄势造成 " + enemy.getChargeDamagePerStack()
                             + " 点自爆伤害（当前自爆伤害 " + enemy.explodeDamage() + "）"));
+        }
+        // 闪电猪闪避：黄底白字圆形「闪」标
+        if (enemy.hasDodge()) {
+            eChips.getChildren().add(BattleUiFactory.statusChip("闪", "#facc15",
+                    "50%概率闪避攻击"));
         }
         refreshIntent();
 
