@@ -111,6 +111,8 @@ public class BattleView extends StackPane implements BattleState {
     private int enemyVulnerable = 0;
     private int enemyWeak = 0;
     private int pendingStrengthLoss = 0;
+    /** 潮湿状态：玩家费用 -1，下回合结束清除 */
+    private int wetTurns = 0;
     /** 玩家敏捷：每次获得格挡时额外 +敏捷（猪疾速等来源） */
     private int playerDexterity = 0;
     /**
@@ -670,6 +672,11 @@ public class BattleView extends StackPane implements BattleState {
                         + enemy.getChargeStacks() + " 层蓄势 × "
                         + enemy.getChargeDamagePerStack() + "），自爆后死亡";
             }
+            case WET -> {
+                glyph = "潮";
+                color = "#0284c7";
+                tip = "意图·潮湿：玩家费用 -" + s.value + "，下回合结束清除";
+            }
             default -> {
                 glyph = "弱";
                 color = "#7c3aed";
@@ -708,6 +715,8 @@ public class BattleView extends StackPane implements BattleState {
         energy += RelicFun.extraEnergy(player, enemy, turn, attackCardsPlayedThisTurn > 0);
         // 猪冰棍：战斗的前两回合开始时额外 +1 能量
         energy += RelicFun.turnStartEnergy(player, turn);
+        // 潮湿：玩家回合开始时扣 1 费（最低 0）
+        if (wetTurns > 0) energy = Math.max(0, energy - 1);
         playedCardThisTurn = false;
         attackCardsPlayedThisTurn = 0;
         fanBonusApplied = false;
@@ -1436,6 +1445,7 @@ public class BattleView extends StackPane implements BattleState {
         SoundFx.play("EndTurn"); // 结束玩家回合音效
         playerTurn = false;
         if (reflectTurns > 0) reflectTurns--;
+        if (wetTurns > 0) wetTurns = 0; // 潮湿在玩家回合结束时清除
 
         // 活动肌肉：回合结束时扣除本回合临时获得的力量
         if (pendingStrengthLoss > 0) {
@@ -1496,7 +1506,7 @@ public class BattleView extends StackPane implements BattleState {
         return switch (intent) {
             case ATTACK -> enemyOink();              // 出手叫声：BOSS 鱼龙叫 / 普通猪叫
             case DEFEND -> List.of("GainDefense");   // 复用已有的加盾音效
-            case BUFF, WEAKEN, REFLECT, RITUAL, CHARGE -> List.of("zhou");
+            case BUFF, WEAKEN, REFLECT, RITUAL, CHARGE, WET -> List.of("zhou");
             case EXPLODE -> List.of("GetHurt");
         };
     }
@@ -1548,6 +1558,10 @@ public class BattleView extends StackPane implements BattleState {
             case REFLECT -> reflectTurns = Math.max(reflectTurns,s.value);
             case RITUAL -> enemy.setRitualPower(s.value);
             case CHARGE -> enemy.addChargeStacks(s.value); // 叠蓄势，自爆伤害随之增加
+            case WET -> {
+                // 潮湿：标记，下回合玩家开始时扣费
+                wetTurns = 1;
+            }
             case EXPLODE -> {
                 // 神风猪锁血后的最终一击：蓄势层数 × 每层伤害，正常扣格挡/血量，自爆后死亡
                 enemyAnim.triggerAttackDash();
@@ -1853,6 +1867,10 @@ public class BattleView extends StackPane implements BattleState {
         if (playerDexterity > 0) {
             pChips.getChildren().add(BattleUiFactory.statusChip("敏", playerDexterity, "#0891b2",
                     "敏捷 +" + playerDexterity + "：每次获得格挡时额外增加"));
+        }
+        if (wetTurns > 0) {
+            pChips.getChildren().add(BattleUiFactory.statusChip("潮", "#0284c7",
+                    "潮湿：费用 -1，下回合结束清除"));
         }
         for (Map.Entry<Card.Kind, Integer> e : powerAmount.entrySet()) {
             PowerBadge badge = powerBadgeOf(e.getKey(), e.getValue());
