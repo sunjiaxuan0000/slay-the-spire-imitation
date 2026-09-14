@@ -35,7 +35,7 @@ import java.util.function.Predicate;
  *
  * <p>目前的使用者：
  * <ul>
- *   <li>起点房间的「破镜」遗物 —— {@link RoomView。removeCardFromDeck()}</li>
+ *   <li>起点房间的「破镜」遗物 —— {@link RoomView}</li>
  *   <li>Boss 遗物的「空鸟笼」—— {@code BattleView.showRemovePicker()}</li>
  *   <li>篝火节点的「强化卡牌」—— {@link RestView}</li>
  * </ul>

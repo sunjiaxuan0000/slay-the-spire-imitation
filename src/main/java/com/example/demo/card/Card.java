@@ -47,6 +47,8 @@ public class Card {
         DEMON_FORM("恶魔形态","每回合增加两点力量",Type.POWER,1),
         TRUE_GRIT("坚毅","获得7点格挡，随机消耗一张手牌",Type.SKILL,3),
         FEEL_NO_PAIN("无惧疼痛","每有一张牌被消耗，获得 3 点格挡",Type.POWER,2),
+        BARRIER("壁垒","你的回合开始时，你的格挡不再消失",Type.POWER,1),
+        BERSERK("狂暴","自己获得 2 层易伤，每回合开始时获得 1 点能量",Type.POWER,1),
         WOUND("伤口", "无法被打出", Type.STATUS, 3),
         SLIME("黏液", "消耗", Type.STATUS, 3);
         // 升级版不再是独立 Kind：由 Card 的 upgraded 布尔值 + Card.of(kind, true) 表达
@@ -159,6 +161,7 @@ public class Card {
             case DEMON_FORM -> "每回合增加 3 点力量";
             case TRUE_GRIT -> "获得9点格挡，随机消耗一张手牌";
             case FEEL_NO_PAIN -> "每有一张牌被消耗，获得 4 点格挡";
+            case BERSERK -> "自己获得 1 层易伤，每回合开始时获得 1 点能量";
             default -> kind.desc;
         };
     }
@@ -244,6 +247,8 @@ public class Card {
     public static Card bodySlam()    { return new Card(Kind.BODY_SLAM, 1, 0, 0); } // 造成你当前格挡值的伤害
     public static Card demonForm()   { return new Card(Kind.DEMON_FORM, 3, 0, 0); } // 每回合增加两点力量
     public static Card feelNoPain()  { return new Card(Kind.FEEL_NO_PAIN, 1, 0, 0); } // 每有一张牌被消耗时获得格挡
+    public static Card barrier()     { return new Card(Kind.BARRIER, 3, 0, 0); } // 回合开始时格挡不再消失
+    public static Card berserk()     { return new Card(Kind.BERSERK, 0, 0, 0); } // 自己获得易伤，每回合 +1 能量
     public static Card trueGrit()    { return new Card(Kind.TRUE_GRIT, 1, 0, 7); } // 获得7点格挡，随机消耗一张手牌
     public static Card wound()       { return new Card(Kind.WOUND, -1, 0, 0); } // -1 表示无法打出
     public static Card slime()       { return new Card(Kind.SLIME, 1, 0, 0, 0, true); } // 可打出，消耗
@@ -293,6 +298,8 @@ public class Card {
             case DEMON_FORM -> new Card(kind, 3, 0, 0, 0, false, false, 1, true);
             case TRUE_GRIT -> new Card(kind, 1, 0, 9, 0, false, false, 1, true);
             case FEEL_NO_PAIN -> new Card(kind, 1, 0, 0, 0, false, false, 1, true);
+            case BARRIER -> new Card(kind, 2, 0, 0, 0, false, false, 1, true);
+            case BERSERK -> new Card(kind, 0, 0, 0, 0, false, false, 1, true);
             case WOUND -> new Card(kind, -1, 0, 0, 0, false, false, 1, true);
             case SLIME -> new Card(kind, 1, 0, 0, 0, true, false, 1, true);
         };
@@ -336,6 +343,8 @@ public class Card {
             case LIMIT_BREAK -> limitBreak();
             case DEMON_FORM -> demonForm();
             case FEEL_NO_PAIN -> feelNoPain();
+            case BARRIER -> barrier();
+            case BERSERK -> berserk();
             case TRUE_GRIT -> trueGrit();
         };
     }
