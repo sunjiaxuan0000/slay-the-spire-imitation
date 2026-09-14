@@ -1,5 +1,7 @@
 package com.example.demo.event;
-
+import javafx.animation.Animation;
+import javafx.animation.ScaleTransition;
+import javafx.util.Duration;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -20,7 +22,7 @@ import javafx.scene.paint.LinearGradient;
 import javafx.scene.paint.Stop;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-
+import javafx.animation.TranslateTransition;
 import java.nio.ByteBuffer;
 import java.util.function.Consumer;
 
@@ -58,7 +60,9 @@ public class EventView extends StackPane {
     /** 选项卡固定尺寸：三个选项同宽同高 */
     private static final double OPTION_W = 540;
     private static final double OPTION_H = 92;
-
+    /**动画展示*/
+    private ScaleTransition imageBreathingTransition;
+    private TranslateTransition imageFloatTransition;//float//
     // ================= 配色（暗金 / 石板） =================
 
     private static final Color COL_TITLE      = Color.rgb(231, 213, 165); // 暗金米白（标题）
@@ -147,6 +151,7 @@ public class EventView extends StackPane {
             getChildren().add(tip);
         }
 
+        //动画//
 
         // =========================================================
         // 2. 创建整个「图片 + 右侧面板」的主体（垂直居中）
@@ -197,7 +202,8 @@ public class EventView extends StackPane {
             eventImageView.setPreserveRatio(true);
 
             imageArea.getChildren().add(eventImageView);
-
+            initImageBreathingTransition(eventImageView);
+            initImageFloatTransition(eventImageView);
         } else {
 
             // 如果图片没找到，显示提示
@@ -395,6 +401,37 @@ public class EventView extends StackPane {
         return (hovered ? OPTION_BG_HOVER + OPTION_BORDER_HOVER
                         : OPTION_BG_NORMAL + OPTION_BORDER_NORMAL)
                 + OPTION_STYLE_BASE;
+    }
+    private void initImageBreathingTransition(ImageView imageView) {
+
+        imageBreathingTransition = new ScaleTransition(
+                Duration.seconds(3),
+                imageView
+        );
+
+        imageBreathingTransition.setFromX(1.0);
+        imageBreathingTransition.setFromY(1.0);
+
+        imageBreathingTransition.setToX(1.04);
+        imageBreathingTransition.setToY(1.04);
+
+        imageBreathingTransition.setCycleCount(Animation.INDEFINITE);
+        imageBreathingTransition.setAutoReverse(true);
+
+        imageBreathingTransition.play();
+    }
+    private void initImageFloatTransition(ImageView imageView) {
+        imageFloatTransition = new TranslateTransition(
+                Duration.seconds(5),
+                imageView
+        );
+        imageFloatTransition.setFromX(-4);
+        imageFloatTransition.setFromY(-4);
+        imageFloatTransition.setToX(4);
+        imageFloatTransition.setToY(4);
+        imageFloatTransition.setCycleCount(Animation.INDEFINITE);
+        imageFloatTransition.setAutoReverse(true);
+        imageFloatTransition.play();
     }
 
     /**
