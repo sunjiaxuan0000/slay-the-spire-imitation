@@ -11,17 +11,67 @@ import java.util.List;
  */
 public class Player {
 
-    public static final String CHARACTER_NAME = "战士";
-    public final int maxHp = 80;
+    /** 角色名 —— 选人页卡片、战斗 HUD、地图 HUD 都读这一个，别再各写一份 */
+    public static final String CHARACTER_NAME = "铁甲战猪";
 
-    public int gold=100;
+    /**
+     * 角色的起始最大生命。
+     *
+     * <p>选人页左侧介绍面板要显示「生命 80/80」，这里必须是那个唯一的 80 ——
+     * 否则以后调数值时，面板会静静地写着旧数字。</p>
+     */
+    public static final int BASE_MAX_HP = 80;
+
+    /** 选人页左侧介绍面板里的角色简介 */
+    public static final String CHARACTER_DESC =
+            "铁甲战猪是一个红色面具半遮面的猪形战士。他是个热心肠，"
+                    + "常常会向处在饥渴之中的恶魔捐献猪血，由此获得了恶魔的剑。";
+
+    /**
+     * 角色的初始遗物。
+     *
+     * <p>选人页左侧介绍面板会把它（图标 + 名字 + 描述）显示在简介下面，
+     * 开局时也是靠这一条加进牌组的 —— 只此一份，别在两处各写一个遗物，
+     * 否则面板会显示着和实际开局不一样的遗物。</p>
+     */
+    public static final Relic STARTER_RELIC = Relic.BURNING_BLOOD;
+
+    public int maxHp = BASE_MAX_HP;
 
     public int hp = maxHp;
     public final List<Card> deck = new ArrayList<>();
     public final List<Relic> relics = new ArrayList<>(); // 本局获得的遗物
+    public int gold = 100; // 金币：商店货币（战斗胜利发放，商店消费，见 ShopView）
+    public boolean restedAtCampfire = false; // 篝火休息后标记
+    public int leaveNoteBattles = 0; // 请假条：剩余生效战斗场次
+
+    /**
+     * 混沌：本局地图变异标记（起点遗物「混沌」拾取后置 true）。
+     *
+     * <p>置位后，非固定层节点在 {@link com.example.demo.view.MapView} 里统一画成
+     * 「事件」图标，进入时由
+     * {@code HelloApplication.handleArrive} 等概率改判成
+     * 怪物 / 精英 / 事件 / 火堆 / 宝箱。整局有效，中途不会自己复位。</p>
+     */
+    public boolean chaos = false;
+
+    /**
+     * 猪疾速：本局「练起来」累计起来的额外敏捷。
+     *
+     * <p>篝火处有这件遗物时，休息会被替换成「练起来」—— 不回血，改为这里 +1，
+     * 于是战斗开始获得的敏捷从 1 涨到 2、3……</p>
+     *
+     * <p>⚠ 状态记在 Player 上而不是 {@link Relic} 上：遗物对象是全局共享的单例，
+     * 记在遗物上会跨局残留。</p>
+     */
+    public int pigRushDex = 0;
+
+    /** 猪雪峰事件本局是否已经出现过（一局最多一次） */
+    public boolean xuefengSeen = false;
 
     public Player() {
         deck.addAll(starterDeck()); // 起始牌组
+        relics.add(STARTER_RELIC); // 铁甲战猪固有初始遗物：燃烧之血（战斗结束回 6 血的被动，见 RelicFun.onBattleEnd）
     }
 
     /** 获得遗物（同名不重复拿，避免效果叠加） */
@@ -31,6 +81,8 @@ public class Player {
             if (have.name.equals(r.name)) return;
         }
         relics.add(r);
+        // 遗物获得时的即时效果（保温杯、请假条等）委托给 RelicFun
+        RelicFun.onRelicObtained(this, r, null);
     }
 
     /** 起始牌组：10 张 = 5 打击 + 4 防御 + 1 痛击 */
@@ -50,5 +102,18 @@ public class Player {
 
     public void damage(int amount) {
         hp = Math.max(0, hp - amount);
+    }
+
+    /** 增加最大生命值，同时恢复等量生命 */
+    public void increaseMaxHp(int amount) {
+        maxHp += amount;
+        hp += amount;
+    }
+
+    /** 削减最大生命值（巨猪骑士的攻击），当前生命同步夹到新上限；上限可减为 0 并判定死亡 */
+    public void reduceMaxHp(int amount) {
+        if (amount <= 0) return;
+        maxHp = Math.max(0, maxHp - amount);
+        hp = Math.max(0, Math.min(hp, maxHp));
     }
 }
