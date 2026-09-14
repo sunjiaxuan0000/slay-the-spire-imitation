@@ -11,6 +11,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
@@ -24,6 +25,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
@@ -187,6 +189,13 @@ public class ShopView extends BorderPane {
             "-fx-border-color: rgba(255, 255, 255, 0.08) transparent transparent transparent;" +
                     "-fx-border-width: 1 0 0 0;";
 
+    /**
+     * 遗物 / 服务卡片的统一最小高度。
+     *
+     * <p>给的是「下限」不是「固定值」：描述短的时候三张卡一样高（按钮对齐），
+     * 描述长（比如猪疾速那种三四行的）时卡片自己长高，文字不会被裁。</p>
+     */
+    public static final double RELIC_ITEM_MIN_H = 300;
 
     // =========================================================
     // 成员变量
@@ -203,6 +212,11 @@ public class ShopView extends BorderPane {
      * 点击购买遗物以后交给外部处理
      */
     private final Consumer<Relic> onBuyRelic;
+
+    /**
+     * 点击「移除卡牌」服务以后交给外部处理（为 null 表示这家店不提供该服务）
+     */
+    private final Runnable onRemoveCard;
 
     /**
      * 点击离开商店以后交给外部处理
@@ -261,6 +275,39 @@ public class ShopView extends BorderPane {
      */
     private final Set<Relic> soldRelics = new HashSet<>();
 
+    /**
+     * 「移除卡牌」服务的按钮（一家店只能买一次）
+     */
+    private Button removeCardButton;
+
+    /**
+     * 「移除卡牌」服务是否已用过
+     */
+    private boolean removeUsed = false;
+
+
+    // =========================================================
+    // 本店的实际标价（基准价 ±30 浮动）
+    // =========================================================
+
+    /**
+     * 卡牌 → 本店标价。
+     *
+     * <p>价格在开店时<b>一次算好</b>存这里，之后只读不改 —— 不能每次
+     * {@link #refreshGold()} 都现摇一次，否则买一张牌金币一刷新，
+     * 其余商品的价格跟着跳，玩家永远不知道自己要点下去多少钱。</p>
+     */
+    private final Map<Card, Integer> cardPrices = new HashMap<>();
+
+    /** 遗物 → 本店标价（同上，开店时定死） */
+    private final Map<Relic, Integer> relicPrices = new HashMap<>();
+
+    /**
+     * 价格浮动幅度：基准价 {@code ±PRICE_SWING}。
+     * 想改成「只便宜不贵」就把下面那个 {@code nextInt} 的区间换成 {@code [0, 2*PRICE_SWING]}。
+     */
+    public static final int PRICE_SWING = 30;
+
 
     // =========================================================
     // 构造方法
@@ -273,11 +320,52 @@ public class ShopView extends BorderPane {
             Consumer<Card> onBuyCard,
             Consumer<Relic> onBuyRelic,
             Runnable onLeave) {
+        this(player, cardGoods, relicGoods, onBuyCard, onBuyRelic, null, onLeave);
+    }
+
+    /**
+     * @param onRemoveCard 「移除卡牌」服务的回调；传 null 则这家店不显示该服务
+     */
+    public ShopView(
+            Player player,
+            List<Card> cardGoods,
+            List<Relic> relicGoods,
+            Consumer<Card> onBuyCard,
+            Consumer<Relic> onBuyRelic,
+            Runnable onRemoveCard,
+            Runnable onLeave) {
+        this(player, cardGoods, relicGoods, onBuyCard, onBuyRelic, onRemoveCard, onLeave,
+                new Random().nextLong());
+    }
+
+    /**
+     * @param priceSeed 价格浮动的随机种子。传「节点种子派生值」就能做到
+     *                  「同一个商店节点重进，标价一模一样」，刷不出更便宜的金卡。
+     */
+    public ShopView(
+            Player player,
+            List<Card> cardGoods,
+            List<Relic> relicGoods,
+            Consumer<Card> onBuyCard,
+            Consumer<Relic> onBuyRelic,
+            Runnable onRemoveCard,
+            Runnable onLeave,
+            long priceSeed) {
 
         this.player = player;
         this.onBuyCard = onBuyCard;
         this.onBuyRelic = onBuyRelic;
+        this.onRemoveCard = onRemoveCard;
         this.onLeave = onLeave;
+
+        // ⚠ 必须先算价，再建 UI —— buildCardItem / buildRelicItem / refreshGold 都读这两张表
+        Random rnd = new Random(priceSeed);
+        for (Card c : cardGoods) {
+            cardPrices.put(c, fluctuate(cardPrice(c), rnd));
+        }
+        for (Relic r : relicGoods) {
+            relicPrices.put(r, fluctuate(relicPrice(), rnd));
+        }
 
         setPadding(new Insets(20));
 
@@ -286,14 +374,30 @@ public class ShopView extends BorderPane {
         // 顶部
         setTop(buildHeader());
 
-        // 商品区域
-        setCenter(buildGoodsArea(cardGoods, relicGoods));
+        // 商品区域（可滚动：商品总高度经常超过窗口，不滚的话底部「离开商店」会被挤没）
+        setCenter(buildScrollableGoods(cardGoods, relicGoods));
 
         // 底部
         setBottom(buildFooter());
 
         // 第一次刷新金币和按钮状态
         refreshGold();
+    }
+
+    /** 基准价 ±{@link #PRICE_SWING}，最低不低于 1 金币 */
+    private static int fluctuate(int base, Random rnd) {
+        int delta = rnd.nextInt(PRICE_SWING * 2 + 1) - PRICE_SWING;
+        return Math.max(1, base + delta);
+    }
+
+    /** 本店里这张牌的实际标价（没登记过就退回基准价） */
+    public int priceOf(Card card) {
+        return cardPrices.getOrDefault(card, cardPrice(card));
+    }
+
+    /** 本店里这件遗物的实际标价（没登记过就退回基准价） */
+    public int priceOf(Relic relic) {
+        return relicPrices.getOrDefault(relic, relicPrice());
     }
 
 
@@ -359,6 +463,39 @@ public class ShopView extends BorderPane {
         );
 
         return box;
+    }
+
+
+    /**
+     * 把商品区包一层可滚动容器。
+     *
+     * <p>「遗物 3 件 + 卡牌 4 张 + 服务 1 项」竖着排下来，高度常常超过窗口（尤其是
+     * 上面还顶了一条 HUD 的时候）。不滚的话 {@link BorderPane} 会把 center 压缩，
+     * 底部的「离开商店」按钮跟着被挤掉 —— 玩家就出不去了。</p>
+     *
+     * <p>滚动条隐藏（沿用地图页的做法）：滚轮 / 拖动照样能用，但界面干净。</p>
+     */
+    private ScrollPane buildScrollableGoods(List<Card> cardGoods, List<Relic> relicGoods) {
+
+        ScrollPane scroll = new ScrollPane(buildGoodsArea(cardGoods, relicGoods));
+
+        scroll.setFitToWidth(true);   // 商品区跟着窗口宽度走，FlowPane 才能正确换行
+
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+
+        scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+
+        scroll.setPannable(true);
+
+        scroll.setMinSize(0, 0);      // 内容再高也不许把窗口撑大
+
+        // 背景透明：露出 ShopView 自己的径向渐变，别糊一层灰
+        scroll.setStyle(
+                "-fx-background: transparent;" +
+                        "-fx-background-color: transparent;"
+        );
+
+        return scroll;
     }
 
 
@@ -447,15 +584,195 @@ public class ShopView extends BorderPane {
 
 
         // =====================================================
+        // 服务（移除卡牌）
+        // =====================================================
+
+        VBox serviceSection = new VBox(10);
+
+        serviceSection.getChildren().add(
+                sectionTitle("服务")
+        );
+
+
+        FlowPane servicePane = new FlowPane();
+
+        servicePane.setHgap(18);
+        servicePane.setVgap(18);
+        servicePane.setAlignment(Pos.CENTER);
+
+
+        if (onRemoveCard != null) {
+
+            servicePane.getChildren().add(
+                    buildRemoveCardItem()
+            );
+        }
+
+
+        serviceSection.getChildren().add(
+                servicePane
+        );
+
+
+        // =====================================================
         // 添加到商品区域
         // =====================================================
 
-        root.getChildren().addAll(
-                relicSection,
-                cardSection
-        );
+        if (onRemoveCard != null) {
+
+            root.getChildren().addAll(
+                    relicSection,
+                    cardSection,
+                    serviceSection
+            );
+
+        } else {
+
+            root.getChildren().addAll(
+                    relicSection,
+                    cardSection
+            );
+        }
 
         return root;
+    }
+
+
+    // =========================================================
+    // 服务项：移除卡牌
+    // =========================================================
+
+    /**
+     * 「移除卡牌」服务：花钱从牌组里永久删掉一张牌（和原版商店的 removal service 一样）。
+     *
+     * <p>这里只负责「显示 + 把点击交给外部」—— 真正弹选牌界面、扣钱、删牌都在
+     * {@code HelloApplication}，因为那些要碰 Player 和 Scene。</p>
+     */
+    private VBox buildRemoveCardItem() {
+
+        VBox box = new VBox(8);
+
+        box.setPadding(
+                new Insets(12)
+        );
+
+        box.setPrefWidth(210);
+
+        // 和遗物卡片同一套高度规则：给下限、不钉死，服务卡不会比旁边矮一截
+        box.setMinHeight(RELIC_ITEM_MIN_H);
+
+        box.setStyle(
+                ITEM_NORMAL_STYLE
+        );
+
+
+        // 图标区（借遗物的美术框风格，中间放个「移除」字样）
+        StackPane art = new StackPane();
+
+        art.setPrefSize(180, 110);
+        art.setMinSize(180, 110);
+        art.setMaxSize(180, 110);
+
+        art.setStyle(
+                "-fx-background-color: rgba(239, 68, 68, 0.14);" +
+                        "-fx-border-color: rgba(248, 113, 113, 0.5);" +
+                        "-fx-border-width: 1;" +
+                        "-fx-background-radius: 10;" +
+                        "-fx-border-radius: 10;"
+        );
+
+        Label glyph = new Label("✂");
+
+        glyph.setStyle(
+                "-fx-text-fill: rgba(255,255,255,0.75);" +
+                        "-fx-font-size: 34px;"
+        );
+
+        art.getChildren().add(glyph);
+
+
+        Label name = new Label("移除卡牌");
+
+        name.setStyle(NAME_STYLE);
+
+
+        Label desc = new Label("从你的牌组中永久移除一张卡牌");
+
+        desc.setStyle(DESC_STYLE);
+        desc.setWrapText(true);
+        desc.setMaxWidth(180);
+        desc.setMinHeight(Region.USE_PREF_SIZE);
+
+
+        Label priceLabel = new Label(removeCardPrice() + " 金币");
+
+        priceLabel.setStyle(PRICE_STYLE);
+
+
+        removeCardButton = new Button("选择");
+
+        removeCardButton.setStyle(BTN_BUY_STYLE);
+
+
+        removeCardButton.setOnAction(e -> {
+
+            if (onRemoveCard != null) {
+
+                onRemoveCard.run();
+            }
+        });
+
+
+        attachHoverEffect(
+                box,
+                () -> removeUsed
+        );
+
+
+        Region push = new Region();
+
+        VBox.setVgrow(push, Priority.ALWAYS);
+
+
+        box.getChildren().addAll(
+                art,
+                name,
+                desc,
+                push,
+                priceLabel,
+                removeCardButton
+        );
+
+
+        return box;
+    }
+
+
+    /**
+     * 外部在真正完成移除之后调用：按钮变「已使用」，不再响应点击。
+     */
+    public void markRemoveUsed() {
+
+        removeUsed = true;
+
+        if (removeCardButton == null) return;
+
+        removeCardButton.setText("已使用");
+
+        removeCardButton.setStyle(
+                BTN_SOLD_STYLE
+        );
+
+        removeCardButton.setDisable(true);
+    }
+
+
+    /**
+     * 「移除卡牌」服务的价格。
+     */
+    public static int removeCardPrice() {
+
+        return 75;
     }
 
 
@@ -560,7 +877,7 @@ public class ShopView extends BorderPane {
         // 价格
         // =====================================================
 
-        int price = cardPrice(card);
+        int price = priceOf(card);
 
         Label priceLabel = new Label(
                 price + " 金币"
@@ -661,7 +978,16 @@ public class ShopView extends BorderPane {
 
         box.setPrefWidth(210);
 
-        box.setPrefHeight(260);
+        /*
+         * ⚠ 不写 setPrefHeight —— 那会把盒子高度钉死，VBox 只能压缩内部控件来塞进
+         * 固定高度，而被压的正是唯一可伸缩的 desc（Label），于是长描述（猪疾速那种）
+         * 直接被裁掉一行。
+         *
+         * 改成「给一个统一的最小高度 + 高度随内容长」：
+         *   - minHeight 让三张卡看起来一样高（矮的描述下面留白，由 spacer 顶开）
+         *   - 描述真超了就把盒子撑高，文字完整显示
+         */
+        box.setMinHeight(RELIC_ITEM_MIN_H);
 
         box.setStyle(
                 ITEM_NORMAL_STYLE
@@ -710,12 +1036,15 @@ public class ShopView extends BorderPane {
 
         desc.setMaxWidth(180);
 
+        // 描述本身不许被压缩：宁可把卡片撑高，也不能裁掉一行效果说明
+        desc.setMinHeight(Region.USE_PREF_SIZE);
+
 
         // =====================================================
         // 价格
         // =====================================================
 
-        int price = relicPrice();
+        int price = priceOf(relic);
 
         Label priceLabel = new Label(
                 price + " 金币"
@@ -777,10 +1106,18 @@ public class ShopView extends BorderPane {
         // 添加内容
         // =====================================================
 
+        // 弹性空白：把「价格 + 购买」压到卡片底部，
+        // 这样三张卡无论描述几行，按钮都在同一条水平线上
+        Region push = new Region();
+
+        VBox.setVgrow(push, Priority.ALWAYS);
+
+
         box.getChildren().addAll(
                 art,
                 name,
                 desc,
+                push,
                 priceLabel,
                 buyButton
         );
@@ -881,7 +1218,7 @@ public class ShopView extends BorderPane {
                 (card, button) ->
                         updateBuyButton(
                                 button,
-                                cardPrice(card),
+                                priceOf(card),
                                 soldCards.contains(card)
                         )
         );
@@ -895,10 +1232,24 @@ public class ShopView extends BorderPane {
                 (relic, button) ->
                         updateBuyButton(
                                 button,
-                                relicPrice(),
+                                priceOf(relic),
                                 soldRelics.contains(relic)
                         )
         );
+
+
+        // =====================================================
+        // 更新「移除卡牌」按钮
+        // =====================================================
+
+        if (removeCardButton != null) {
+
+            updateBuyButton(
+                    removeCardButton,
+                    removeCardPrice(),
+                    removeUsed
+            );
+        }
     }
 
 
@@ -1111,23 +1462,29 @@ public class ShopView extends BorderPane {
     // =========================================================
 
     /**
-     * 卡牌价格。
+     * 卡牌价格：按<b>稀有度</b>定，越稀有越贵。
      *
-     * 当前根据卡牌权重决定：
+     * <p>{@code Kind.weight} 的取值是 1=金卡 / 2=蓝卡 / 3=白卡（见
+     * {@code Card.Kind} 的注释），所以：</p>
      *
-     * weight = 3 → 75
-     * weight = 1 → 150
-     * 其他      → 50
+     * <pre>
+     *   weight = 1（金卡，最稀有）→ 150
+     *   weight = 2（蓝卡）        → 100
+     *   weight = 3（白卡，最常见）→ 50
+     * </pre>
+     *
+     * <p>⚠ 别把「weight 数值大」当成「更稀有」—— 它越大越普通，
+     * 之前把白卡定成 75、蓝卡落 default 定成 50，正好搞反了。</p>
      */
     public static int cardPrice(Card card) {
 
         return switch (card.kind.weight) {
 
-            case 3 -> 75;
+            case 1 -> 150;   // 金卡
 
-            case 1 -> 150;
+            case 2 -> 100;   // 蓝卡
 
-            default -> 50;
+            default -> 50;   // 白卡
         };
     }
 
@@ -1200,20 +1557,15 @@ public class ShopView extends BorderPane {
         );
 
 
-        Label placeholder =
-                new Label(
-                        "遗物美术区域"
-                );
-
-
-        placeholder.setStyle(
-                "-fx-text-fill: rgba(255,255,255,0.35);" +
-                        "-fx-font-size: 13px;"
-        );
-
-
+        /*
+         * 遗物图标统一走 Relic.buildIconGraphic() —— 那是全项目唯一的图标渲染入口
+         * （HUD / 详情 / 开发者面板都用它），商店不能自己另画一套，
+         * 否则读档后图标会退化成「名字首字」。
+         *
+         * 没配 imagePath 的遗物它自己会退回紫色圆 + 首字，这里什么都不用管。
+         */
         art.getChildren().add(
-                placeholder
+                relic.buildIconGraphic(84)
         );
 
 

@@ -65,6 +65,8 @@ public final class SaveData {
     public boolean chaos;                // 混沌：本局地图变异
     public boolean restedAtCampfire;
     public int leaveNoteBattles;         // 请假条：剩余生效战斗场次
+    /** 金币（商店货币；战斗胜利发放、商店消费）。旧存档没这个字段时按初始值 100 走。 */
+    public int gold = Player.INITIAL_GOLD;
     /** 猪疾速：本局在篝火「练起来」累计的额外敏捷 */
     public int pigRushDex;
     /** 猪雪峰：本局是否已经出过这个事件（一局只出一次） */
@@ -137,6 +139,7 @@ public final class SaveData {
         s.chaos = player.chaos;
         s.restedAtCampfire = player.restedAtCampfire;
         s.leaveNoteBattles = player.leaveNoteBattles;
+        s.gold = player.gold;
         s.pigRushDex = player.pigRushDex;
         s.xuefengSeen = player.xuefengSeen;
         for (Card c : player.deck) {
@@ -159,6 +162,7 @@ public final class SaveData {
         p.setProperty("chaos", Boolean.toString(s.chaos));
         p.setProperty("restedAtCampfire", Boolean.toString(s.restedAtCampfire));
         p.setProperty("leaveNoteBattles", Integer.toString(s.leaveNoteBattles));
+        p.setProperty("gold", Integer.toString(s.gold));
         p.setProperty("pigRushDex", Integer.toString(s.pigRushDex));
         p.setProperty("xuefengSeen", Boolean.toString(s.xuefengSeen));
         p.setProperty("deck", String.join(",", s.deck));
@@ -201,6 +205,8 @@ public final class SaveData {
             s.chaos = Boolean.parseBoolean(p.getProperty("chaos", "false"));
             s.restedAtCampfire = Boolean.parseBoolean(p.getProperty("restedAtCampfire", "false"));
             s.leaveNoteBattles = Integer.parseInt(p.getProperty("leaveNoteBattles", "0"));
+            s.gold = Integer.parseInt(p.getProperty("gold",
+                    Integer.toString(Player.INITIAL_GOLD)));
             s.pigRushDex = Integer.parseInt(p.getProperty("pigRushDex", "0"));
             s.xuefengSeen = Boolean.parseBoolean(p.getProperty("xuefengSeen", "false"));
             s.deck.addAll(splitList(p.getProperty("deck", "")));
@@ -243,6 +249,7 @@ public final class SaveData {
         p.chaos = chaos;
         p.restedAtCampfire = restedAtCampfire;
         p.leaveNoteBattles = leaveNoteBattles;
+        p.gold = gold;
         p.pigRushDex = pigRushDex;
         p.xuefengSeen = xuefengSeen;
         return p;

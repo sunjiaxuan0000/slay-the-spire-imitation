@@ -6,6 +6,7 @@ import com.example.demo.character.RelicFun;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 /**
  * 地图事件：名字 + 描述 + 若干选项（选项名 + 选项实际效果说明 + 效果参数）。
@@ -57,36 +58,24 @@ public class EventDef {
     public final List<Option> options;
 
     /**
-     * 事件左侧插图（带四周 Alpha 渐变淡出，见 {@link EventView}）的文件名
-     * （相对 {@code /com/example/demo/}）。为 null 时左侧显示「未找到事件图片」提示。
-     */
-    public final String imageName;
-
-    /**
-     * 事件专属背景图的文件名（相对 {@code /com/example/demo/}）。
-     * 为 null 时 {@link EventView} 退回通用的 {@code event_bg.png}。
+     * 事件背景大图的文件名（相对 {@code /com/example/demo/}）。
+     *
+     * <p>事件页现在<b>只有一张全屏背景大图</b>，没有「左侧小插图」那套了
+     * （{@link EventView}）—— 每个事件都像猪雪峰一样，用一整张图铺满整个页面。</p>
+     *
+     * <p>为 null 时 {@link EventView} 退回通用的 {@code event_bg.png}。</p>
      */
     public final String bgName;
 
     public EventDef(String name, String desc, List<Option> options) {
-        this(name, desc, null, options, null);
+        this(name, desc, options, null);
     }
 
-    /** 带左侧插图（事件配图）的构造 */
-    public EventDef(String name, String desc, String imageName, List<Option> options) {
-        this(name, desc, imageName, options, null);
-    }
-
-    /** 带专属背景图的构造 */
+    /** 带全屏背景大图的事件（推荐写法：每个事件都该有自己的图） */
     public EventDef(String name, String desc, List<Option> options, String bgName) {
-        this(name, desc, null, options, bgName);
-    }
-
-    public EventDef(String name, String desc, String imageName, List<Option> options, String bgName) {
         this.name = name;
         this.desc = desc;
         this.options = options;
-        this.imageName = imageName;
         this.bgName = bgName;
     }
 
@@ -102,65 +91,65 @@ public class EventDef {
                 new EventDef("岔路口的雕像",
                         "一尊古老的石像立在路中间，底座刻着几行模糊的字："
                                 + "“向它献上你的血，它将予你回应。”雕像的眼窝似乎亮了一下。",
-                        "Event-Goldenldol.png",
                         List.of(
                                 new Option("以血相献", "失去 8 点生命", Action.DAMAGE, 8),
                                 new Option("轻叩石像", "无事发生，雕像纹丝不动", Action.NOTHING, 0),
                                 new Option("转身离开", "没有冒险的必要", Action.NOTHING, 0)
-                        )),
+                        ),
+                        "Event-Goldenldol.png"),
 
                 new EventDef("废弃的营地",
                         "地上散落着焦黑的木柴与一顶破帐篷。有人曾在这里扎营，"
                                 + "营火早已熄灭，但木头深处似乎还留着一点余温。",
-                        "Event-BonfireSpirits.png",
                         List.of(
                                 new Option("拨弄余烬", "回复 15 点生命", Action.HEAL, 15),
                                 new Option("翻找遗物", "获得一件未持有的随机遗物", Action.ADD_RELIC, 0),
                                 new Option("不作停留", "继续赶路", Action.NOTHING, 0)
-                        )),
+                        ),
+                        "Event-BonfireSpirits.png"),
 
                 new EventDef("迷雾中的书摊",
                         "一阵风吹过，路旁不知何时多了一个书摊。摊主蒙着面，"
                                 + "声音沙哑：“挑一样吧，凡人——是磨刀石，还是暖炉？”",
-                        "Event-Cleric.png",
                         List.of(
                                 new Option("要一张卡牌", "随机一张卡牌加入牌组", Action.ADD_CARD, 0),
                                 new Option("喝口热茶", "回复 10 点生命", Action.HEAL, 10),
                                 new Option("无视摊主", "径直走开", Action.NOTHING, 0)
-                        )),
+                        ),
+                        "Event-Cleric.png"),
 
                 new EventDef("神秘泉水",
                         "一汪清澈的泉水出现在你面前。\n"
                                 + "水面平静得有些诡异，你无法判断它是否安全。",
-                        "Event-DivineFountain.png",
                         List.of(
                                 new Option("饮用泉水",
                                         "50% 概率回复 15 点生命，50% 概率失去 10 点生命",
                                         Action.RANDOM_WATER, 0),
                                 new Option("离开", "什么也没发生", Action.NOTHING, 0)
-                        )),
+                        ),
+                        "Event-DivineFountain.png"),
 
                 new EventDef("神秘书籍",
                         "一本落满灰尘的古老书籍静静地躺在石台上。\n"
                                 + "书页没有文字，只有一道道看不懂的符号。\n"
                                 + "当你靠近时，书页竟自行翻动起来……",
-                        "Event-CursedTome.png",
                         List.of(
                                 new Option("阅读书籍", "获得一张随机卡牌", Action.ADD_CARD, 0),
                                 new Option("离开", "什么也没发生", Action.NOTHING, 0)
-                        )),
+                        ),
+                        "Event-CursedTome.png"),
 
                 new EventDef("诅咒祭坛",
                         "一座漆黑的祭坛矗立在道路中央。\n"
                                 + "祭坛周围没有任何声音，只有中央的一枚黑色符文散发着微弱的光。\n"
                                 + "你能感觉到其中蕴含着某种力量，但这股力量似乎并不免费。",
-                        "Event-ForgottenAltar.png",
                         List.of(
                                 new Option("接受诅咒",
                                         "失去 10 点生命，获得一张“伤口”",
                                         Action.CURSE, 10),
                                 new Option("离开", "什么也不发生", Action.NOTHING, 0)
-                        ))
+                        ),
+                        "Event-ForgottenAltar.png")
         );
 
     // ================= 猪雪峰（一局只出一次的低概率专属事件） =================
@@ -179,7 +168,6 @@ public class EventDef {
             "你在猪塔中探索，发现了一个奇特的雕像。\n"
                     + "像是一头天使猪站在雪峰上的雕像。\n"
                     + "你从中吸取到了一些力量",
-            "encounter/xuefeng.png",    // 左侧插图和全屏背景用同一张图
             List.of(
                     new Option("拿起猪爆气",
                             "战斗开始时，对自身造成不可格挡的 2 点伤害，对怪物造成 13 点伤害",
@@ -192,7 +180,7 @@ public class EventDef {
                                     + "改为使本遗物提供的敏捷 +1",
                             Action.ADD_NAMED_RELIC, 0, "猪疾速")
             ),
-            "encounter/xuefeng.png");   // 专属背景
+            "encounter/xuefeng.png");   // 全屏背景大图
 
     /**
      * 进事件节点时挑一个事件。
@@ -206,12 +194,15 @@ public class EventDef {
      *
      * @param player 当前玩家（用于判断这局出没出过猪雪峰）；传 null 时只挑常规池
      */
-    public static EventDef pick(Player player) {
-        if (!xuefengDone(player) && Math.random() < XUEFENG_CHANCE) {
+    public static EventDef pick(Player player, long seed) {
+        // ⚠ 用节点种子而不是 Math.random()：同一个节点重进（SL / 混沌改判后）
+        // 必须还是同一个事件，不然玩家能靠「退出重进」把事件刷到满意为止。
+        Random rnd = new Random(seed);
+        if (!xuefengDone(player) && rnd.nextDouble() < XUEFENG_CHANCE) {
             player.xuefengSeen = true;
             return XUEFENG;
         }
-        return NORMAL_POOL.get((int) (Math.random() * NORMAL_POOL.size()));
+        return NORMAL_POOL.get(rnd.nextInt(NORMAL_POOL.size()));
     }
 
     private static boolean xuefengDone(Player player) {
