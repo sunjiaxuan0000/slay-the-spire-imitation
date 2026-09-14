@@ -1,5 +1,9 @@
 package com.example.demo.card;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
 /**
  * 一张卡牌（后续战斗系统会用到 damage/block/cost/draw）。
  * 以后再加新牌就照着打击/防御的样子加一个静态工厂方法。
@@ -253,10 +257,42 @@ public class Card {
     public static Card wound()       { return new Card(Kind.WOUND, -1, 0, 0); } // -1 表示无法打出
     public static Card slime()       { return new Card(Kind.SLIME, 1, 0, 0, 0, true); } // 可打出，消耗
 
-    /** 英雄宝典遗物：随机生成一张不消耗能量的能力牌 */
+    /**
+     * 全部「能力牌」种类。
+     *
+     * <p>⚠ <b>从 {@link Kind} 枚举里现算，不写死名单</b> —— 以后新加一张
+     * {@code Type.POWER} 的牌，这里和 {@link #randomPower} / {@link #freePower()}
+     * 会自动带上，不用回来改。</p>
+     */
+    public static List<Kind> powerKinds() {
+        List<Kind> pool = new ArrayList<>();
+        for (Kind k : Kind.values()) {
+            if (k.type == Type.POWER) pool.add(k);
+        }
+        return pool;
+    }
+
+    /**
+     * 随机一张能力牌，<b>按它自己的正常费用</b>。
+     *
+     * <p>事件「用恶魔的剑击打」这类「获得随机能力牌」的奖励走这里。</p>
+     *
+     * <p>⚠ 不要拿 {@link #freePower()} 当普通奖励发：那是「0 费的能力牌」，
+     * 发出去等于白送一张免费牌。</p>
+     *
+     * @param rnd 随机源（事件里传节点种子派生的流，保证重进这个节点拿到同一张）
+     */
+    public static Card randomPower(Random rnd) {
+        List<Kind> pool = powerKinds();
+        if (pool.isEmpty()) return kindle();   // 兜底：真出现「一张能力牌都没有」也不崩
+        return of(pool.get(rnd.nextInt(pool.size())));
+    }
+
+    /** 英雄宝典遗物：随机生成一张<b>不消耗能量</b>的能力牌（池子 = 全部能力牌） */
     public static Card freePower() {
-        Kind[] powers = { Kind.KINDLE, Kind.BRUTALITY };
-        Kind k = powers[new java.util.Random().nextInt(powers.length)];
+        List<Kind> pool = powerKinds();
+        if (pool.isEmpty()) return kindle();
+        Kind k = pool.get(new Random().nextInt(pool.size()));
         return new Card(k, 0, 0, 0, 0);
     }
 

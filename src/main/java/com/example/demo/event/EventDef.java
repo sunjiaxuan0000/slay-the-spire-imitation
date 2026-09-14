@@ -6,6 +6,7 @@ import com.example.demo.character.RelicFun;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 /**
  * 地图事件：
@@ -40,7 +41,7 @@ public class EventDef {
 
         ADD_CARD,           // 加入一张随机卡牌
 
-        ADD_RELIC,          // 获得一件未持有的随机遗物
+        ADD_RELIC,          // 获得随机遗物，amount = 件数（0 当作 1 件）
 
         ADD_NAMED_RELIC,    // 获得指定名字的遗物，使用 relicName
 
@@ -48,7 +49,23 @@ public class EventDef {
 
         NOTHING,            // 什么也不发生
 
-        RANDOM_WATER        // 神秘泉水：随机回血或掉血
+        RANDOM_WATER,       // 神秘泉水：随机回血或掉血
+
+        // ---------- 2026-09-14 事件效果扩充 ----------
+
+        ADD_MAX_HP,         // 提升生命上限，amount = 加多少（当前生命同步 +amount）
+
+        ADD_GOLD,           // 获得金币，amount = 加多少
+
+        ADD_POWER_CARD,     // 加入一张随机「能力牌」
+
+        ADD_CARD_REWARD,    // 走 amount 次「卡牌奖励」三选一（和战斗胜利同一套界面）
+
+        UPGRADE_RANDOM,     // 随机升级牌组里的 amount 张牌
+
+        UPGRADE_CHOOSE,     // 由玩家选择升级 amount 张牌
+
+        REMOVE_CHOOSE       // 由玩家选择移除 amount 张牌
     }
 
 
@@ -336,19 +353,19 @@ public class EventDef {
                             ),
 
                             new Option(
-                                    "喝口热茶",
-                                    "回复 8 点生命"+ "但是会被烫伤\n" ,
+                                    "喝一口热茶",
+                                    "失去 10 点生命，最大生命 +5",
                                     List.of(
-                                            new Effect(Action.HEAL, 8),
-                                            new Effect(Action.ADD_WOUND, 1)
+                                            new Effect(Action.DAMAGE, 10),
+                                            new Effect(Action.ADD_MAX_HP, 5)
                                     )
                             ),
 
                             new Option(
-                                    "无视摊主",
-                                    "径直走开",
+                                    "攻击摊主",
+                                    "获得 50 金币",
                                     List.of(
-                                            new Effect(Action.NOTHING, 0)
+                                            new Effect(Action.ADD_GOLD, 50)
                                     )
                             )
                     )
@@ -379,10 +396,10 @@ public class EventDef {
                             ),
 
                             new Option(
-                                    "离开",
-                                    "什么也没发生",
+                                    "用恶魔的剑击打",
+                                    "获得一张随机能力牌",
                                     List.of(
-                                            new Effect(Action.NOTHING, 0)
+                                            new Effect(Action.ADD_POWER_CARD, 0)
                                     )
                             )
                     )
@@ -406,18 +423,18 @@ public class EventDef {
 
                             new Option(
                                     "阅读书籍",
-                                    "获得一张随机卡牌，并获得一张“伤口”",
+                                    "获得 2 次卡牌奖励",
                                     List.of(
-                                            new Effect(Action.ADD_CARD, 0),
-                                            new Effect(Action.ADD_WOUND, 1)
+                                            new Effect(Action.ADD_CARD_REWARD, 2)
                                     )
                             ),
 
                             new Option(
-                                    "离开",
-                                    "什么也没发生",
+                                    "烧毁书籍",
+                                    "受到 10 点伤害，随机升级 2 张牌",
                                     List.of(
-                                            new Effect(Action.NOTHING, 0)
+                                            new Effect(Action.DAMAGE, 10),
+                                            new Effect(Action.UPGRADE_RANDOM, 2)
                                     )
                             )
                     )
@@ -441,27 +458,28 @@ public class EventDef {
 
                             new Option(
                                     "触碰符文",
-                                    "失去 15 点生命，获得一张随机卡牌",
+                                    "失去 10 点生命，选择升级一张牌",
                                     List.of(
-                                            new Effect(Action.DAMAGE, 5),
-                                            new Effect(Action.ADD_CARD, 0)
+                                            new Effect(Action.DAMAGE, 10),
+                                            new Effect(Action.UPGRADE_CHOOSE, 1)
                                     )
                             ),
 
                             new Option(
                                     "接受诅咒",
-                                    "失去 10 点生命，获得一张“伤口”",
+                                    "获得 2 件随机遗物，并获得一张“伤口”",
                                     List.of(
-                                            new Effect(Action.DAMAGE, 10),
+                                            new Effect(Action.ADD_RELIC, 2),
                                             new Effect(Action.ADD_WOUND, 1)
                                     )
                             ),
 
                             new Option(
-                                    "转身离开",
-                                    "你确定要转身离开吗....",
+                                    "大肆破坏",
+                                    "失去 20 点生命，选择移除 2 张牌",
                                     List.of(
-                                            new Effect(Action.DAMAGE, 20)
+                                            new Effect(Action.DAMAGE, 20),
+                                            new Effect(Action.REMOVE_CHOOSE, 2)
                                     )
                             )
                     )
@@ -536,19 +554,28 @@ public class EventDef {
     // 7. 随机挑选事件
     // =========================================================
 
-    public static EventDef pick(Player player) {
-
-        if (!xuefengDone(player)
-                && Math.random() < XUEFENG_CHANCE) {
-
+    /**
+     * 进事件节点时挑一个事件。
+     *
+     * <p>猪雪峰是「一局一次 + 低概率」：先掷一次 {@link #XUEFENG_CHANCE} 的骰子，
+     * 中了就出它并把 {@link Player#xuefengSeen} 置位（本局不再出）；
+     * 没中就在常规池里均匀挑。</p>
+     *
+     * <p>已经出过的判据是「{@code xuefengSeen} 或已经持有三件之一」——
+     * 双保险：万一存档没记下 xuefengSeen（旧档），手上已经有遗物也足以说明来过了。</p>
+     *
+     * @param player 当前玩家（用于判断这局出没出过猪雪峰）；传 null 时只挑常规池
+     * @param seed   节点种子派生的事件流种子
+     */
+    public static EventDef pick(Player player, long seed) {
+        // ⚠ 用节点种子而不是 Math.random()：同一个节点重进（SL / 混沌改判后）
+        // 必须还是同一个事件，不然玩家能靠「退出重进」把事件刷到满意为止。
+        Random rnd = new Random(seed);
+        if (!xuefengDone(player) && rnd.nextDouble() < XUEFENG_CHANCE) {
             player.xuefengSeen = true;
-
             return XUEFENG;
         }
-
-        return NORMAL_POOL.get(
-                (int) (Math.random() * NORMAL_POOL.size())
-        );
+        return NORMAL_POOL.get(rnd.nextInt(NORMAL_POOL.size()));
     }
 
 

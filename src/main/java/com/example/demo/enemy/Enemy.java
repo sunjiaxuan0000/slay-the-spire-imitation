@@ -111,6 +111,9 @@ public abstract class Enemy {
     /** 仪式：每回合开始自动增加的力量值，0 表示无仪式。由 RITUAL 意图激活。 */
     protected int ritualPower = 0;
 
+    /** 仪式刚激活标记：RITUAL 执行后下一回合跳过加力量 */
+    protected boolean ritualJustActivated = false;
+
     /** 攻击后向玩家抽牌堆塞入的黏液牌数量，0 表示无此效果（史莱姆特有）。 */
     protected int slimeOnAttack = 0;
 
@@ -230,6 +233,11 @@ public abstract class Enemy {
         return ritualPower;
     }
 
+    /** 仪式是否刚激活（下一回合不加力量） */
+    public boolean isRitualJustActivated() {
+        return ritualJustActivated;
+    }
+
     /** 攻击后塞入玩家抽牌堆的黏液牌数量 */
     public int getSlimeOnAttack() {
         return slimeOnAttack;
@@ -260,14 +268,19 @@ public abstract class Enemy {
         return portraitSize;
     }
 
-    /** 设置仪式效果（由 RITUAL 意图触发） */
+    /** 设置仪式效果（由 RITUAL 意图触发），标记下一回合跳过加力量 */
     public void setRitualPower(int value) {
         this.ritualPower = value;
+        this.ritualJustActivated = true;
     }
 
-    /** 每回合开始时调用：仪式生效则自动增加力量 */
+    /** 每回合开始时调用：仪式生效则自动增加力量（首回合跳过） */
     public void applyRitual() {
         if (ritualPower > 0) {
+            if (ritualJustActivated) {
+                ritualJustActivated = false; // 跳过仪式后的第一个回合
+                return;
+            }
             power += ritualPower;
         }
     }
@@ -332,7 +345,7 @@ public abstract class Enemy {
         Step s = current();
         int v = s.value;
         return switch (s.intent) {
-            case ATTACK -> s.intent.label + " " + (baseAttackDamage(s) + power + ritualPower);
+            case ATTACK -> s.intent.label + " " + (baseAttackDamage(s) + power + (ritualJustActivated ? 0 : ritualPower));
             // 格挡量走 blockGain：敏捷会加成（混沌猪的「加 10 格挡」在有敏捷时是 16）
             case DEFEND -> s.intent.label + " " + blockGain(v);
             // 交给子类：普通敌人是「力量 +N」，混沌猪是随机增益（具体哪一种看 buffIntentTip）
