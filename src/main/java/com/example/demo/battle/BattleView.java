@@ -112,6 +112,8 @@ public class BattleView extends StackPane implements BattleState {
     private int enemyVulnerable = 0;
     private int enemyWeak = 0;
     private int pendingStrengthLoss = 0;
+    /** 潮湿状态：玩家费用 -1，下回合结束清除 */
+    private int wetTurns = 0;
     /** 玩家敏捷：每次获得格挡时额外 +敏捷（猪疾速等来源） */
     private int playerDexterity = 0;
     /**
@@ -671,6 +673,11 @@ public class BattleView extends StackPane implements BattleState {
                         + enemy.getChargeStacks() + " 层蓄势 × "
                         + enemy.getChargeDamagePerStack() + "），自爆后死亡";
             }
+            case WET -> {
+                glyph = "潮";
+                color = "#0284c7";
+                tip = "意图·潮湿：玩家费用 -" + s.value + "，下回合结束清除";
+            }
             default -> {
                 glyph = "弱";
                 color = "#7c3aed";
@@ -713,6 +720,8 @@ public class BattleView extends StackPane implements BattleState {
         energy += RelicFun.extraEnergy(player, enemy, turn, attackCardsPlayedThisTurn > 0);
         // 猪冰棍：战斗的前两回合开始时额外 +1 能量
         energy += RelicFun.turnStartEnergy(player, turn);
+        // 潮湿：玩家回合开始时扣 1 费（最低 0）
+        if (wetTurns > 0) energy = Math.max(0, energy - 1);
         playedCardThisTurn = false;
         attackCardsPlayedThisTurn = 0;
         fanBonusApplied = false;
@@ -1261,6 +1270,11 @@ public class BattleView extends StackPane implements BattleState {
 
     @Override
     public void damageEnemy(int dmg) {
+        // 闪避判定：在削格挡、扣血、反伤之前
+        if (enemy.hasDodge() && enemy.dodge()) {
+            showDodgeText();
+            return;
+        }
         if (dmg > 0) SoundFx.play("ironclad_attack"); // 玩家攻击牌命中怪物音效
         enemyAnim.triggerHitKnock();
         if (enemy.block > 0) {
@@ -1271,6 +1285,22 @@ public class BattleView extends StackPane implements BattleState {
         enemy.hp = Math.max(0, enemy.hp - dmg);
         applyReflect(dmg);
         resolveEnemyLethal();
+    }
+
+    /** 闪避时在敌人立绘上方弹出白字「闪避！」并淡出 */
+    private void showDodgeText() {
+        Label dodge = new Label("闪避！");
+        dodge.setTextFill(javafx.scene.paint.Color.WHITE);
+        dodge.setFont(javafx.scene.text.Font.font(28));
+        dodge.setStyle("-fx-font-weight: bold; -fx-effect: dropshadow(gaussian, #000, 4, 0.5, 0, 0);");
+        StackPane.setAlignment(dodge, javafx.geometry.Pos.TOP_CENTER);
+        enemyPortrait.getChildren().add(dodge);
+
+        FadeTransition fade = new FadeTransition(Duration.millis(800), dodge);
+        fade.setFromValue(1.0);
+        fade.setToValue(0.0);
+        fade.setOnFinished(e -> enemyPortrait.getChildren().remove(dodge));
+        fade.play();
     }
 
     /**
@@ -1434,6 +1464,7 @@ public class BattleView extends StackPane implements BattleState {
         SoundFx.play("EndTurn"); // 结束玩家回合音效
         playerTurn = false;
         if (reflectTurns > 0) reflectTurns--;
+        if (wetTurns > 0) wetTurns = 0; // 潮湿在玩家回合结束时清除
 
         // 活动肌肉：回合结束时扣除本回合临时获得的力量
         if (pendingStrengthLoss > 0) {
@@ -1494,7 +1525,7 @@ public class BattleView extends StackPane implements BattleState {
         return switch (intent) {
             case ATTACK -> enemyOink();              // 出手叫声：BOSS 鱼龙叫 / 普通猪叫
             case DEFEND -> List.of("GainDefense");   // 复用已有的加盾音效
-            case BUFF, WEAKEN, REFLECT, RITUAL, CHARGE -> List.of("zhou");
+            case BUFF, WEAKEN, REFLECT, RITUAL, CHARGE, WET -> List.of("zhou");
             case EXPLODE -> List.of("GetHurt");
         };
     }
@@ -1547,6 +1578,10 @@ public class BattleView extends StackPane implements BattleState {
             case REFLECT -> reflectTurns = Math.max(reflectTurns,s.value);
             case RITUAL -> enemy.setRitualPower(s.value);
             case CHARGE -> enemy.addChargeStacks(s.value); // 叠蓄势，自爆伤害随之增加
+            case WET -> {
+                // 潮湿：标记，下回合玩家开始时扣费
+                wetTurns = 1;
+            }
             case EXPLODE -> {
                 // 神风猪锁血后的最终一击：蓄势层数 × 每层伤害，正常扣格挡/血量，自爆后死亡
                 enemyAnim.triggerAttackDash();
@@ -1857,6 +1892,10 @@ public class BattleView extends StackPane implements BattleState {
             pChips.getChildren().add(BattleUiFactory.statusChip("敏", playerDexterity, "#0891b2",
                     "敏捷 +" + playerDexterity + "：每次获得格挡时额外增加"));
         }
+        if (wetTurns > 0) {
+            pChips.getChildren().add(BattleUiFactory.statusChip("潮", "#0284c7",
+                    "潮湿：费用 -1，下回合结束清除"));
+        }
         for (Map.Entry<Card.Kind, Integer> e : powerAmount.entrySet()) {
             PowerBadge badge = powerBadgeOf(e.getKey(), e.getValue());
             if (badge != null) {
@@ -1947,6 +1986,11 @@ public class BattleView extends StackPane implements BattleState {
             eChips.getChildren().add(BattleUiFactory.diamondChip("蓄", enemy.getChargeStacks(), "#dc2626",
                     "蓄势：每层蓄势造成 " + enemy.getChargeDamagePerStack()
                             + " 点自爆伤害（当前自爆伤害 " + enemy.explodeDamage() + "）"));
+        }
+        // 闪电猪闪避：黄底白字圆形「闪」标
+        if (enemy.hasDodge()) {
+            eChips.getChildren().add(BattleUiFactory.statusChip("闪", "#facc15",
+                    "50%概率闪避攻击"));
         }
         refreshIntent();
 

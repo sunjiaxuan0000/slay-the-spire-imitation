@@ -21,7 +21,8 @@ public abstract class Enemy {
         REFLECT("反伤"),
         RITUAL("仪式"),
         CHARGE("蓄势"),
-        EXPLODE("自爆");
+        EXPLODE("自爆"),
+        WET("潮湿");
         public final String label;
         Intent(String label) { this.label = label; }
     }
@@ -130,6 +131,16 @@ public abstract class Enemy {
         return slimeOnAttack;
     }
 
+    /** 是否拥有闪避能力（决定血条下方是否显示「闪」图标） */
+    public boolean hasDodge() {
+        return false;
+    }
+
+    /** 闪避判定：返回 true 表示本次攻击被完全闪避（子类覆写） */
+    public boolean dodge() {
+        return false;
+    }
+
     /** 立绘文件名（BigSlime 可复用史莱姆的图） */
     public String getPortraitName() {
         return portraitName != null ? portraitName : name;
@@ -207,7 +218,6 @@ public abstract class Enemy {
     public boolean triggerDeathLock() {
         return false;
     }
-
     /** 描述当前意图的文字 */
     public String intentText() {
         Step s = current();
@@ -221,6 +231,7 @@ public abstract class Enemy {
             case RITUAL -> s.intent.label + " 每回合力量 +" + v;
             case CHARGE -> s.intent.label + " +" + v + " 层";
             case EXPLODE -> s.intent.label + " " + explodeDamage();
+            case WET -> s.intent.label + "减少我方" + v + "费用";
         };
     }
 
