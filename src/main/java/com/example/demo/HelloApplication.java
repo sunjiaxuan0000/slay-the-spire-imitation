@@ -937,7 +937,9 @@ public class HelloApplication extends Application {
         // 先把「这次进去会遇到什么」定下来，才能一起存进档里
         switch (type) {
             case MONSTER -> { if (enemy == null) enemy = monsterForRow(map); }
-            case ELITE   -> { if (enemy == null) enemy = EnemyFactory.elite(); }
+            // 精英按节点种子从池子里抽：同一个精英节点重进还是同一只（SL 刷不了），
+            // 池子 = 卫士猪 / 闪电猪 / 混沌猪，等概率。
+            case ELITE   -> { if (enemy == null) enemy = EnemyFactory.elite(nodeSeed(map)); }
             // BOSS 按地图定好的种类出（和地图上画的那只对得上），不再临场随机
             case BOSS    -> { if (enemy == null) enemy = EnemyFactory.boss(map.bossKind); }
             case EVENT   -> {

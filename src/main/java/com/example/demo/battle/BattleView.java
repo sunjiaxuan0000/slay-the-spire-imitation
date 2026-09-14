@@ -296,6 +296,9 @@ public class BattleView extends StackPane implements BattleState {
         this.shuffleRnd = new Random(battleSeed);
         this.miscRnd = new Random(battleSeed ^ 0x5DEECE66DL);
         this.battleSeed = battleSeed;
+        // 敌人自己的随机（混沌猪的随机增益 / 闪避判定）也从这一份种子派生 ——
+        // 读档重打这一战，buff 顺序和闪避结果完全一致，刷不了。
+        enemy.setBattleSeed(battleSeed);
         this.deathOverlay = new DeathOverlay(enemy.name, () -> onFinish.accept(false));
         this.rewardOverlay = new RewardOverlay(() -> { rewardOverlay.hide(); onFinish.accept(true); });
 
@@ -656,7 +659,8 @@ public class BattleView extends StackPane implements BattleState {
             case BUFF -> {
                 glyph = "强";
                 color = "#d97706";
-                tip = "意图·强化：这个敌人将要为自己施加增益效果";
+                // 普通敌人给通用文案；混沌猪会明示这一回合抽到的具体增益
+                tip = enemy.buffIntentTip();
             }
             case REFLECT ->{
                 glyph="反";
@@ -1587,8 +1591,15 @@ public class BattleView extends StackPane implements BattleState {
                     draw.add(Card.slime());
                 }
             }
-            case DEFEND -> enemy.block += s.value; // 音效由 enemySoundOf(DEFEND) 播放
-            case BUFF -> enemy.power += s.value;
+            // 格挡量走 enemy.blockGain()：敏捷会加成（混沌猪的「敏捷6」= 加 10 格挡变 16）
+            case DEFEND -> enemy.block += enemy.blockGain(s.value); // 音效由 enemySoundOf(DEFEND) 播放
+            case BUFF -> {
+                // 由敌人自己决定加什么：普通敌人 = 力量；混沌猪 = 力量/仪式/敏捷/闪避/反伤 五选一
+                enemy.applyBuff(s);
+                // 混沌猪若抽到「反伤」，把待生效的反伤回合数交给战斗层
+                int rt = enemy.consumeReflectTurns();
+                if (rt > 0) reflectTurns = Math.max(reflectTurns, rt);
+            }
             case WEAKEN -> weakTurns = Math.max(weakTurns, s.value);
             case REFLECT -> reflectTurns = Math.max(reflectTurns,s.value);
             case RITUAL -> enemy.setRitualPower(s.value);
@@ -1946,6 +1957,10 @@ public class BattleView extends StackPane implements BattleState {
             eChips.getChildren().add(BattleUiFactory.statusChip("力", enemy.power, "#f59e0b",
                     "力量：每段攻击伤害增加"+enemy.power+"点"));
         }
+        if (enemy.getDexterity() > 0) {
+            eChips.getChildren().add(BattleUiFactory.statusChip("敏", enemy.getDexterity(), "#0891b2",
+                    "敏捷 +" + enemy.getDexterity() + "：敌人每次获得格挡时额外增加"));
+        }
         if (enemyVulnerable > 0) {
             eChips.getChildren().add(BattleUiFactory.statusChip("伤", enemyVulnerable, "#dc2626",
                     "易伤： " + enemyVulnerable + " 回合内：承受伤害 ×1.5"));
@@ -2014,10 +2029,10 @@ public class BattleView extends StackPane implements BattleState {
                     "蓄势：每层蓄势造成 " + enemy.getChargeDamagePerStack()
                             + " 点自爆伤害（当前自爆伤害 " + enemy.explodeDamage() + "）"));
         }
-        // 闪电猪闪避：黄底白字圆形「闪」标
+        // 闪电猪 / 混沌猪闪避：黄底白字圆形「闪」标（概率按敌人自己的设定显示）
         if (enemy.hasDodge()) {
             eChips.getChildren().add(BattleUiFactory.statusChip("闪", "#facc15",
-                    "50%概率闪避攻击"));
+                    enemy.dodgeChanceUi() + "%概率闪避攻击"));
         }
         refreshIntent();
 
