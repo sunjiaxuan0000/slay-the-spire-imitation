@@ -22,6 +22,7 @@ import com.example.demo.view.RewardOverlay;
 import com.example.demo.view.MapView;
 import com.example.demo.view.RoomView;
 import com.example.demo.view.RunHud;
+import com.example.demo.view.ShopView;
 import com.example.demo.view.SettingsView;
 import com.example.demo.view.RelicObtainToast;
 import com.example.demo.view.RestView;
@@ -62,10 +63,7 @@ import javafx.scene.text.Font;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 public class HelloApplication extends Application {
 
@@ -458,6 +456,8 @@ public class HelloApplication extends Application {
             activeBattle = null;
             battleMapOpen = false;
             if (won) {
+                player.gold += calculateGoldReward(type); // 战斗胜利发放金币
+
                 // 精英战利品：只「挑」不「拿」。真正入账要等玩家在获取界面上点「拾取」，
                 // 所以这里拿到的只是一个候选 —— 丢弃就什么都不发生。
                 Relic eliteRelic = (type == GameMap.NodeType.ELITE)
@@ -514,6 +514,21 @@ public class HelloApplication extends Application {
                 }
             }
         });
+    }
+    private int calculateGoldReward(GameMap.NodeType type){
+        if (type == GameMap.NodeType.MONSTER) {
+            return 10 + new Random().nextInt(16);
+        }
+
+        if (type == GameMap.NodeType.ELITE) {
+            return 25 + new Random().nextInt(26);
+        }
+
+        if (type == GameMap.NodeType.BOSS) {
+            return 100;
+        }
+
+        return 0;
     }
 
     // ================= 战斗中的只读地图 =================
@@ -898,7 +913,65 @@ public class HelloApplication extends Application {
                     markCleared(map, player);
                 }
             }
+            case SHOP -> startShopScene(stage, map, player);
         }
+    }
+
+    // ================= 商店 =================
+
+    /** 商店场景：展示卡牌/遗物商品，购买和离开的逻辑都在这里结算 */
+    private void startShopScene(Stage stage, GameMap map, Player player) {
+        // 本店商品（先固定一批，以后可换成随机）
+        List<Card> cardGoods = List.of(
+                Card.heavyBlade(), Card.impregnable(), Card.kindle(), Card.offering());
+        List<Relic> relicGoods = List.of(
+                new Relic("青铜怀表", "战斗开始时获得 2 点格挡"),
+                new Relic("请假条", "每回合多抽 1 张牌"));
+
+        // 购买回调里要刷新商店 UI，但 shop 此时还没构造完 → 先用数组占位，构造完再填
+        final ShopView[] shopRef = new ShopView[1];
+
+        ShopView shop = new ShopView(player, cardGoods, relicGoods,
+                c -> { // 购买卡牌
+                    int price = ShopView.cardPrice(c);
+                    if (player.gold < price) {
+                        shopAlert("金币不足！", "这件商品要 " + price + " 金币，你只有 " + player.gold + "。");
+                        return;
+                    }
+                    player.gold -= price;
+                    player.deck.add(c);
+                    shopRef[0].refreshGold();
+                    shopRef[0].markSold(c);
+                },
+                r -> { // 购买遗物
+                    int price = ShopView.relicPrice();
+                    if (player.gold < price) {
+                        shopAlert("金币不足！", "这件商品要 " + price + " 金币，你只有 " + player.gold + "。");
+                        return;
+                    }
+                    player.gold -= price;
+                    player.addRelic(r);
+                    shopRef[0].refreshGold();
+                    shopRef[0].markSold(r);
+                },
+                () -> showMapScene(stage, map, player)); // 离开商店 → 回地图
+        shopRef[0] = shop;
+
+        // 复用 Scene 切换（不新建 Scene → 不动窗口尺寸/全屏），Esc = 离开商店
+        switchScene(stage, shop, e -> {
+            if (e.getCode() == KeyCode.ESCAPE) {
+                showMapScene(stage, map, player); // ESC = 离开商店
+            }
+        });
+    }
+
+    /** 商店提示弹窗（金币不足等） */
+    private void shopAlert(String title, String text) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(text);
+        alert.showAndWait();
     }
 
     /**
@@ -1101,6 +1174,29 @@ public class HelloApplication extends Application {
                 yield r == null
                         ? new EventOutcome("遗物池里已经没有新遗物了……", null, null)
                         : new EventOutcome("发现遗物：「" + r.name + "」\n" + r.desc, r, null);
+            }
+            case RANDOM_WATER -> {
+                int before = player.hp();
+                if (Math.random() < 0.5) {
+                    player.heal(10);
+                    yield new EventOutcome(
+                            "你喝下泉水...运气不错，恢复 10 点生命：" + before + " → " + player.hp(),
+                            null, null);
+                } else {
+                    player.damage(10);
+                    yield new EventOutcome(
+                            "你喝下泉水...糟糕，失去 10 点生命：" + before + " → " + player.hp(),
+                            null, null);
+                }
+            }
+            case CURSE -> {
+                int before = player.hp();
+                player.damage(opt.amount);              // 扣血（amount = 10）
+                Card wound = Card.wound();              // 每次都新建一张"伤口"，不复用实例
+                player.deck.add(wound);
+                yield new EventOutcome("你感受到一股冰冷的力量涌入身体……\n"
+                        + "失去 " + opt.amount + " 点生命：" + before + " → " + player.hp() + "\n"
+                        + "获得卡牌：「" + wound.kind.label + "」加入牌组", null, wound);
             }
             case ADD_NAMED_RELIC -> {
                 // 猪雪峰：点名发放专属遗物（那三件不在任何抽取池里）。

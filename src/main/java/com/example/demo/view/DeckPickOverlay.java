@@ -10,6 +10,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.FlowPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
@@ -34,7 +35,7 @@ import java.util.function.Predicate;
  *
  * <p>目前的使用者：
  * <ul>
- *   <li>起点房间的「破镜」遗物 —— {@link RoomView#removeCardFromDeck()}</li>
+ *   <li>起点房间的「破镜」遗物 —— {@link RoomView}</li>
  *   <li>Boss 遗物的「空鸟笼」—— {@code BattleView.showRemovePicker()}</li>
  *   <li>篝火节点的「强化卡牌」—— {@link RestView}</li>
  * </ul>
@@ -70,6 +71,14 @@ public class DeckPickOverlay extends StackPane {
     private static final String CARD_BTN_LOCKED =
             "-fx-background-color: transparent; -fx-padding: 0; -fx-opacity: 0.38;";
 
+    /** 「显示升级」开关：关 / 开两种配色 */
+    private static final String PREVIEW_OFF_STYLE =
+            "-fx-background-color: #334155; -fx-text-fill: #e2e8f0; "
+            + "-fx-background-radius: 9; -fx-cursor: hand;";
+    private static final String PREVIEW_ON_STYLE =
+            "-fx-background-color: #b45309; -fx-text-fill: #ffffff; "
+            + "-fx-background-radius: 9; -fx-cursor: hand;";
+
     private final Player player;
     private final String titleText;
     private final String subText;
@@ -81,6 +90,11 @@ public class DeckPickOverlay extends StackPane {
     private final Runnable onCancel;
     /** 悬停提示，可为 null */
     private final Function<Card, String> tooltipFor;
+    /** 强化模式：隐藏不可强化的牌，并显示「显示升级」开关（篝火 / 青铜怀表启用） */
+    private final boolean upgradeMode;
+    /** 当前是否处于「升级预览」状态 */
+    private boolean previewUpgraded = false;
+    private final Button previewBtn = new Button("显示升级：关");
 
     private final Label title = new Label();
     private final FlowPane cardGrid = new FlowPane(8, 8);
@@ -119,6 +133,20 @@ public class DeckPickOverlay extends StackPane {
     public DeckPickOverlay(Player player, String titleText, String subText, List<Card> cards,
                            Predicate<Card> selectable, Consumer<Card> onPick,
                            Runnable onCancel, Function<Card, String> tooltipFor) {
+        this(player, titleText, subText, cards, selectable, onPick, onCancel, tooltipFor, false);
+    }
+
+    /**
+     * 通用版 + 强化模式开关。
+     *
+     * @param upgradeMode 强化模式（篝火「强化卡牌」/ 青铜怀表传 {@code true}）：
+     *                    隐藏不可强化的牌（已强化 / 状态牌），并显示「显示升级」开关
+     *                    ——点击后把可强化的牌预览为升级版，再点一次切回原样
+     */
+    public DeckPickOverlay(Player player, String titleText, String subText, List<Card> cards,
+                           Predicate<Card> selectable, Consumer<Card> onPick,
+                           Runnable onCancel, Function<Card, String> tooltipFor,
+                           boolean upgradeMode) {
         this.player = player;
         this.titleText = titleText;
         this.subText = subText;
@@ -127,6 +155,7 @@ public class DeckPickOverlay extends StackPane {
         this.onPick = onPick;
         this.onCancel = onCancel;
         this.tooltipFor = tooltipFor;
+        this.upgradeMode = upgradeMode;
         buildChrome();
     }
 
@@ -152,11 +181,28 @@ public class DeckPickOverlay extends StackPane {
         sub.setTextFill(Color.rgb(148, 163, 184));
         sub.setFont(Font.font(13));
 
+        HBox actions = new HBox(10);
+        actions.setAlignment(Pos.CENTER);
+        if (upgradeMode) {
+            previewBtn.setFont(Font.font(14));
+            previewBtn.setPrefSize(140, 34);
+            previewBtn.setStyle(PREVIEW_OFF_STYLE);
+            previewBtn.setOnAction(e -> {
+                previewUpgraded = !previewUpgraded;
+                previewBtn.setText(previewUpgraded ? "显示升级：开" : "显示升级：关");
+                previewBtn.setStyle(previewUpgraded ? PREVIEW_ON_STYLE : PREVIEW_OFF_STYLE);
+                fillGrid(); // 立即按新状态重建卡面
+            });
+            actions.getChildren().addAll(previewBtn, closeButton());
+        } else {
+            actions.getChildren().add(closeButton());
+        }
+
         VBox panel = new VBox(10);
         panel.setAlignment(Pos.CENTER);
         panel.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
         panel.setStyle("-fx-background-color: #1e293b; -fx-background-radius: 16; -fx-padding: 18;");
-        panel.getChildren().addAll(title, sub, scroll, closeButton());
+        panel.getChildren().addAll(title, sub, scroll, actions);
 
         setAlignment(panel, Pos.CENTER);
         getChildren().addAll(dim, panel);
@@ -179,24 +225,37 @@ public class DeckPickOverlay extends StackPane {
     /** 铺满父容器并刷新卡面（每次展示都按当前牌组重建，牌组变了也不会残留旧卡） */
     public void show() {
         resolved = false;
+        previewUpgraded = false; // 每次打开都回到「未升级预览」
+        if (upgradeMode) {
+            previewBtn.setText("显示升级：关");
+            previewBtn.setStyle(PREVIEW_OFF_STYLE);
+        }
+        fillGrid();
+        setVisible(true);
+    }
 
+    /** 按当前牌组重建卡面网格（「显示升级」开关切换时也走这里） */
+    private void fillGrid() {
         List<Card> list = new ArrayList<>(cards != null ? cards : player.deck);
+        if (upgradeMode) {
+            list.removeIf(c -> !selectable.test(c)); // 强化页面：不可强化的牌直接不显示
+        }
         list.sort(Comparator.comparingInt(c -> c.id));
 
         title.setText(titleText + " · 共 " + list.size() + " 张");
 
         cardGrid.getChildren().clear();
         for (Card c : list) {
-            cardGrid.getChildren().add(cardButton(c));
+            // 升级预览：只把「可强化」的牌换成升级版展示；点击仍作用于原牌
+            Card shown = (previewUpgraded && c.canUpgrade()) ? c.upgrade() : c;
+            cardGrid.getChildren().add(cardButton(c, shown));
         }
-
-        setVisible(true);
     }
 
     /** 一张卡面：图形与奖励弹层一致，外面套一层透明按钮承接点击与悬停高亮 */
-    private Button cardButton(Card c) {
+    private Button cardButton(Card c, Card shown) {
         Button b = new Button();
-        b.setGraphic(CardFaceView.buildAt(c, CARD_W)); // 分层贴图卡面
+        b.setGraphic(CardFaceView.buildAt(shown, CARD_W)); // 分层贴图卡面
 
         if (tooltipFor != null) {
             String tip = tooltipFor.apply(c);

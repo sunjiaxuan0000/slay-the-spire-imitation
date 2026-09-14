@@ -41,6 +41,7 @@ public class Player {
     public int hp = maxHp;
     public final List<Card> deck = new ArrayList<>();
     public final List<Relic> relics = new ArrayList<>(); // 本局获得的遗物
+    public int gold = 100; // 金币：商店货币（战斗胜利发放，商店消费，见 ShopView）
     public boolean restedAtCampfire = false; // 篝火休息后标记
     public int leaveNoteBattles = 0; // 请假条：剩余生效战斗场次
 

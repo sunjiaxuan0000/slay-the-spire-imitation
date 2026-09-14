@@ -50,7 +50,7 @@ public final class CardRewardPool {
     }
 
     /**
-     * 奖励卡池：战斗胜利、遗物「混沌」的卡牌奖励都用这一份（27 张）。
+     * 奖励卡池：战斗胜利、遗物「混沌」的卡牌奖励都用这一份（29 张）。
      *
      * <p>不含初始牌组的打击 / 防御 / 痛击。具体抽哪几张交给
      * {@link #draw(List, int, boolean)}，所以这里只负责「池子里有什么」。</p>
@@ -65,7 +65,8 @@ public final class CardRewardPool {
                 Card.fortify(), Card.focus(), Card.shockwave(),
                 Card.heavyBlade(), Card.adamantArm(), Card.brutality(), Card.flex(),
                 Card.powerThrough(), Card.soulSever(), Card.uppercut(), Card.bodySlam(),
-                Card.hemokinesis(), Card.limitBreak(), Card.feelNoPain(), Card.trueGrit());
+                Card.hemokinesis(), Card.limitBreak(), Card.feelNoPain(), Card.trueGrit(),
+                Card.barrier(), Card.berserk());
     }
 
     /** 当前怜悯偏移值（百分比），供显示 / 调试 */
