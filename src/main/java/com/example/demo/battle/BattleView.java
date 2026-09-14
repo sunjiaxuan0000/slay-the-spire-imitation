@@ -1519,7 +1519,7 @@ public class BattleView extends StackPane implements BattleState {
         enemy.checkPhaseTransition();
         if (enemy.isSecondPhase && !wasSecondPhase) {
             SoundFx.play("zhou"); // 二阶段变身音效
-            playPhaseTransition(this::performEnemyAction);
+            playPhaseTransition(this::afterEnemyAction);
         } else {
             performEnemyAction();
         }
@@ -1621,9 +1621,13 @@ public class BattleView extends StackPane implements BattleState {
                 return;    // 不再推进轮盘 / 开启玩家回合
             }
         }
+        afterEnemyAction();
+    }
+
+    /** 敌人行动完毕后：推进轮盘、刷新 UI、等待后回到玩家回合 */
+    private void afterEnemyAction() {
         if (enemyWeak > 0) enemyWeak--;
         enemy.advance();
-
         refreshAll();
         PauseTransition pause = new PauseTransition(Duration.millis(600));
         pause.setOnFinished(e -> {
