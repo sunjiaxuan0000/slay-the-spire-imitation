@@ -93,7 +93,7 @@ public class BattleView extends StackPane implements BattleState {
 
     /**
      * 洗牌专用随机流：<b>带种子</b>，种子由「地图种子 + 当前节点坐标」算出（见
-     * {@code HelloApplication.battleSeed}）。同一场战斗重进多少次，抽到的牌序都一样 ——
+     * {@code HelloApplication.nodeSeed}）。同一场战斗重进多少次，抽到的牌序都一样 ——
      * 这样 SL（存档读档）不会把牌序洗乱，玩家也没法靠退出重进刷起手。
      *
      * <p>⚠ 只准给洗牌用。战斗里其它随机（比如坚毅随机消耗手牌）走 {@link #miscRnd}，
@@ -103,6 +103,15 @@ public class BattleView extends StackPane implements BattleState {
 
     /** 战斗内其它随机（坚毅随机消耗手牌等）：不可复现也无所谓，不参与洗牌。 */
     private final Random miscRnd;
+
+    /**
+     * 本场战斗的种子（= {@code HelloApplication.nodeSeed}）。
+     *
+     * <p>留着它是因为战斗里还有别的「重进要一样」的随机：Boss 遗物、召唤铃铛的
+     * 三连候选。它们不能用 {@link #shuffleRnd}（会吃掉洗牌序列），所以各自
+     * {@code new Random(battleSeed 派生值)} 起一条新流。</p>
+     */
+    private final long battleSeed;
 
     private int energy = 3;
     private int playerBlock = 0;
@@ -286,6 +295,7 @@ public class BattleView extends StackPane implements BattleState {
         // misc 用 battleSeed 派生一个不同的值，保证两条流的序列不重合。
         this.shuffleRnd = new Random(battleSeed);
         this.miscRnd = new Random(battleSeed ^ 0x5DEECE66DL);
+        this.battleSeed = battleSeed;
         this.deathOverlay = new DeathOverlay(enemy.name, () -> onFinish.accept(false));
         this.rewardOverlay = new RewardOverlay(() -> { rewardOverlay.hide(); onFinish.accept(true); });
 
@@ -1676,7 +1686,8 @@ public class BattleView extends StackPane implements BattleState {
         // Boss 战胜利：挑一个 Boss 遗物（池为空时跳过）。只挑不拿，见下面那行注释
         if (enemy.isBoss) {
             // 只「挑」不立刻入账 —— 真正入账要等玩家在获取界面上点「拾取」（见 showReward()）
-            bossRelicObtained = RelicFun.pickBossRelic(player);
+            // 传种子：重进这一战（或读档续上）拿到的是同一件 Boss 遗物，刷不了
+            bossRelicObtained = RelicFun.pickBossRelic(player, battleSeed * 31 + 11);
         }
         hud.refresh();
         playerAnim.stop();   // 冻结双方待机呼吸，交给倒地动画接管
@@ -1778,7 +1789,8 @@ public class BattleView extends StackPane implements BattleState {
      * 也就是玩家点「拾取」召唤铃铛的那一刻，不在这里。</p>
      */
     private void showBellRelicOffers() {
-        List<Relic> offers = RelicFun.pickEliteOptions(player, BELL_RELIC_OFFERS);
+        // 传种子：铃铛的三个候选跟着这一战走，重进 / 读档不会换人
+        List<Relic> offers = RelicFun.pickEliteOptions(player, BELL_RELIC_OFFERS, battleSeed * 31 + 12);
         showRelicOffers(offers, 0, this::showCardReward);
     }
 

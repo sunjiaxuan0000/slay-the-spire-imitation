@@ -313,8 +313,18 @@ public class RelicFun {
      * <p>池子不够 {@code count} 个时就给多少算多少，不报错。</p>
      */
     public static List<Relic> pickStarterOptions(Player player, int count) {
+        return pickStarterOptions(player, count, new Random().nextLong());
+    }
+
+    /**
+     * 同上，但随机数由 {@code seed} 决定（起点房间传节点种子）。
+     *
+     * <p>固定种子是为了「SL 刷不了」：退出重进起点房间，三个候选还是原来那三个，
+     * 不能靠反复读档换一份更好的初始遗物。</p>
+     */
+    public static List<Relic> pickStarterOptions(Player player, int count, long seed) {
         List<Relic> pool = filterOwned(Relic.starterRelics(), player);
-        Collections.shuffle(pool);
+        Collections.shuffle(pool, new Random(seed));
         return new ArrayList<>(pool.subList(0, Math.min(count, pool.size())));
     }
 
@@ -333,7 +343,7 @@ public class RelicFun {
      * 而不是先加进 relics 再想办法减掉（relics 里还有即时效果，减不干净）。</p>
      */
     public static Relic pickEliteRelic(Player player) {
-        return pickEliteRelic(player, Set.of());
+        return pickEliteRelic(player, Set.of(), new Random().nextLong());
     }
 
     /**
@@ -342,6 +352,16 @@ public class RelicFun {
      * @param exclude 本次连抽里已经出现过的遗物名（可为 {@code Set.of()}）
      */
     public static Relic pickEliteRelic(Player player, Set<String> exclude) {
+        return pickEliteRelic(player, exclude, new Random().nextLong());
+    }
+
+    /**
+     * 同上，但随机数由 {@code seed} 决定。
+     *
+     * <p>凡是「进这个节点时抽一次、重进还得是同一件」的场合都传节点种子
+     * （精英战利品 / 宝箱 / 商店货架）—— 不然玩家退出重进就能把战利品换一件。</p>
+     */
+    public static Relic pickEliteRelic(Player player, Set<String> exclude, long seed) {
         List<Relic> eliteRelics = Relic.eliteRelics();
         List<Integer> eliteWeights = Relic.eliteWeights();
         List<Relic> pool = new ArrayList<>();
@@ -358,7 +378,7 @@ public class RelicFun {
 
         int total = 0;
         for (int w : weights) total += w;
-        int roll = new Random().nextInt(total);
+        int roll = new Random(seed).nextInt(total);
         int cumulative = 0;
         Relic picked = pool.get(pool.size() - 1);
         for (int i = 0; i < pool.size(); i++) {
@@ -380,10 +400,20 @@ public class RelicFun {
      * 池子不够 {@code count} 个就给多少算多少。</p>
      */
     public static List<Relic> pickEliteOptions(Player player, int count) {
+        return pickEliteOptions(player, count, new Random().nextLong());
+    }
+
+    /**
+     * 同上，但整批候选由 {@code seed} 决定（同一个种子 → 同样的三个候选、同样的顺序）。
+     *
+     * <p>连抽的第 {@code i} 个用 {@code seed * 31 + i} 派生，所以「前几个被丢弃了」
+     * 也不会让后面的候选换人 —— 三连遗物界面每次读档都长一样。</p>
+     */
+    public static List<Relic> pickEliteOptions(Player player, int count, long seed) {
         List<Relic> picked = new ArrayList<>();
         Set<String> taken = new HashSet<>();
         for (int i = 0; i < count; i++) {
-            Relic r = pickEliteRelic(player, taken);
+            Relic r = pickEliteRelic(player, taken, seed * 31 + i);
             if (r == null) break;
             picked.add(r);
             taken.add(r.name);
@@ -393,16 +423,26 @@ public class RelicFun {
 
     /** 从事件遗物池挑一个玩家还没有的（只挑不拿；池空返回 null） */
     public static Relic pickEventRelic(Player player) {
+        return pickEventRelic(player, new Random().nextLong());
+    }
+
+    /** 同上，但随机数由 {@code seed} 决定（事件页传节点种子） */
+    public static Relic pickEventRelic(Player player, long seed) {
         List<Relic> pool = filterOwned(Relic.eventRelics(), player);
         if (pool.isEmpty()) return null;
-        return pool.get(new Random().nextInt(pool.size()));
+        return pool.get(new Random(seed).nextInt(pool.size()));
     }
 
     /** 从 Boss 遗物池挑一个玩家还没有的（只挑不拿；池空返回 null） */
     public static Relic pickBossRelic(Player player) {
+        return pickBossRelic(player, new Random().nextLong());
+    }
+
+    /** 同上，但随机数由 {@code seed} 决定（Boss 战传战斗种子） */
+    public static Relic pickBossRelic(Player player, long seed) {
         List<Relic> pool = filterOwned(Relic.bossRelics(), player);
         if (pool.isEmpty()) return null;
-        return pool.get(new Random().nextInt(pool.size()));
+        return pool.get(new Random(seed).nextInt(pool.size()));
     }
 
     /* ----------------- 真正入账 ----------------- */
