@@ -75,9 +75,9 @@ public class ChaosPig extends Enemy {
     private static final int LOOP_START = 3;
 
     private static final List<Step> WHEEL = List.of(
-            new Step(Intent.ATTACK, 8),          // 第 1 回合
-            new Step(Intent.BUFF, BUFF_VALUE),   // 第 2 回合：随机增益
-            new Step(Intent.ATTACK, 10),         // 第 3 回合
+            new Step(Intent.BUFF, BUFF_VALUE),          // 第 1 回合：随机增益
+            new Step(Intent.ATTACK, 10),          // 第 2回合
+            new Step(Intent.ATTACK, 12),         // 第 3 回合
             new Step(Intent.DEFEND, 10),         // ┐
             new Step(Intent.BUFF, BUFF_VALUE),   // ├ 循环段
             new Step(Intent.ATTACK, 10)          // ┘
@@ -107,7 +107,7 @@ public class ChaosPig extends Enemy {
     private boolean dodgeGranted = false;
 
     public ChaosPig() {
-        super("混沌猪", 88, true, false, true, WHEEL);
+        super("混沌猪", 104, true, false, true, WHEEL);
         this.reflectRate = REFLECT_RATE;
         this.isElite = true;
     }
