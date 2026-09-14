@@ -635,7 +635,7 @@ public class BattleView extends StackPane implements BattleState {
                 glyph = "攻";
                 color = "#dc2626";
                 // 预览值 = 基础攻击 + 当前力量 + 仪式力量（下回合开始仪式会先生效再攻击）
-                int previewPower = enemy.power + enemy.getRitualPower();
+                int previewPower = enemy.power + (enemy.isRitualJustActivated() ? 0 : enemy.getRitualPower());
                 number = enemy.baseAttackDamage(s) + previewPower;
                 if (enemyWeak > 0) number = number * 3 / 4;
                 // 猪龙鱼公爵二阶段：玩家有格挡时攻击 ×1.6
@@ -1697,7 +1697,6 @@ public class BattleView extends StackPane implements BattleState {
         if (battleOver) return;
         battleOver = true;
         playerAnim.stop();
-        RelicFun.onBattleEnd(player);
         // Boss 战胜利：挑一个 Boss 遗物（池为空时跳过）。只挑不拿，见下面那行注释
         if (enemy.isBoss) {
             // 只「挑」不立刻入账 —— 真正入账要等玩家在获取界面上点「拾取」（见 showReward()）
@@ -1727,6 +1726,8 @@ public class BattleView extends StackPane implements BattleState {
                 fallDown, new PauseTransition(Duration.millis(180)));
         seq.setOnFinished(e -> {
             gameTimer.stop();
+            RelicFun.onBattleEnd(player); // 燃烧之血等：倒地动画结束后才回血
+            hud.refresh();
             showReward();
         });
         seq.play();
